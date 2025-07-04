@@ -22,4 +22,6 @@ pub const Module = @import("module.zig").Module;
 pub const Book = @import("book.zig").Book;
 pub const Reference = @import("reference.zig");
 
+pub const Parser = @import("parser.zig");
+
 pub const transliterate = @import("transliterate.zig").transliterate_word;

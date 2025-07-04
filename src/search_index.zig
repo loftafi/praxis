@@ -1,0 +1,935 @@
+//! Hold a collection of `lexeme` or `form` objects keyed to a
+//! string. Searching for a `lexeme` or `form` using an exact or partial string match.
+
+pub const MAX_WORD_SIZE = 500;
+const MAX_INDEX_KEYWORD_SIZE = 50;
+const MAX_SEARCH_RESULTS = 60;
+
+pub const IndexError = error{ WordTooLong, EmptyWord };
+
+/// A wrapper for a StringHashMap that allows searching for prefixes of the key.
+pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
+    return struct {
+        const Self = @This();
+
+        index: std.StringHashMap(*SearchResult),
+        allocator: Allocator,
+
+        // Temporary memory buffer holds slices of search keywords.
+        slices: ArrayList([]const u8),
+
+        /// init should be used with an arena allocator where possible. Call deinit if arena allocator is not used.
+        pub fn init(allocator: Allocator) Self {
+            return Self{
+                .allocator = allocator,
+                .index = std.StringHashMap(*SearchResult).init(allocator),
+                .slices = ArrayList([]const u8).init(allocator),
+            };
+        }
+
+        /// deinit is provided for the case where an arena allocator is not being used.
+        pub fn deinit(self: *Self) void {
+            var i = self.index.iterator();
+            while (i.next()) |item| {
+                self.allocator.free(item.key_ptr.*);
+                item.value_ptr.*.destroy(self.allocator);
+            }
+            self.slices.deinit();
+            self.index.deinit();
+        }
+
+        /// The key is cloned and owned, the value is neither cloned nor owned.
+        pub fn add(self: *Self, word: []const u8, form: T) error{ OutOfMemory, WordTooLong, EmptyWord, InvalidUtf8 }!void {
+            if (word.len >= MAX_WORD_SIZE) {
+                std.debug.print("Word {s} too long for index.", .{word});
+                return IndexError.WordTooLong;
+            }
+            if (word.len == 0) {
+                return IndexError.EmptyWord;
+            }
+
+            self.slices.clearRetainingCapacity();
+            var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+            var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+            try keywordify(word, &unaccented_word, &normalised_word, &self.slices);
+
+            var result = try self.getOrCreateSearchResult(normalised_word.slice());
+            try result.exact_accented.append(form);
+
+            if (!std.mem.eql(u8, normalised_word.slice(), unaccented_word.slice())) {
+                result = try self.getOrCreateSearchResult(unaccented_word.slice());
+                try result.exact_unaccented.append(form);
+            }
+
+            for (self.slices.items) |substring| {
+                if (is_stopword(substring)) {
+                    continue;
+                }
+                result = try self.getOrCreateSearchResult(substring);
+                try result.partial_match.append(form);
+            }
+        }
+
+        fn getOrCreateSearchResult(self: *Self, keyword: []const u8) !*SearchResult {
+            var value = self.index.get(keyword);
+            if (value == null) {
+                const key = try self.allocator.dupe(u8, keyword);
+                value = try SearchResult.create(self.allocator, key);
+                try self.index.put(key, value.?);
+            }
+            return value.?;
+        }
+
+        pub fn lookup(self: *Self, word: []const u8) ?*SearchResult {
+            if (word.len >= MAX_WORD_SIZE) {
+                // If search word is too long, it definitely
+                // is not in the search result.
+                return null;
+            }
+
+            var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+            var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+            normalise_word(word, &unaccented_word, &normalised_word) catch {
+                // If normalisation fails due to invalid utf8 encoding
+                // then we know this query has no results.
+                //
+                // Theoretically strange unicode issues could cause an
+                // out of memory error, but again this is an invalid
+                // search query.
+                return null;
+            };
+
+            const result = self.index.get(normalised_word.slice());
+            if (result != null) {
+                return result;
+            }
+
+            return self.index.get(unaccented_word.slice());
+        }
+
+        /// Srt search results to most likely matches and throw away anything
+        /// over MAX_SEARCH_RESULTS search results.
+        pub fn sort(self: *Self) !void {
+            var i = self.index.valueIterator();
+            while (i.next()) |sr| {
+                std.mem.sort(T, sr.*.exact_accented.items, {}, cmp);
+                std.mem.sort(T, sr.*.exact_unaccented.items, {}, cmp);
+                std.mem.sort(T, sr.*.partial_match.items, {}, cmp);
+
+                if (sr.*.exact_accented.items.len > MAX_SEARCH_RESULTS) {
+                    try sr.*.exact_accented.resize(MAX_SEARCH_RESULTS);
+                }
+                if (sr.*.exact_unaccented.items.len > MAX_SEARCH_RESULTS) {
+                    try sr.*.exact_unaccented.resize(MAX_SEARCH_RESULTS);
+                }
+                if (sr.*.partial_match.items.len > MAX_SEARCH_RESULTS) {
+                    try sr.*.partial_match.resize(MAX_SEARCH_RESULTS);
+                }
+            }
+        }
+
+        /// Write out each search index in alphabetical order. Alphabetical order
+        /// results in a stable order of data in the binary file.
+        ///
+        /// Each search index entry must be sorted with `sort()` before saving index data.
+        pub fn write_binary_bytes(self: *const Self, data: *ArrayList(u8)) !void {
+            var unsorted = try std.ArrayList([]const u8).initCapacity(self.allocator, self.index.count());
+            defer unsorted.deinit();
+
+            // Create a sorted list of the indexes
+            var walk = self.index.iterator();
+            while (walk.next()) |i| {
+                try unsorted.append(i.key_ptr.*);
+            }
+            std.mem.sort([]const u8, unsorted.items, {}, stringLessThan);
+
+            // Output the sorted list
+            try append_u32(data, self.index.count());
+            for (unsorted.items) |key| {
+                try self.index.get(key).?.write_binary_bytes(data);
+            }
+        }
+
+        pub fn load_binary_data(self: *Self, data: *BinaryReader, uids: *std.AutoHashMap(u24, T)) !void {
+            const indexes = try data.u32();
+            for (0..indexes) |_| {
+                const keyword = data.string() catch return error.InvalidIndexFile;
+                const value = try self.allocator.alloc(u8, keyword.len);
+                @memcpy(value, keyword);
+                const results = try SearchResult.create(self.allocator, value);
+                try self.index.put(value, results);
+                var size = try data.u8();
+                for (0..size) |_| {
+                    const uid = try data.u24();
+                    if (uids.get(uid)) |item| {
+                        try results.exact_accented.append(item);
+                    } else {
+                        std.debug.print("Missing record search index uid {d}\n", .{uid});
+                    }
+                }
+                size = try data.u8();
+                for (0..size) |_| {
+                    const uid = try data.u24();
+                    if (uids.get(uid)) |item| {
+                        try results.exact_unaccented.append(item);
+                    } else {
+                        std.debug.print("Missing record search index uid {d}\n", .{uid});
+                    }
+                }
+                size = try data.u8();
+                for (0..size) |_| {
+                    const uid = try data.u24();
+                    if (uids.get(uid)) |item| {
+                        try results.partial_match.append(item);
+                    } else {
+                        std.debug.print("Missing record search index uid {d}\n", .{uid});
+                    }
+                }
+            }
+        }
+
+        pub const SearchResult = struct {
+            keyword: []const u8,
+
+            // Exact match with accents
+            exact_accented: ArrayList(T),
+
+            // Exact match without accents
+            exact_unaccented: ArrayList(T),
+
+            // Unaccented prefix match, most common words first
+            partial_match: ArrayList(T),
+
+            pub const Iterator = struct {
+                const SI = @This();
+                results: *SearchResult,
+                i: usize,
+                j: usize,
+                k: usize,
+
+                pub fn next(si: *SI) ?T {
+                    if (si.i < si.results.exact_accented.items.len) {
+                        const entry = si.results.exact_accented.items[si.i];
+                        si.i += 1;
+                        return entry;
+                    }
+                    if (si.j < si.results.exact_unaccented.items.len) {
+                        const entry = si.results.exact_unaccented.items[si.j];
+                        si.j += 1;
+                        return entry;
+                    }
+                    if (si.k < si.results.partial_match.items.len) {
+                        const entry = si.results.partial_match.items[si.k];
+                        si.k += 1;
+                        return entry;
+                    }
+                    return null;
+                }
+            };
+
+            pub fn iterator(self: *SearchResult) Iterator {
+                return .{
+                    .results = self,
+                    .i = 0,
+                    .j = 0,
+                    .k = 0,
+                };
+            }
+
+            pub fn create(allocator: Allocator, word: []const u8) !*SearchResult {
+                var sr = try allocator.create(SearchResult);
+                sr.keyword = word;
+                sr.exact_accented = ArrayList(T).init(allocator);
+                sr.exact_unaccented = ArrayList(T).init(allocator);
+                sr.partial_match = ArrayList(T).init(allocator);
+                return sr;
+            }
+
+            pub fn destroy(self: *SearchResult, allocator: Allocator) void {
+                self.exact_accented.deinit();
+                self.exact_unaccented.deinit();
+                self.partial_match.deinit();
+                allocator.destroy(self);
+            }
+
+            /// Search index must be sorted with `sort()` before saving index data.
+            pub fn write_binary_bytes(self: *SearchResult, data: *ArrayList(u8)) !void {
+                std.debug.assert(MAX_SEARCH_RESULTS <= 0xff);
+
+                try data.appendSlice(self.keyword);
+                try data.append(US);
+
+                if (self.exact_accented.items.len > 0xff) {
+                    log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_accented.items.len });
+                    return error.IndexTooLarge;
+                }
+                try data.append(@intCast(self.exact_accented.items.len));
+                for (self.exact_accented.items) |g| {
+                    if (g.uid > 0xffffff) {
+                        return error.UidTooLarge;
+                    }
+                    try append_u24(data, @intCast(g.uid));
+                }
+
+                if (self.exact_unaccented.items.len > 0xff) {
+                    log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_unaccented.items.len });
+                    return error.IndexTooLarge;
+                }
+                try data.append(@intCast(self.exact_unaccented.items.len));
+                for (self.exact_unaccented.items) |g| {
+                    if (g.uid > 0xffffff) {
+                        return error.UidTooLarge;
+                    }
+                    try append_u24(data, @intCast(g.uid));
+                }
+
+                if (self.partial_match.items.len > 0xff) {
+                    log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.partial_match.items.len });
+                    return error.IndexTooLarge;
+                }
+                try data.append(@intCast(self.partial_match.items.len));
+                for (self.partial_match.items) |g| {
+                    if (g.uid > 0xffffff) {
+                        return error.UidTooLarge;
+                    }
+                    try append_u24(data, @intCast(g.uid));
+                }
+            }
+        };
+    };
+}
+
+fn stringLessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
+    return std.mem.order(u8, lhs, rhs) == .lt;
+}
+
+/// Normalise is used to standardize a keyword into the format
+/// it would appear if it exists inside the search index.
+///
+///  - The unaccented version removes all accents and breathings.
+///  - The normalised removes only excess accents and standarises the final letter.
+///
+pub fn normalise_word(
+    word: []const u8,
+    unaccented: *std.BoundedArray(u8, MAX_WORD_SIZE + 1),
+    normalised: *std.BoundedArray(u8, MAX_WORD_SIZE + 1),
+) !void {
+    if (word.len >= MAX_WORD_SIZE) {
+        return IndexError.WordTooLong;
+    }
+    var view = std.unicode.Utf8View.init(word) catch |e| {
+        if (e == error.InvalidUtf8) {
+            std.debug.print("normalise_word on invalid unicode. {s} -- {any}\n", .{ word, word });
+        }
+        return e;
+    };
+
+    // Only one accent per normalised word
+    var saw_accent = false;
+    var i = view.iterator();
+
+    while (i.nextCodepointSlice()) |slice| {
+        const c = try std.unicode.utf8Decode(slice);
+
+        // Unaccent processing
+        const d = unaccent(c);
+        if (d) |s| {
+            try unaccented.appendSlice(s);
+        } else if (lowercase(c)) |lc| {
+            try unaccented.appendSlice(lc);
+        } else {
+            try unaccented.appendSlice(slice);
+        }
+
+        // Normalisation processing
+        if (remove_accent(c)) |rm| {
+            if (saw_accent) {
+                try normalised.appendSlice(rm);
+            } else if (lowercase(c)) |lc| {
+                try normalised.appendSlice(lc);
+            } else {
+                saw_accent = true;
+                try normalised.appendSlice(slice);
+            }
+        } else {
+            if ((c == 'σ' or c == 'Σ' or c == 'ς') and (i.i == word.len)) {
+                try normalised.appendSlice(comptime &ue('ς'));
+            } else if (lowercase(c)) |lc| {
+                try normalised.appendSlice(lc);
+            } else {
+                try normalised.appendSlice(slice);
+            }
+        }
+    }
+}
+
+/// Keywordify returns an unaccented, and normalised version
+/// of a word. It also returns substrings of the unaccented and
+/// normalised word for search indexing.
+///
+///  - The unaccented version removes all accents and breathings.
+///  - The normalised removes only excess accents and standarises the final letter.
+///
+/// The substrings are slices of the `unaccented` and `normalised`
+/// string buffer.
+pub fn keywordify(
+    word: []const u8,
+    unaccented: *std.BoundedArray(u8, MAX_WORD_SIZE + 1),
+    normalised: *std.BoundedArray(u8, MAX_WORD_SIZE + 1),
+    substrings: *ArrayList([]const u8),
+) error{ OutOfMemory, WordTooLong, InvalidUtf8 }!void {
+    if (word.len >= MAX_WORD_SIZE) {
+        return IndexError.WordTooLong;
+    }
+    var view = std.unicode.Utf8View.init(word) catch |e| {
+        if (e == error.InvalidUtf8) {
+            std.debug.print("keywordify on invalid unicode. {s} -- {any}\n", .{ word, word });
+        }
+        return e;
+    };
+
+    // Only one accent per normalised word
+    var saw_accent = false;
+
+    var i = view.iterator();
+    var character_count: usize = 0;
+
+    while (i.nextCodepointSlice()) |character_slice| {
+        const c = std.unicode.utf8Decode(character_slice) catch {
+            return error.InvalidUtf8;
+        };
+        character_count += 1;
+
+        // Removes accents and capitalisation
+        if (unaccent(c)) |s| {
+            unaccented.appendSlice(s) catch return error.WordTooLong;
+        } else if (lowercase(c)) |lc| {
+            unaccented.appendSlice(lc) catch return error.WordTooLong;
+        } else {
+            unaccented.appendSlice(character_slice) catch return error.WordTooLong;
+        }
+
+        // Normalisation processing
+        if (remove_accent(c)) |rm| {
+            if (saw_accent) {
+                normalised.appendSlice(rm) catch return error.WordTooLong;
+            } else if (lowercase(c)) |lc| {
+                normalised.appendSlice(lc) catch return error.WordTooLong;
+            } else {
+                saw_accent = true;
+                normalised.appendSlice(character_slice) catch return error.WordTooLong;
+            }
+        } else {
+            if ((c == 'σ' or c == 'Σ' or c == 'ς') and (i.i == word.len)) {
+                normalised.appendSlice(comptime &ue('ς')) catch return error.WordTooLong;
+            } else if (lowercase(c)) |lc| {
+                normalised.appendSlice(lc) catch return error.WordTooLong;
+            } else {
+                normalised.appendSlice(character_slice) catch return error.WordTooLong;
+            }
+        }
+
+        if (i.i == word.len) {
+            // The full length version is not a substring
+            //try substrings.append(normalised.slice());
+            //try substrings.append(unaccented.slice());
+        } else if (character_count == 1 and character_slice.len < word.len) {
+            // If we have only seen one unicode character, and there are more
+            // characters to read, don't keep a one character slice
+            continue;
+        } else if (character_count < MAX_INDEX_KEYWORD_SIZE) {
+            const k1 = normalised.slice();
+            const k2 = unaccented.slice();
+            try substrings.append(k1);
+            if (!std.mem.eql(u8, k1, k2)) {
+                try substrings.append(unaccented.slice());
+            }
+        }
+    }
+}
+
+const ue = std.unicode.utf8EncodeComptime;
+
+/// Remove accent and breathing marks. Returns an array that is equal or
+/// shoter in length to the original array used to build the character
+/// to prevent memory overrun.
+pub fn unaccent(c: u21) ?[]const u8 {
+    return switch (c) {
+        'Α', 'Ἀ', 'Ἁ', 'Ἄ', 'Ἅ', 'ἄ', 'ἅ', 'ἀ', 'ᾶ', 'ᾷ', 'ἁ', 'ά', 'ὰ', 'ἂ', 'ἃ', 'Ά', 'Ὰ' => comptime &ue('α'),
+        'Β' => comptime &ue('β'),
+        'Γ' => comptime &ue('γ'),
+        'Δ' => comptime &ue('δ'),
+        'Ε', 'Ἑ', 'Ἐ', 'ἔ', 'ἕ', 'ἐ', 'ἑ', 'ὲ', 'έ', 'ἒ', 'ἓ', 'Έ', 'Ὲ' => comptime &ue('ε'),
+        'Ζ' => comptime &ue('ζ'),
+        'Η', 'Ἡ', 'Ἠ', 'ἤ', 'ἥ', 'ἡ', 'ἠ', 'ή', 'ὴ', 'ἢ', 'ἣ', 'ῆ', 'ἦ', 'ἧ', 'Ή', 'Ὴ', 'ᾖ', 'ᾗ', 'ῃ', 'ᾑ', 'ᾐ', 'ῇ', 'ῄ', 'ῂ', 'ᾔ', 'ᾕ', 'ᾓ', 'ᾒ', 'ᾞ', 'ῌ', 'ᾙ', 'ᾘ', 'ᾜ', 'ᾝ', 'ᾛ', 'ᾚ' => comptime &ue('η'),
+        'Θ' => comptime &ue('θ'),
+        'Ἰ', 'Ἱ', 'ἴ', 'ἵ', 'ἰ', 'ἱ', 'ί', 'ὶ', 'ἲ', 'ἳ', 'ῖ', 'ἷ', 'ἶ', 'Ὶ', 'Ί' => comptime &ue('ι'),
+        'Κ' => comptime &ue('κ'),
+        'Λ' => comptime &ue('λ'),
+        'Ν' => comptime &ue('ν'),
+        'Μ' => comptime &ue('μ'),
+        'Ξ' => comptime &ue('ξ'),
+        'Ο', 'Ὀ', 'Ὁ', 'ό', 'ὸ', 'ὂ', 'ὃ', 'ὄ', 'ὅ', 'ὁ', 'ὀ', 'Ό', 'Ὸ' => comptime &ue('ο'),
+        'Π' => comptime &ue('π'),
+        'Ρ', 'ῤ', 'ῥ' => comptime &ue('ρ'),
+        'Σ', 'ς' => comptime &ue('σ'),
+        'Τ' => comptime &ue('τ'),
+        'Υ', 'Ὑ', 'Ύ', 'Ὺ', 'ὔ', 'ὕ', 'ὐ', 'ὑ', 'ύ', 'ὺ', 'ὒ', 'ὓ', 'ῦ', 'ϋ', 'ὖ', 'ὗ' => comptime &ue('υ'),
+        'Φ' => comptime &ue('φ'),
+        'Χ' => comptime &ue('χ'),
+        'Ψ' => comptime &ue('ψ'),
+        'Ω', 'ώ', 'ὼ', 'Ώ', 'Ὼ', 'ὠ', 'ῶ', 'ὡ', 'ὦ', 'ὧ', 'ὤ', 'ὢ', 'ὣ', 'ὥ', 'ῷ' => comptime &ue('ω'),
+        else => null,
+    };
+}
+
+pub fn normalise_char(c: u21) u21 {
+    return switch (c) {
+        'Α', 'Ἀ', 'Ἁ', 'Ἄ', 'Ἅ', 'ἄ', 'ἅ', 'ἀ', 'ᾶ', 'ᾷ', 'ἁ', 'ά', 'ὰ', 'ἂ', 'ἃ', 'Ά', 'Ὰ' => 'α',
+        'Β' => 'β',
+        'Γ' => 'γ',
+        'Δ' => 'δ',
+        'Ε', 'Ἑ', 'Ἐ', 'ἔ', 'ἕ', 'ἐ', 'ἑ', 'ὲ', 'έ', 'ἒ', 'ἓ', 'Έ', 'Ὲ' => 'ε',
+        'Ζ' => 'ζ',
+        'Η', 'Ἡ', 'Ἠ', 'ἤ', 'ἥ', 'ἡ', 'ἠ', 'ή', 'ὴ', 'ἢ', 'ἣ', 'ῆ', 'ἦ', 'ἧ', 'Ή', 'Ὴ', 'ᾖ', 'ᾗ', 'ῃ', 'ᾑ', 'ᾐ', 'ῇ', 'ῄ', 'ῂ', 'ᾔ', 'ᾕ', 'ᾓ', 'ᾒ', 'ᾞ', 'ῌ', 'ᾙ', 'ᾘ', 'ᾜ', 'ᾝ', 'ᾛ', 'ᾚ' => 'η',
+        'Θ' => 'θ',
+        'Ἰ', 'Ἱ', 'ἴ', 'ἵ', 'ἰ', 'ἱ', 'ί', 'ὶ', 'ἲ', 'ἳ', 'ῖ', 'ἷ', 'ἶ', 'Ὶ', 'Ί' => 'ι',
+        'Κ' => 'κ',
+        'Λ' => 'λ',
+        'Ν' => 'ν',
+        'Μ' => 'μ',
+        'Ξ' => 'ξ',
+        'Ο', 'Ὀ', 'Ὁ', 'ό', 'ὸ', 'ὂ', 'ὃ', 'ὄ', 'ὅ', 'ὁ', 'ὀ', 'Ό', 'Ὸ' => 'ο',
+        'Π' => 'π',
+        'Ρ', 'ῤ', 'ῥ' => 'ρ',
+        'Σ', 'ς' => 'σ',
+        'Τ' => 'τ',
+        'Υ', 'Ὑ', 'Ύ', 'Ὺ', 'ὔ', 'ὕ', 'ὐ', 'ὑ', 'ύ', 'ὺ', 'ὒ', 'ὓ', 'ῦ', 'ϋ', 'ὖ', 'ὗ' => 'υ',
+        'Φ' => 'φ',
+        'Χ' => 'χ',
+        'Ψ' => 'ψ',
+        'Ω', 'ώ', 'ὼ', 'Ώ', 'Ὼ', 'ὠ', 'ῶ', 'ὡ', 'ὦ', 'ὧ', 'ὤ', 'ὢ', 'ὣ', 'ὥ', 'ῷ', 'ᾦ', 'ᾧ', 'ῳ' => 'ω',
+        else => {
+            if (c >= 'A' and c <= 'Z') return c + ('a' - 'A');
+            return c;
+        },
+    };
+}
+
+// unaccent must return an array that is equal or shoter in length to the original
+// array used to build the character to prevent memory overrun.
+fn lowercase(c: u21) ?[]const u8 {
+    return switch (c) {
+        'Α' => comptime &ue('α'),
+        'Ἀ' => comptime &ue('ἀ'),
+        'Ἁ' => comptime &ue('ἁ'),
+        'Ἄ' => comptime &ue('ἄ'),
+        'Ἅ' => comptime &ue('ἅ'),
+        'Ά' => comptime &ue('ά'),
+        'Ὰ' => comptime &ue('ὰ'),
+        'Β' => comptime &ue('β'),
+        'Γ' => comptime &ue('γ'),
+        'Δ' => comptime &ue('δ'),
+        'Ε' => comptime &ue('ε'),
+        'Ἑ' => comptime &ue('ἑ'),
+        'Ἐ' => comptime &ue('ἐ'),
+        'Ὲ' => comptime &ue('ὲ'),
+        'Έ' => comptime &ue('έ'),
+        'Ζ' => comptime &ue('ζ'),
+        'Η' => comptime &ue('η'),
+        'Ἡ' => comptime &ue('η'),
+        'Ἠ' => comptime &ue('η'),
+        'Ή' => comptime &ue('η'),
+        'Ὴ' => comptime &ue('η'),
+        'Θ' => comptime &ue('θ'),
+        'Ι' => comptime &ue('ι'),
+        'Ἰ' => comptime &ue('ἰ'),
+        'Ἱ' => comptime &ue('ἱ'),
+        'Ὶ' => comptime &ue('ὶ'),
+        'Ί' => comptime &ue('ί'),
+        'Κ' => comptime &ue('κ'),
+        'Λ' => comptime &ue('λ'),
+        'Μ' => comptime &ue('μ'),
+        'Ν' => comptime &ue('ν'),
+        'Ξ' => comptime &ue('ξ'),
+        'Ο' => comptime &ue('ο'),
+        'Ὀ' => comptime &ue('ὀ'),
+        'Ὁ' => comptime &ue('ὁ'),
+        'Ό' => comptime &ue('ό'),
+        'Ὸ' => comptime &ue('ὸ'),
+        'Π' => comptime &ue('π'),
+        'Ρ',
+        => comptime &ue('ρ'),
+        'Σ',
+        => comptime &ue('σ'),
+        'Τ' => comptime &ue('τ'),
+        'Υ' => comptime &ue('υ'),
+        'Ὑ' => comptime &ue('ὑ'),
+        'Ύ' => comptime &ue('ύ'),
+        'Ὺ' => comptime &ue('ὺ'),
+        'Φ' => comptime &ue('φ'),
+        'Χ' => comptime &ue('χ'),
+        'Ψ' => comptime &ue('ψ'),
+        'Ω' => comptime &ue('ω'),
+        'Ὠ' => comptime &ue('ω'),
+        'Ὡ' => comptime &ue('ω'),
+        'Ὼ' => comptime &ue('ω'),
+        'Ώ' => comptime &ue('ω'),
+        'A' => comptime &ue('a'),
+        'B' => comptime &ue('b'),
+        'C' => comptime &ue('c'),
+        'D' => comptime &ue('d'),
+        'E' => comptime &ue('e'),
+        'F' => comptime &ue('f'),
+        'G' => comptime &ue('g'),
+        'H' => comptime &ue('h'),
+        'I' => comptime &ue('i'),
+        'J' => comptime &ue('j'),
+        'K' => comptime &ue('k'),
+        'L' => comptime &ue('l'),
+        'M' => comptime &ue('m'),
+        'N' => comptime &ue('n'),
+        'O' => comptime &ue('o'),
+        'P' => comptime &ue('p'),
+        'Q' => comptime &ue('q'),
+        'R' => comptime &ue('r'),
+        'S' => comptime &ue('s'),
+        'T' => comptime &ue('t'),
+        'U' => comptime &ue('u'),
+        'V' => comptime &ue('v'),
+        'W' => comptime &ue('w'),
+        'X' => comptime &ue('x'),
+        'Y' => comptime &ue('y'),
+        'Z' => comptime &ue('z'),
+        else => null,
+    };
+}
+
+/// Remove accent marks, but retain breathing marks. Returns an array that is
+/// equal or shoter in length to the original array used to build the character
+/// to prevent memory overrun.
+fn remove_accent(c: u21) ?[]const u8 {
+    return switch (c) {
+        'ά', 'ὰ', 'Ά', 'Ὰ', 'ᾶ' => comptime &ue('α'),
+        'Ἄ', 'ἄ', 'ἂ' => comptime &ue('ἀ'),
+        'Ἅ', 'ἅ', 'ἃ' => comptime &ue('ἁ'),
+        'έ', 'ὲ', 'Έ', 'Ὲ' => comptime &ue('ε'),
+        'ἔ', 'ἒ' => comptime &ue('ἐ'),
+        'ἕ', 'ἓ' => comptime &ue('ἑ'),
+        'ή', 'ὴ', 'Ή', 'Ὴ', 'ῆ' => comptime &ue('η'),
+        'ἤ', 'ἢ' => comptime &ue('ἠ'),
+        'ἥ', 'ἣ' => comptime &ue('ἡ'),
+        'ί', 'ὶ', 'Ί', 'Ὶ', 'ῖ' => comptime &ue('ι'),
+        'ἴ', 'ἲ' => comptime &ue('ἰ'),
+        'ἵ', 'ἳ' => comptime &ue('ἱ'),
+        'ό', 'ὸ', 'Ό', 'Ὸ' => comptime &ue('ο'),
+        'ὄ', 'ὂ' => comptime &ue('ὀ'),
+        'ὅ', 'ὃ' => comptime &ue('ὁ'),
+        'ύ', 'ὺ', 'Ύ', 'Ὺ', 'ῦ' => comptime &ue('υ'),
+        'ὔ', 'ὒ' => comptime &ue('ὐ'),
+        'ὕ', 'ὓ' => comptime &ue('ὑ'),
+        'ώ', 'ὼ', 'Ώ', 'Ὼ', 'ῶ', 'ῷ', 'ῳ' => comptime &ue('ω'),
+        'ὥ', 'ὣ', 'ὧ', 'ᾧ' => comptime &ue('ὡ'),
+        'ὦ', 'ὤ', 'ὢ', 'ᾦ' => comptime &ue('ὠ'),
+        else => null,
+    };
+}
+
+const std = @import("std");
+const log = std.log;
+const is_stopword = @import("gloss_tokens.zig").is_stopword;
+const ArrayList = std.ArrayList;
+const Allocator = std.mem.Allocator;
+const BinaryReader = @import("binary_reader.zig");
+const BinaryWriter = @import("binary_writer.zig");
+const append_u32 = BinaryWriter.append_u32;
+const append_u24 = BinaryWriter.append_u24;
+const US = BinaryReader.US;
+
+const eq = std.testing.expectEqual;
+const se = std.testing.expectEqualStrings;
+
+test "unaccent" {
+    try eq(null, unaccent('a'));
+    try std.testing.expectEqualStrings("α", unaccent('ἀ').?);
+    try std.testing.expectEqualStrings("ω", unaccent('ῷ').?);
+    try std.testing.expectEqualStrings("ω", unaccent('ὢ').?);
+}
+
+test "normalise simple" {
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "abc";
+        try normalise_word(word, &unaccented_word, &normalised_word);
+        try se("abc", unaccented_word.slice());
+        try se("abc", normalised_word.slice());
+    }
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "AbC";
+        try normalise_word(word, &unaccented_word, &normalised_word);
+        try se("abc", unaccented_word.slice());
+        try se("abc", normalised_word.slice());
+    }
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "Kenan";
+        try normalise_word(word, &unaccented_word, &normalised_word);
+        try se("kenan", unaccented_word.slice());
+        try se("kenan", normalised_word.slice());
+    }
+
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "αβγ";
+        try normalise_word(word, &unaccented_word, &normalised_word);
+        try se("αβγ", unaccented_word.slice());
+        try se("αβγ", normalised_word.slice());
+    }
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "ἀρτος";
+        try normalise_word(word, &unaccented_word, &normalised_word);
+        try se("αρτοσ", unaccented_word.slice());
+        try se("ἀρτος", normalised_word.slice());
+    }
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "ἄρτος";
+        try normalise_word(word, &unaccented_word, &normalised_word);
+        try se("αρτοσ", unaccented_word.slice());
+        try se("ἄρτος", normalised_word.slice());
+    }
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "ἌΡΤΟΣ";
+        try normalise_word(word, &unaccented_word, &normalised_word);
+        try se("αρτοσ", unaccented_word.slice());
+        try se("ἄρτος", normalised_word.slice());
+    }
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "ὥρα";
+        try normalise_word(word, &unaccented_word, &normalised_word);
+        try se("ωρα", unaccented_word.slice());
+        try se("ὥρα", normalised_word.slice());
+    }
+}
+
+test "keywordify simple" {
+    const allocator = std.testing.allocator;
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "ἄρτός";
+        var slices = ArrayList([]const u8).init(allocator);
+        defer slices.deinit();
+        try keywordify(word, &unaccented_word, &normalised_word, &slices);
+        try std.testing.expectEqual(6, slices.items.len);
+        try se("ἄρ", slices.items[0]);
+        try se("αρ", slices.items[1]);
+        try se("ἄρτ", slices.items[2]);
+        try se("αρτ", slices.items[3]);
+        try se("ἄρτο", slices.items[4]);
+        try se("αρτο", slices.items[5]);
+        try se("ἄρτος", normalised_word.slice());
+        try se("αρτοσ", unaccented_word.slice());
+    }
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "ΜΩϋσῆς";
+        var slices = ArrayList([]const u8).init(allocator);
+        defer slices.deinit();
+        try keywordify(word, &unaccented_word, &normalised_word, &slices);
+        try std.testing.expectEqual(7, slices.items.len);
+        try se("μω", slices.items[0]);
+        try se("μωϋ", slices.items[1]);
+        try se("μωυ", slices.items[2]);
+        try se("μωϋσ", slices.items[3]);
+        try se("μωυσ", slices.items[4]);
+        try se("μωϋσῆ", slices.items[5]);
+        try se("μωυση", slices.items[6]);
+        try se("μωϋσῆς", normalised_word.slice());
+        try se("μωυσησ", unaccented_word.slice());
+    }
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "serpent";
+        var slices = ArrayList([]const u8).init(allocator);
+        defer slices.deinit();
+        try keywordify(word, &unaccented_word, &normalised_word, &slices);
+        try std.testing.expectEqual(5, slices.items.len);
+        try se("se", slices.items[0]);
+        try se("ser", slices.items[1]);
+        try se("serp", slices.items[2]);
+        try se("serpe", slices.items[3]);
+        try se("serpen", slices.items[4]);
+        try se("serpent", normalised_word.slice());
+        try se("serpent", unaccented_word.slice());
+    }
+}
+
+test "search_index basics" {
+    const allocator = std.testing.allocator;
+
+    const Thing = struct {
+        word: []const u8,
+        const Self = @This();
+        pub fn lessThan(_: void, a: *Self, b: *Self) bool {
+            return std.mem.lessThan(u8, a.word, b.word);
+        }
+    };
+    var index = SearchIndex(*Thing, Thing.lessThan).init(allocator);
+    defer index.deinit();
+
+    var f1 = Thing{ .word = "ἄρτος" };
+    try index.add(f1.word, &f1);
+    var f2 = Thing{ .word = "ἔχω" };
+    try index.add(f2.word, &f2);
+    var f3 = Thing{ .word = "ἄγγελος" };
+    try index.add(f3.word, &f3);
+    var f4 = Thing{ .word = "ἄρτον" };
+    try index.add(f4.word, &f4);
+
+    try eq(null, index.lookup(""));
+    try eq(null, index.lookup("εις"));
+
+    {
+        const sr = index.lookup("ἄ");
+        try std.testing.expect(sr == null);
+    }
+
+    {
+        const sr = index.lookup("ἄρ");
+        try std.testing.expect(sr != null);
+        try se("ἄρ", sr.?.keyword);
+        try eq(0, sr.?.exact_accented.items.len);
+        try eq(0, sr.?.exact_unaccented.items.len);
+        try eq(2, sr.?.partial_match.items.len);
+    }
+
+    {
+        const sr = index.lookup("ἄρτ");
+        try std.testing.expect(sr != null);
+        try se("ἄρτ", sr.?.keyword);
+        try eq(0, sr.?.exact_accented.items.len);
+        try eq(0, sr.?.exact_unaccented.items.len);
+        try eq(2, sr.?.partial_match.items.len);
+    }
+
+    {
+        const sr = index.lookup("ἄρτος");
+        try std.testing.expect(sr != null);
+        try se("ἄρτος", sr.?.keyword);
+        try eq(1, sr.?.exact_accented.items.len);
+        try eq(0, sr.?.exact_unaccented.items.len);
+        try eq(0, sr.?.partial_match.items.len);
+    }
+
+    {
+        const sr = index.lookup("αρτ");
+        try std.testing.expect(sr != null);
+        try se("αρτ", sr.?.keyword);
+        try eq(0, sr.?.exact_accented.items.len);
+        try eq(0, sr.?.exact_unaccented.items.len);
+        try eq(2, sr.?.partial_match.items.len);
+    }
+}
+
+test "search_index_duplicates" {
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var substrings = std.ArrayList([]const u8).init(std.testing.allocator);
+        defer substrings.deinit();
+        try keywordify("περιπατεῖτε", &unaccented_word, &normalised_word, &substrings);
+        //for (substrings.items) |s| {
+        //    std.debug.print(" sliced: {s}\n", .{s});
+        //}
+        try eq(11, substrings.items.len);
+    }
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const Thing = struct {
+        word: []const u8,
+        const Self = @This();
+        pub fn lessThan(_: void, a: *Self, b: *Self) bool {
+            return std.mem.lessThan(u8, a.word, b.word);
+        }
+    };
+    var index = SearchIndex(*Thing, Thing.lessThan).init(allocator);
+    defer index.deinit();
+
+    var f1 = Thing{ .word = "περιπατεῖτε" };
+    try index.add(f1.word, &f1);
+
+    try std.testing.expectEqual(13, index.index.count());
+
+    try eq(null, index.lookup("π"));
+    try eq(null, index.lookup("εις"));
+
+    {
+        const sr = index.lookup("περιπατεῖτε");
+        try std.testing.expect(sr != null);
+        try se("περιπατεῖτε", sr.?.keyword);
+        try eq(1, sr.?.exact_accented.items.len);
+        try eq(0, sr.?.exact_unaccented.items.len);
+        try eq(0, sr.?.partial_match.items.len);
+    }
+}
+
+test "search_index arena" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const Thing = struct {
+        word: []const u8,
+        const Self = @This();
+        pub fn lessThan(_: void, a: *Self, b: *Self) bool {
+            return std.mem.lessThan(u8, a.word, b.word);
+        }
+    };
+    var index = SearchIndex(*Thing, Thing.lessThan).init(allocator);
+    defer index.deinit();
+
+    var f1 = Thing{ .word = "ἄρτος" };
+    try index.add(f1.word, &f1);
+    var f2 = Thing{ .word = "ἔχω" };
+    try index.add(f2.word, &f2);
+    var f3 = Thing{ .word = "ἄγγελος" };
+    try index.add(f3.word, &f3);
+    var f4 = Thing{ .word = "ἄρτον" };
+    try index.add(f4.word, &f4);
+
+    //var ti = index.index.iterator();
+    //while (ti.next()) |i| {
+    //    std.debug.print(" - {s}\n", .{i.key_ptr.*});
+    //}
+    try std.testing.expectEqual(26, index.index.count());
+
+    try eq(null, index.lookup(""));
+    try eq(null, index.lookup("εις"));
+
+    {
+        const sr = index.lookup("ἄρ");
+        try std.testing.expect(sr != null);
+        try se("ἄρ", sr.?.keyword);
+        try eq(0, sr.?.exact_accented.items.len);
+        try eq(0, sr.?.exact_unaccented.items.len);
+        try eq(2, sr.?.partial_match.items.len);
+    }
+}

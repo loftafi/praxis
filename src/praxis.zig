@@ -1,5 +1,6 @@
 pub const Dictionary = @import("dictionary.zig").Dictionary;
 pub const SearchIndex = @import("search_index.zig").SearchIndex;
+pub const MAX_WORD_SIZE = @import("search_index.zig").MAX_WORD_SIZE;
 
 pub const Lexeme = @import("lexeme.zig");
 pub const Form = @import("form.zig");

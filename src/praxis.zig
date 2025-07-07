@@ -9,6 +9,10 @@ pub const Lang = @import("lang.zig").Lang;
 pub const Gloss = @import("gloss.zig");
 pub const Panels = @import("panels.zig");
 
+pub const lexemeLessThan = Lexeme.lessThan;
+pub const formLessThan = Form.lessThan;
+pub const stringLessThan = @import("sort.zig").lessThan;
+
 pub const parsing = @import("parsing.zig");
 pub const Parsing = parsing.Parsing;
 pub const PartOfSpeech = parsing.PartOfSpeech;

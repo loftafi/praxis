@@ -1,6 +1,6 @@
 .{
     .name = .praxis,
-    .version = "0.0.4",
+    .version = "0.0.5",
     .fingerprint = 0x9db9462b35f6f714,
     .minimum_zig_version = "0.14.1",
     .dependencies = .{},

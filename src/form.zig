@@ -103,7 +103,7 @@ pub fn glosses_by_lang(self: *const Self, lang: Lang) ?*Gloss {
 /// Sort on the `word` field in ascii alphabetical. Fall back
 /// to sort by `preferred` value and `glosses` count.
 pub fn lessThan(_: void, self: *Self, other: *Self) bool {
-    const x = std.mem.order(u8, self.word, other.word);
+    const x = @import("sort.zig").order(self.word, other.word);
     if (x == .lt) {
         return true;
     } else if (x == .gt) {

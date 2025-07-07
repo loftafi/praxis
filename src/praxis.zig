@@ -1,5 +1,6 @@
 pub const Dictionary = @import("dictionary.zig").Dictionary;
 pub const SearchIndex = @import("search_index.zig").SearchIndex;
+pub const normalise_word = @import("search_index.zig").normalise_word;
 pub const MAX_WORD_SIZE = @import("search_index.zig").MAX_WORD_SIZE;
 
 pub const Lexeme = @import("lexeme.zig");
@@ -24,5 +25,6 @@ pub const Book = @import("book.zig").Book;
 pub const Reference = @import("reference.zig");
 
 pub const Parser = @import("parser.zig");
+pub const pos_to_english = @import("part_of_speech.zig").english;
 
 pub const transliterate = @import("transliterate.zig").transliterate_word;

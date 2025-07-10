@@ -340,6 +340,16 @@ pub const std_options = struct {
     pub const log_level: std.log.Level = .debug;
 };
 
+test "form_init" {
+    var form = try Self.create(std.testing.allocator);
+    defer form.destroy();
+    try expectEqual(0, form.word.len);
+    try expectEqual(false, form.preferred);
+    try expectEqual(false, form.incorrect);
+    try expectEqual(0, form.glosses.items.len);
+    try expectEqual(0, form.references.items.len);
+}
+
 test "form_read_write_bytes" {
     var t = Parser.init("fish|N-NSM|true|20|en:swim:to arch#zh:你好|sbl#Mark 11:22 33,sr#Luke 1:2 3\n");
     var form = try Self.create(std.testing.allocator);

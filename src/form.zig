@@ -347,7 +347,7 @@ test "form_init" {
     try expectEqual(false, form.preferred);
     try expectEqual(false, form.incorrect);
     try expectEqual(0, form.glosses.items.len);
-    try expectEqual(1, form.references.items.len);
+    try expectEqual(0, form.references.items.len);
 }
 
 test "form_read_write_bytes" {

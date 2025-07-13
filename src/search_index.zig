@@ -12,34 +12,42 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
     return struct {
         const Self = @This();
 
-        index: std.StringHashMap(*SearchResult),
-        allocator: Allocator,
+        /// Map a search `keyword` string to a `SearchResult` record.
+        index: StringHashMapUnmanaged(*SearchResult),
 
-        // Temporary memory buffer holds slices of search keywords.
-        slices: ArrayList([]const u8),
+        /// Holds allocated copies of each `keyword` in the `index`.
+        slices: ArrayListUnmanaged([]const u8),
 
-        /// init should be used with an arena allocator where possible. Call deinit if arena allocator is not used.
-        pub fn init(allocator: Allocator) Self {
+        pub fn init() Self {
             return Self{
-                .allocator = allocator,
-                .index = std.StringHashMap(*SearchResult).init(allocator),
-                .slices = ArrayList([]const u8).init(allocator),
+                .index = .empty,
+                .slices = .empty,
             };
         }
 
-        /// deinit is provided for the case where an arena allocator is not being used.
-        pub fn deinit(self: *Self) void {
+        /// `deinit` is required if do not use an arena allocator.
+        pub fn deinit(self: *Self, allocator: Allocator) void {
             var i = self.index.iterator();
             while (i.next()) |item| {
-                self.allocator.free(item.key_ptr.*);
-                item.value_ptr.*.destroy(self.allocator);
+                allocator.free(item.key_ptr.*);
+                item.value_ptr.*.destroy(allocator);
             }
-            self.slices.deinit();
-            self.index.deinit();
+            self.slices.deinit(allocator);
+            self.index.deinit(allocator);
         }
 
         /// The key is cloned and owned, the value is neither cloned nor owned.
-        pub fn add(self: *Self, word: []const u8, form: T) error{ OutOfMemory, WordTooLong, EmptyWord, InvalidUtf8 }!void {
+        pub fn add(
+            self: *Self,
+            allocator: Allocator,
+            word: []const u8,
+            form: T,
+        ) error{
+            OutOfMemory,
+            WordTooLong,
+            EmptyWord,
+            InvalidUtf8,
+        }!void {
             if (word.len >= MAX_WORD_SIZE) {
                 std.debug.print("Word {s} too long for index.", .{word});
                 return IndexError.WordTooLong;
@@ -51,31 +59,42 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
             self.slices.clearRetainingCapacity();
             var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
             var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
-            try keywordify(word, &unaccented_word, &normalised_word, &self.slices);
+            try keywordify(allocator, word, &unaccented_word, &normalised_word, &self.slices);
 
-            var result = try self.getOrCreateSearchResult(normalised_word.slice());
-            try result.exact_accented.append(form);
+            var result = try self.getOrCreateSearchResult(
+                allocator,
+                normalised_word.slice(),
+            );
+            try result.exact_accented.append(allocator, form);
 
             if (!std.mem.eql(u8, normalised_word.slice(), unaccented_word.slice())) {
-                result = try self.getOrCreateSearchResult(unaccented_word.slice());
-                try result.exact_unaccented.append(form);
+                result = try self.getOrCreateSearchResult(
+                    allocator,
+                    unaccented_word.slice(),
+                );
+                try result.exact_unaccented.append(allocator, form);
             }
 
             for (self.slices.items) |substring| {
                 if (is_stopword(substring)) {
                     continue;
                 }
-                result = try self.getOrCreateSearchResult(substring);
-                try result.partial_match.append(form);
+                result = try self.getOrCreateSearchResult(allocator, substring);
+                try result.partial_match.append(allocator, form);
             }
         }
 
-        fn getOrCreateSearchResult(self: *Self, keyword: []const u8) !*SearchResult {
+        /// Return a `SearchResult` record corresponding to a search `keyword`.
+        fn getOrCreateSearchResult(
+            self: *Self,
+            allocator: Allocator,
+            keyword: []const u8,
+        ) error{OutOfMemory}!*SearchResult {
             var value = self.index.get(keyword);
             if (value == null) {
-                const key = try self.allocator.dupe(u8, keyword);
-                value = try SearchResult.create(self.allocator, key);
-                try self.index.put(key, value.?);
+                const key = try allocator.dupe(u8, keyword);
+                value = try SearchResult.create(allocator, key);
+                try self.index.put(allocator, key, value.?);
             }
             return value.?;
         }
@@ -132,9 +151,13 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
         /// results in a stable order of data in the binary file.
         ///
         /// Each search index entry must be sorted with `sort()` before saving index data.
-        pub fn write_binary_bytes(self: *const Self, data: *ArrayList(u8)) !void {
-            var unsorted = try std.ArrayList([]const u8).initCapacity(self.allocator, self.index.count());
-            defer unsorted.deinit();
+        pub fn writeBinaryBytes(
+            self: *const Self,
+            allocator: Allocator,
+            data: *ArrayListUnmanaged(u8),
+        ) !void {
+            var unsorted: std.ArrayListUnmanaged([]const u8) = .empty;
+            defer unsorted.deinit(allocator);
 
             // Create a sorted list of the indexes
             var walk = self.index.iterator();
@@ -150,13 +173,18 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
             }
         }
 
-        pub fn load_binary_data(self: *Self, data: *BinaryReader, uids: *std.AutoHashMap(u24, T)) !void {
+        pub fn load_binary_data(
+            self: *Self,
+            data: *BinaryReader,
+            uids: *std.AutoHashMap(u24, T),
+            allocator: Allocator,
+        ) error{OutOfMemory}!void {
             const indexes = try data.u32();
             for (0..indexes) |_| {
                 const keyword = data.string() catch return error.InvalidIndexFile;
-                const value = try self.allocator.alloc(u8, keyword.len);
+                const value = try allocator.alloc(u8, keyword.len);
                 @memcpy(value, keyword);
-                const results = try SearchResult.create(self.allocator, value);
+                const results = try SearchResult.create(allocator, value);
                 try self.index.put(value, results);
                 var size = try data.u8();
                 for (0..size) |_| {
@@ -191,14 +219,14 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
         pub const SearchResult = struct {
             keyword: []const u8,
 
-            // Exact match with accents
-            exact_accented: ArrayList(T),
+            /// Exact matches with accents.
+            exact_accented: ArrayListUnmanaged(T),
 
-            // Exact match without accents
-            exact_unaccented: ArrayList(T),
+            /// Exact matches without accents.
+            exact_unaccented: ArrayListUnmanaged(T),
 
-            // Unaccented prefix match, most common words first
-            partial_match: ArrayList(T),
+            /// Unaccented prefix matches, most common words first.
+            partial_match: ArrayListUnmanaged(T),
 
             pub const Iterator = struct {
                 const SI = @This();
@@ -236,34 +264,41 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
                 };
             }
 
-            pub fn create(allocator: Allocator, word: []const u8) !*SearchResult {
-                var sr = try allocator.create(SearchResult);
-                sr.keyword = word;
-                sr.exact_accented = ArrayList(T).init(allocator);
-                sr.exact_unaccented = ArrayList(T).init(allocator);
-                sr.partial_match = ArrayList(T).init(allocator);
+            pub fn create(allocator: Allocator, word: []const u8) error{OutOfMemory}!*SearchResult {
+                const sr = try allocator.create(SearchResult);
+                sr.* = .{
+                    .keyword = word,
+                    .exact_accented = .empty,
+                    .exact_unaccented = .empty,
+                    .partial_match = .empty,
+                };
                 return sr;
             }
 
             pub fn destroy(self: *SearchResult, allocator: Allocator) void {
-                self.exact_accented.deinit();
-                self.exact_unaccented.deinit();
-                self.partial_match.deinit();
+                self.exact_accented.deinit(allocator);
+                self.exact_unaccented.deinit(allocator);
+                self.partial_match.deinit(allocator);
                 allocator.destroy(self);
             }
 
-            /// Search index must be sorted with `sort()` before saving index data.
-            pub fn write_binary_bytes(self: *SearchResult, data: *ArrayList(u8)) !void {
+            /// Write contents of this `SearchIndex` to the `data`
+            /// array. Use `sort()` before saving index data.
+            pub fn writeBinaryBytes(
+                self: *SearchResult,
+                allocator: Allocator,
+                data: *ArrayListUnmanaged(u8),
+            ) error{OutOfMemory}!void {
                 std.debug.assert(MAX_SEARCH_RESULTS <= 0xff);
 
-                try data.appendSlice(self.keyword);
-                try data.append(US);
+                try data.appendSlice(allocator, self.keyword);
+                try data.append(allocator, US);
 
                 if (self.exact_accented.items.len > 0xff) {
                     log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_accented.items.len });
                     return error.IndexTooLarge;
                 }
-                try data.append(@intCast(self.exact_accented.items.len));
+                try data.append(allocator, @intCast(self.exact_accented.items.len));
                 for (self.exact_accented.items) |g| {
                     if (g.uid > 0xffffff) {
                         return error.UidTooLarge;
@@ -275,7 +310,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
                     log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_unaccented.items.len });
                     return error.IndexTooLarge;
                 }
-                try data.append(@intCast(self.exact_unaccented.items.len));
+                try data.append(allocator, @intCast(self.exact_unaccented.items.len));
                 for (self.exact_unaccented.items) |g| {
                     if (g.uid > 0xffffff) {
                         return error.UidTooLarge;
@@ -299,16 +334,12 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
     };
 }
 
-fn stringLessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
-    return std.mem.order(u8, lhs, rhs) == .lt;
-}
-
-/// Normalise is used to standardize a keyword into the format
-/// it would appear if it exists inside the search index.
-///
-///  - The unaccented version removes all accents and breathings.
-///  - The normalised removes only excess accents and standarises the final letter.
-///
+//// Normalise is used to standardize a keyword into the format
+//// it would appear if it exists inside the search index.
+////
+////  - The unaccented version removes all accents and breathings.
+////  - The normalised removes only excess accents and standarises the final letter.
+////
 pub fn normalise_word(
     word: []const u8,
     unaccented: *std.BoundedArray(u8, MAX_WORD_SIZE + 1),
@@ -373,10 +404,11 @@ pub fn normalise_word(
 /// The substrings are slices of the `unaccented` and `normalised`
 /// string buffer.
 pub fn keywordify(
+    allocator: Allocator,
     word: []const u8,
     unaccented: *std.BoundedArray(u8, MAX_WORD_SIZE + 1),
     normalised: *std.BoundedArray(u8, MAX_WORD_SIZE + 1),
-    substrings: *ArrayList([]const u8),
+    substrings: *ArrayListUnmanaged([]const u8),
 ) error{ OutOfMemory, WordTooLong, InvalidUtf8 }!void {
     if (word.len >= MAX_WORD_SIZE) {
         return IndexError.WordTooLong;
@@ -440,9 +472,9 @@ pub fn keywordify(
         } else if (character_count < MAX_INDEX_KEYWORD_SIZE) {
             const k1 = normalised.slice();
             const k2 = unaccented.slice();
-            try substrings.append(k1);
+            try substrings.append(allocator, k1);
             if (!std.mem.eql(u8, k1, k2)) {
-                try substrings.append(unaccented.slice());
+                try substrings.append(allocator, unaccented.slice());
             }
         }
     }
@@ -451,7 +483,7 @@ pub fn keywordify(
 const ue = std.unicode.utf8EncodeComptime;
 
 /// Remove accent and breathing marks. Returns an array that is equal or
-/// shoter in length to the original array used to build the character
+/// shorter in length to the original array used to build the character
 /// to prevent memory overrun.
 pub fn unaccent(c: u21) ?[]const u8 {
     return switch (c) {
@@ -483,6 +515,12 @@ pub fn unaccent(c: u21) ?[]const u8 {
     };
 }
 
+/// Return a deaccented, lowercased, normalised version of a character.
+///
+/// - Α Ἄ ἀ all become α
+/// - Σ σ ς all become σ
+/// - D d all become d
+///
 pub fn normalise_char(c: u21) u21 {
     return switch (c) {
         'Α', 'Ἀ', 'Ἁ', 'Ἄ', 'Ἅ', 'ἄ', 'ἅ', 'ἀ', 'ᾶ', 'ᾷ', 'ἁ', 'ά', 'ὰ', 'ἂ', 'ἃ', 'Ά', 'Ὰ' => 'α',
@@ -516,8 +554,9 @@ pub fn normalise_char(c: u21) u21 {
     };
 }
 
-// unaccent must return an array that is equal or shoter in length to the original
-// array used to build the character to prevent memory overrun.
+// lowercase returns a unicode array containing the lowercase equivalent
+// of the requested letter. It is assumed that the array returned is equal
+// or shoter in length to the original array used to build the character.
 fn lowercase(c: u21) ?[]const u8 {
     return switch (c) {
         'Α' => comptime &ue('α'),
@@ -638,10 +677,13 @@ fn remove_accent(c: u21) ?[]const u8 {
 const std = @import("std");
 const log = std.log;
 const is_stopword = @import("gloss_tokens.zig").is_stopword;
-const ArrayList = std.ArrayList;
+
+const StringHashMapUnmanaged = std.StringHashMapUnmanaged;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;
 const BinaryReader = @import("binary_reader.zig");
 const BinaryWriter = @import("binary_writer.zig");
+const stringLessThan = @import("sort.zig").lessThan;
 const append_u32 = BinaryWriter.append_u32;
 const append_u24 = BinaryWriter.append_u24;
 const US = BinaryReader.US;
@@ -730,9 +772,9 @@ test "keywordify simple" {
         var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
         var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
         const word = "ἄρτός";
-        var slices = ArrayList([]const u8).init(allocator);
-        defer slices.deinit();
-        try keywordify(word, &unaccented_word, &normalised_word, &slices);
+        var slices: ArrayListUnmanaged([]const u8) = .empty;
+        defer slices.deinit(allocator);
+        try keywordify(allocator, word, &unaccented_word, &normalised_word, &slices);
         try std.testing.expectEqual(6, slices.items.len);
         try se("ἄρ", slices.items[0]);
         try se("αρ", slices.items[1]);
@@ -747,9 +789,9 @@ test "keywordify simple" {
         var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
         var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
         const word = "ΜΩϋσῆς";
-        var slices = ArrayList([]const u8).init(allocator);
-        defer slices.deinit();
-        try keywordify(word, &unaccented_word, &normalised_word, &slices);
+        var slices: ArrayListUnmanaged([]const u8) = .empty;
+        defer slices.deinit(allocator);
+        try keywordify(allocator, word, &unaccented_word, &normalised_word, &slices);
         try std.testing.expectEqual(7, slices.items.len);
         try se("μω", slices.items[0]);
         try se("μωϋ", slices.items[1]);
@@ -765,9 +807,15 @@ test "keywordify simple" {
         var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
         var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
         const word = "serpent";
-        var slices = ArrayList([]const u8).init(allocator);
-        defer slices.deinit();
-        try keywordify(word, &unaccented_word, &normalised_word, &slices);
+        var slices: ArrayListUnmanaged([]const u8) = .empty;
+        defer slices.deinit(allocator);
+        try keywordify(
+            allocator,
+            word,
+            &unaccented_word,
+            &normalised_word,
+            &slices,
+        );
         try std.testing.expectEqual(5, slices.items.len);
         try se("se", slices.items[0]);
         try se("ser", slices.items[1]);
@@ -789,17 +837,17 @@ test "search_index basics" {
             return std.mem.lessThan(u8, a.word, b.word);
         }
     };
-    var index = SearchIndex(*Thing, Thing.lessThan).init(allocator);
-    defer index.deinit();
+    var index = SearchIndex(*Thing, Thing.lessThan).init();
+    defer index.deinit(allocator);
 
     var f1 = Thing{ .word = "ἄρτος" };
-    try index.add(f1.word, &f1);
+    try index.add(allocator, f1.word, &f1);
     var f2 = Thing{ .word = "ἔχω" };
-    try index.add(f2.word, &f2);
+    try index.add(allocator, f2.word, &f2);
     var f3 = Thing{ .word = "ἄγγελος" };
-    try index.add(f3.word, &f3);
+    try index.add(allocator, f3.word, &f3);
     var f4 = Thing{ .word = "ἄρτον" };
-    try index.add(f4.word, &f4);
+    try index.add(allocator, f4.word, &f4);
 
     try eq(null, index.lookup(""));
     try eq(null, index.lookup("εις"));
@@ -850,16 +898,19 @@ test "search_index_duplicates" {
     {
         var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
         var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var substrings = std.ArrayList([]const u8).init(std.testing.allocator);
-        defer substrings.deinit();
-        try keywordify("περιπατεῖτε", &unaccented_word, &normalised_word, &substrings);
-        //for (substrings.items) |s| {
-        //    std.debug.print(" sliced: {s}\n", .{s});
-        //}
+        var substrings: std.ArrayListUnmanaged([]const u8) = .empty;
+        defer substrings.deinit(std.testing.allocator);
+        try keywordify(
+            std.testing.allocator,
+            "περιπατεῖτε",
+            &unaccented_word,
+            &normalised_word,
+            &substrings,
+        );
         try eq(11, substrings.items.len);
     }
 
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -870,11 +921,11 @@ test "search_index_duplicates" {
             return std.mem.lessThan(u8, a.word, b.word);
         }
     };
-    var index = SearchIndex(*Thing, Thing.lessThan).init(allocator);
-    defer index.deinit();
+    var index = SearchIndex(*Thing, Thing.lessThan).init();
+    defer index.deinit(allocator);
 
     var f1 = Thing{ .word = "περιπατεῖτε" };
-    try index.add(f1.word, &f1);
+    try index.add(allocator, f1.word, &f1);
 
     try std.testing.expectEqual(13, index.index.count());
 
@@ -903,17 +954,17 @@ test "search_index arena" {
             return std.mem.lessThan(u8, a.word, b.word);
         }
     };
-    var index = SearchIndex(*Thing, Thing.lessThan).init(allocator);
-    defer index.deinit();
+    var index = SearchIndex(*Thing, Thing.lessThan).init();
+    defer index.deinit(allocator);
 
     var f1 = Thing{ .word = "ἄρτος" };
-    try index.add(f1.word, &f1);
+    try index.add(allocator, f1.word, &f1);
     var f2 = Thing{ .word = "ἔχω" };
-    try index.add(f2.word, &f2);
+    try index.add(allocator, f2.word, &f2);
     var f3 = Thing{ .word = "ἄγγελος" };
-    try index.add(f3.word, &f3);
+    try index.add(allocator, f3.word, &f3);
     var f4 = Thing{ .word = "ἄρτον" };
-    try index.add(f4.word, &f4);
+    try index.add(allocator, f4.word, &f4);
 
     //var ti = index.index.iterator();
     //while (ti.next()) |i| {

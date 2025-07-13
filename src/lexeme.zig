@@ -26,9 +26,9 @@ pub fn create(allocator: std.mem.Allocator) !*Self {
     return s;
 }
 
-pub fn destroy(self: *Self) void {
+pub fn destroy(self: *Self, allocator: Allocator) void {
     self.deinit();
-    self.forms.allocator.destroy(self);
+    allocator.destroy(self);
 }
 
 pub fn init(self: *Self, allocator: std.mem.Allocator) !void {
@@ -193,7 +193,7 @@ pub fn read_binary(self: *Self, t: *BinaryReader) !void {
     const form_count = try t.u16();
     for (0..form_count) |_| {
         const form_entry = try Form.create(self.forms.allocator);
-        errdefer form_entry.destroy();
+        errdefer form_entry.destroy(self.forms.allocator);
         try form_entry.read_binary(t);
         form_entry.lexeme = self;
         try self.forms.append(form_entry);
@@ -202,34 +202,34 @@ pub fn read_binary(self: *Self, t: *BinaryReader) !void {
 
 /// Write all fields from a lexeme in binary format. No child
 /// form records are output.
-pub fn write_binary(self: *Self, data: *std.ArrayList(u8)) !void {
-    try append_u24(data, self.uid);
-    try data.appendSlice(self.word);
-    try data.append(US);
-    try data.append(@intFromEnum(self.lang));
-    try append_u32(data, @bitCast(self.pos));
-    try data.append(@intFromEnum(self.article)); // M, F, M/F...
-    try append_u16(data, @intCast(self.glosses.items.len));
+pub fn writeBinary(self: *Self, allocator: Allocator, data: *std.ArrayListUnmanaged(u8)) !void {
+    try append_u24(allocator, data, self.uid);
+    try data.appendSlice(allocator, self.word);
+    try data.append(allocator, US);
+    try data.append(allocator, @intFromEnum(self.lang));
+    try append_u32(allocator, data, @bitCast(self.pos));
+    try data.append(allocator, @intFromEnum(self.article)); // M, F, M/F...
+    try append_u16(allocator, data, @intCast(self.glosses.items.len));
     for (self.glosses.items) |gloss| {
-        try data.append(@intFromEnum(gloss.lang));
+        try data.append(allocator, @intFromEnum(gloss.lang));
         for (gloss.glosses()) |item| {
-            try data.appendSlice(item);
-            try data.append(US);
+            try data.appendSlice(allocator, item);
+            try data.append(allocator, US);
         }
-        try data.append(RS);
+        try data.append(allocator, RS);
     }
     if (self.tags) |tags| {
-        try append_u8(data, @intCast(tags.len));
+        try append_u8(allocator, data, @intCast(tags.len));
         for (tags) |tag| {
-            try data.appendSlice(tag);
-            try data.append(US);
+            try data.appendSlice(allocator, tag);
+            try data.append(allocator, US);
         }
     } else {
-        try append_u8(data, 0);
+        try append_u8(allocator, data, 0);
     }
-    try append_u8(data, @as(u8, @intCast(self.strongs.items.len)));
+    try append_u8(allocator, data, @as(u8, @intCast(self.strongs.items.len)));
     for (self.strongs.items) |number| {
-        try append_u16(data, number);
+        try append_u16(allocator, data, number);
     }
 }
 
@@ -324,6 +324,7 @@ pub fn read_text(self: *Self, t: *Parser) !void {
 }
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 pub const Parser = @import("parser.zig");
 const is_eol = @import("parser.zig").is_eol;
 const is_whitespace = @import("parser.zig").is_whitespace;
@@ -361,7 +362,7 @@ const expectEqualStrings = std.testing.expectEqualStrings;
 test "read_lexeme" {
     var data = Parser.init("Ἀαρών|el||17|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|");
     var lexeme = try Self.create(std.testing.allocator);
-    defer lexeme.destroy();
+    defer lexeme.destroy(std.testing.allocator);
     try lexeme.read_text(&data);
     try expectEqualStrings("Ἀαρών", lexeme.word);
     try expectEqual(17, lexeme.uid);
@@ -383,7 +384,7 @@ test "read_lexeme2" {
         \\ἀγγεῖον|el|ἀγγεῖο|388|30,55|τό|Noun|-ου|ἀγγεῖ|en:vessel:flask:container:can|a b c|tag|
     );
     var lexeme = try Self.create(std.testing.allocator);
-    defer lexeme.destroy();
+    defer lexeme.destroy(std.testing.allocator);
     try lexeme.read_text(&data);
     try expectEqual(Lang.greek, lexeme.lang);
     try expectEqual(388, lexeme.uid);
@@ -396,14 +397,15 @@ test "read_lexeme2" {
 }
 
 test "lexeme_bytes" {
+    const allocator = std.testing.allocator;
     var data = Parser.init("cat|el||17|2|ὁ|IndeclinableProperNoun||cat|en:cat#zh:ara#es:nat||person|");
-    var lexeme = try Self.create(std.testing.allocator);
-    defer lexeme.destroy();
+    var lexeme = try Self.create(allocator);
+    defer lexeme.destroy(allocator);
     try lexeme.read_text(&data);
 
-    var out = std.ArrayList(u8).init(std.testing.allocator);
-    defer out.deinit();
-    try lexeme.write_binary(&out);
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+    try lexeme.writeBinary(allocator, &out);
 
     //try expectEqual(41, out.items.len);
     try expectEqual(17, out.items[0]);
@@ -427,20 +429,21 @@ test "lexeme_bytes" {
 }
 
 test "compare_lexeme" {
+    const allocator = std.testing.allocator;
     {
         var data = Parser.init(
             \\Ἀαρώ|el||17|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
             \\Ἀαρών|el||18|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
             \\Ἀαρώνα|el||19|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
         );
-        var lexeme1 = try Self.create(std.testing.allocator);
-        defer lexeme1.destroy();
+        var lexeme1 = try Self.create(allocator);
+        defer lexeme1.destroy(allocator);
         try lexeme1.read_text(&data);
-        var lexeme2 = try Self.create(std.testing.allocator);
-        defer lexeme2.destroy();
+        var lexeme2 = try Self.create(allocator);
+        defer lexeme2.destroy(allocator);
         try lexeme2.read_text(&data);
-        var lexeme3 = try Self.create(std.testing.allocator);
-        defer lexeme3.destroy();
+        var lexeme3 = try Self.create(allocator);
+        defer lexeme3.destroy(allocator);
         try lexeme3.read_text(&data);
         try expectEqual(true, lessThan({}, lexeme1, lexeme2));
         try expectEqual(true, lessThan({}, lexeme1, lexeme3));
@@ -453,14 +456,14 @@ test "compare_lexeme" {
             \\Ἀαρών|el||18|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫||person|
             \\Ἀαρών|el||19|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
         );
-        var lexeme1 = try Self.create(std.testing.allocator);
-        defer lexeme1.destroy();
+        var lexeme1 = try Self.create(allocator);
+        defer lexeme1.destroy(allocator);
         try lexeme1.read_text(&data);
-        var lexeme2 = try Self.create(std.testing.allocator);
-        defer lexeme2.destroy();
+        var lexeme2 = try Self.create(allocator);
+        defer lexeme2.destroy(allocator);
         try lexeme2.read_text(&data);
-        var lexeme3 = try Self.create(std.testing.allocator);
-        defer lexeme3.destroy();
+        var lexeme3 = try Self.create(allocator);
+        defer lexeme3.destroy(allocator);
         try lexeme3.read_text(&data);
         try expectEqual(true, lessThan({}, lexeme1, lexeme2));
         try expectEqual(true, lessThan({}, lexeme1, lexeme3));
@@ -470,21 +473,22 @@ test "compare_lexeme" {
 }
 
 test "binary_lexeme_load_save" {
+    const allocator = std.testing.allocator;
     var data = Parser.init("ἅγιος|el||519|40,39||Adjective||ἅγι|en:holy:set apart:sacred#zh:聖潔的:至聖所:聖所:聖徒:聖:聖潔#es:santo:apartado:sagrado|ἅγιος,-α,-ον|worship, church|\n");
-    var lexeme = try Self.create(std.testing.allocator);
-    defer lexeme.destroy();
+    var lexeme = try Self.create(allocator);
+    defer lexeme.destroy(allocator);
     try lexeme.read_text(&data);
     try expectEqual(2, lexeme.strongs.items.len);
     try expectEqual(40, lexeme.strongs.items[0]);
     try expectEqual(39, lexeme.strongs.items[1]);
     try expectEqual(2, lexeme.tags.?.len);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
-    defer out.deinit();
-    try lexeme.write_binary(&out);
-    try append_u16(&out, 0); // no forms
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+    try lexeme.writeBinary(allocator, &out);
+    try append_u16(allocator, &out, 0); // no forms
 
-    var lexeme2 = try Self.create(std.testing.allocator);
-    defer lexeme2.destroy();
+    var lexeme2 = try Self.create(allocator);
+    defer lexeme2.destroy(allocator);
     var r = BinaryReader.init(out.items);
     try lexeme2.read_binary(&r);
     try expectEqual(2, lexeme.strongs.items.len);
@@ -495,7 +499,7 @@ test "binary_lexeme_load_save" {
 test "read_invalid_lexeme_id" {
     var data = Parser.init("Ἀαρών|el||nana|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|\n");
     var lexeme = try Self.create(std.testing.allocator);
-    defer lexeme.destroy();
+    defer lexeme.destroy(std.testing.allocator);
     const e = lexeme.read_text(&data);
     try expectEqual(e, error.InvalidU24);
 }

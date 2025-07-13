@@ -126,24 +126,14 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
             return self.index.get(unaccented_word.slice());
         }
 
-        /// Srt search results to most likely matches and throw away anything
-        /// over MAX_SEARCH_RESULTS search results.
+        /// Sort search results to most likely matches and throw
+        /// away anything over MAX_SEARCH_RESULTS search results.
         pub fn sort(self: *Self) !void {
             var i = self.index.valueIterator();
             while (i.next()) |sr| {
                 std.mem.sort(T, sr.*.exact_accented.items, {}, cmp);
                 std.mem.sort(T, sr.*.exact_unaccented.items, {}, cmp);
                 std.mem.sort(T, sr.*.partial_match.items, {}, cmp);
-
-                if (sr.*.exact_accented.items.len > MAX_SEARCH_RESULTS) {
-                    try sr.*.exact_accented.resize(MAX_SEARCH_RESULTS);
-                }
-                if (sr.*.exact_unaccented.items.len > MAX_SEARCH_RESULTS) {
-                    try sr.*.exact_unaccented.resize(MAX_SEARCH_RESULTS);
-                }
-                if (sr.*.partial_match.items.len > MAX_SEARCH_RESULTS) {
-                    try sr.*.partial_match.resize(MAX_SEARCH_RESULTS);
-                }
             }
         }
 
@@ -155,60 +145,64 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
             self: *const Self,
             allocator: Allocator,
             data: *ArrayListUnmanaged(u8),
-        ) !void {
+        ) error{ OutOfMemory, IndexTooLarge }!void {
             var unsorted: std.ArrayListUnmanaged([]const u8) = .empty;
             defer unsorted.deinit(allocator);
+            try unsorted.ensureTotalCapacityPrecise(allocator, self.index.size);
 
             // Create a sorted list of the indexes
             var walk = self.index.iterator();
             while (walk.next()) |i| {
-                try unsorted.append(i.key_ptr.*);
+                try unsorted.append(allocator, i.key_ptr.*);
             }
             std.mem.sort([]const u8, unsorted.items, {}, stringLessThan);
 
             // Output the sorted list
-            try append_u32(data, self.index.count());
+            try append_u32(allocator, data, self.index.count());
             for (unsorted.items) |key| {
-                try self.index.get(key).?.write_binary_bytes(data);
+                try self.index.get(key).?.writeBinaryBytes(allocator, data);
             }
         }
 
-        pub fn load_binary_data(
+        pub fn loadBinaryData(
             self: *Self,
+            allocator: Allocator,
             data: *BinaryReader,
             uids: *std.AutoHashMap(u24, T),
-            allocator: Allocator,
-        ) error{OutOfMemory}!void {
+        ) error{ OutOfMemory, InvalidIndexFile, unexpected_eof }!void {
             const indexes = try data.u32();
             for (0..indexes) |_| {
                 const keyword = data.string() catch return error.InvalidIndexFile;
                 const value = try allocator.alloc(u8, keyword.len);
                 @memcpy(value, keyword);
                 const results = try SearchResult.create(allocator, value);
-                try self.index.put(value, results);
+                try self.index.put(allocator, value, results);
                 var size = try data.u8();
+                try results.exact_accented.ensureTotalCapacityPrecise(allocator, size);
                 for (0..size) |_| {
                     const uid = try data.u24();
                     if (uids.get(uid)) |item| {
-                        try results.exact_accented.append(item);
+                        results.exact_accented.appendAssumeCapacity(item);
                     } else {
                         std.debug.print("Missing record search index uid {d}\n", .{uid});
                     }
                 }
                 size = try data.u8();
+                try results.exact_unaccented.ensureTotalCapacityPrecise(allocator, size);
                 for (0..size) |_| {
                     const uid = try data.u24();
                     if (uids.get(uid)) |item| {
-                        try results.exact_unaccented.append(item);
+                        results.exact_unaccented.appendAssumeCapacity(item);
                     } else {
                         std.debug.print("Missing record search index uid {d}\n", .{uid});
                     }
                 }
                 size = try data.u8();
+                try results.partial_match.ensureTotalCapacityPrecise(allocator, size);
                 for (0..size) |_| {
                     const uid = try data.u24();
                     if (uids.get(uid)) |item| {
-                        try results.partial_match.append(item);
+                        results.partial_match.appendAssumeCapacity(item);
                     } else {
                         std.debug.print("Missing record search index uid {d}\n", .{uid});
                     }
@@ -288,46 +282,46 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
                 self: *SearchResult,
                 allocator: Allocator,
                 data: *ArrayListUnmanaged(u8),
-            ) error{OutOfMemory}!void {
+            ) error{ OutOfMemory, IndexTooLarge }!void {
                 std.debug.assert(MAX_SEARCH_RESULTS <= 0xff);
 
                 try data.appendSlice(allocator, self.keyword);
                 try data.append(allocator, US);
 
-                if (self.exact_accented.items.len > 0xff) {
+                var count: usize = @min(self.exact_accented.items.len, MAX_SEARCH_RESULTS);
+                if (count > 0xff) {
                     log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_accented.items.len });
                     return error.IndexTooLarge;
                 }
-                try data.append(allocator, @intCast(self.exact_accented.items.len));
-                for (self.exact_accented.items) |g| {
-                    if (g.uid > 0xffffff) {
-                        return error.UidTooLarge;
-                    }
-                    try append_u24(data, @intCast(g.uid));
+                try data.append(allocator, @intCast(count));
+                for (self.exact_accented.items, 0..) |g, i| {
+                    if (i == count) break;
+                    if (g.uid > 0xffffff) return error.UidTooLarge;
+                    try append_u24(allocator, data, @intCast(g.uid));
                 }
 
-                if (self.exact_unaccented.items.len > 0xff) {
+                count = @min(self.exact_unaccented.items.len, MAX_SEARCH_RESULTS);
+                if (count > 0xff) {
                     log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_unaccented.items.len });
                     return error.IndexTooLarge;
                 }
-                try data.append(allocator, @intCast(self.exact_unaccented.items.len));
-                for (self.exact_unaccented.items) |g| {
-                    if (g.uid > 0xffffff) {
-                        return error.UidTooLarge;
-                    }
-                    try append_u24(data, @intCast(g.uid));
+                try data.append(allocator, @intCast(count));
+                for (self.exact_unaccented.items, 0..) |g, i| {
+                    if (i == count) break;
+                    if (g.uid > 0xffffff) return error.UidTooLarge;
+                    try append_u24(allocator, data, @intCast(g.uid));
                 }
 
-                if (self.partial_match.items.len > 0xff) {
+                count = @min(self.partial_match.items.len, MAX_SEARCH_RESULTS);
+                if (count > 0xff) {
                     log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.partial_match.items.len });
                     return error.IndexTooLarge;
                 }
-                try data.append(@intCast(self.partial_match.items.len));
-                for (self.partial_match.items) |g| {
-                    if (g.uid > 0xffffff) {
-                        return error.UidTooLarge;
-                    }
-                    try append_u24(data, @intCast(g.uid));
+                try data.append(allocator, @intCast(count));
+                for (self.partial_match.items, 0..) |g, i| {
+                    if (i == count) break;
+                    if (g.uid > 0xffffff) return error.UidTooLarge;
+                    try append_u24(allocator, data, @intCast(g.uid));
                 }
             }
         };

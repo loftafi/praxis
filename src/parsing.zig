@@ -20,78 +20,78 @@ pub const Parsing = packed struct(u32) {
     crasis: bool = false,
     unused: bool = false,
 
-    pub fn string(p: Parsing, b: *std.ArrayList(u8)) !void {
+    pub fn string(p: Parsing, b: anytype) !void {
         switch (p.part_of_speech) {
             .unknown => {
                 return;
             },
             .adverb => {
-                try b.appendSlice("ADV");
+                try b.writeAll("ADV");
                 try append_flag(p, b);
                 return;
             },
             .comparative_adverb => {
-                try b.appendSlice("ADV-C");
+                try b.writeAll("ADV-C");
                 return;
             },
             .superlative_adverb => {
-                try b.appendSlice("ADV-S");
+                try b.writeAll("ADV-S");
                 return;
             },
             .conjunction => {
-                try b.appendSlice("CONJ");
+                try b.writeAll("CONJ");
                 try append_flag(p, b);
                 return;
             },
             .conditional => {
-                try b.appendSlice("COND");
+                try b.writeAll("COND");
                 try append_flag(p, b);
                 return;
             },
             .particle => {
-                try b.appendSlice("PRT");
+                try b.writeAll("PRT");
                 try append_flag(p, b);
                 return;
             },
             .preposition => {
-                try b.appendSlice("PREP");
+                try b.writeAll("PREP");
                 try append_flag(p, b);
                 return;
             },
             .interjection => {
-                try b.appendSlice("INJ");
+                try b.writeAll("INJ");
                 try append_flag(p, b);
                 return;
             },
             .aramaic_transliteration => {
-                try b.appendSlice("ARAM");
+                try b.writeAll("ARAM");
                 return;
             },
             .hebrew_transliteration => {
-                try b.appendSlice("HEB");
+                try b.writeAll("HEB");
                 return;
             },
             .proper_noun => {
                 if (p.indeclinable) {
-                    try b.appendSlice("N-PRI");
+                    try b.writeAll("N-PRI");
                     return;
                 }
             },
             .numeral => {
                 if (p.indeclinable) {
-                    try b.appendSlice("A-NUI");
+                    try b.writeAll("A-NUI");
                     return;
                 }
             },
             .letter => {
                 if (p.indeclinable) {
-                    try b.appendSlice("N-LI");
+                    try b.writeAll("N-LI");
                     return;
                 }
             },
             .noun => {
                 if (p.indeclinable) {
-                    try b.appendSlice("N-OI");
+                    try b.writeAll("N-OI");
                     return;
                 }
             },
@@ -100,127 +100,127 @@ pub const Parsing = packed struct(u32) {
 
         switch (p.part_of_speech) {
             .verb => {
-                try b.append('V');
+                try b.writeByte('V');
                 try append_vp(p, b);
                 return;
             },
             .noun => {
-                try b.append('N');
+                try b.writeByte('N');
                 try append_cng(p, b);
                 try append_flag(p, b);
                 return;
             },
             .article => {
-                try b.append('T');
+                try b.writeByte('T');
                 try append_cng(p, b);
                 try append_flag(p, b);
                 return;
             },
             .adjective => {
-                try b.append('A');
+                try b.writeByte('A');
                 try append_cng(p, b);
                 try append_flag(p, b);
                 return;
             },
             .relative_pronoun => {
-                try b.append('R');
+                try b.writeByte('R');
                 try append_cng(p, b);
                 return;
             },
             .reciprocal_pronoun => {
-                try b.append('C');
+                try b.writeByte('C');
                 try append_cng(p, b);
                 return;
             },
             .demonstrative_pronoun => {
-                try b.append('D');
+                try b.writeByte('D');
                 try append_cng(p, b);
                 try append_flag(p, b);
                 return;
             },
             .reflexive_pronoun => {
-                try b.append('F');
+                try b.writeByte('F');
                 try append_fcng(p, b);
                 return;
             },
             .possessive_pronoun => {
-                try b.append('S');
+                try b.writeByte('S');
                 try append_ref(p, b);
                 return;
             },
             .personal_pronoun => {
-                try b.append('P');
+                try b.writeByte('P');
                 try append_personal_pronoun(p, b);
                 try append_flag(p, b);
                 return;
             },
             .proper_noun => {
                 if (p.indeclinable) {
-                    try b.appendSlice("IPN");
+                    try b.writeAll("IPN");
                     try append_cng(p, b);
                     return;
                 }
-                try b.appendSlice("PN");
+                try b.writeAll("PN");
                 try append_cng(p, b);
                 return;
             },
             .pronoun => {
                 if (p.correlative and p.interrogative) {
-                    try b.appendSlice("Q");
+                    try b.writeAll("Q");
                     try append_cng(p, b);
                     return;
                 }
                 if (p.correlative) {
-                    try b.appendSlice("K");
+                    try b.writeAll("K");
                     try append_cng(p, b);
                     return;
                 }
                 if (p.interrogative) {
-                    try b.appendSlice("I");
+                    try b.writeAll("I");
                     try append_cng(p, b);
                     return;
                 }
                 if (p.indefinite) {
-                    try b.appendSlice("X");
+                    try b.writeAll("X");
                     try append_cng(p, b);
                     return;
                 }
-                try b.appendSlice("O");
+                try b.writeAll("O");
                 try append_cng(p, b);
                 return;
             },
             .superlative_adverb => {
-                try b.appendSlice("ADV-S");
+                try b.writeAll("ADV-S");
                 try append_flag(p, b);
                 return;
             },
             .superlative_noun => {
-                try b.appendSlice("N");
+                try b.writeAll("N");
                 try append_cng(p, b);
-                try b.appendSlice("-S");
+                try b.writeAll("-S");
                 return;
             },
             .superlative_adjective => {
-                try b.appendSlice("A");
+                try b.writeAll("A");
                 try append_cng(p, b);
-                try b.appendSlice("-S");
+                try b.writeAll("-S");
                 return;
             },
             .comparative_adverb => {
-                try b.appendSlice("ADV-C");
+                try b.writeAll("ADV-C");
                 try append_flag(p, b);
                 return;
             },
             .comparative_noun => {
-                try b.append('N');
+                try b.writeByte('N');
                 try append_cng(p, b);
-                try b.appendSlice("-C");
+                try b.writeAll("-C");
                 return;
             },
             .comparative_adjective => {
-                try b.append('A');
+                try b.writeByte('A');
                 try append_cng(p, b);
-                try b.appendSlice("-C");
+                try b.writeAll("-C");
                 return;
             },
             else => {},
@@ -366,166 +366,166 @@ pub const Case = enum(u3) {
     vocative = 5,
 };
 
-inline fn append_person(p: Parsing, b: *std.ArrayList(u8)) !void {
+inline fn append_person(p: Parsing, b: anytype) !void {
     switch (p.person) {
-        .first => try b.append('1'),
-        .second => try b.append('2'),
-        .third => try b.append('3'),
+        .first => try b.writeByte('1'),
+        .second => try b.writeByte('2'),
+        .third => try b.writeByte('3'),
         .unknown => return error.Incomplete,
     }
 }
 
-inline fn append_personal_pronoun(p: Parsing, b: *std.ArrayList(u8)) !void {
+inline fn append_personal_pronoun(p: Parsing, b: anytype) !void {
     switch (p.person) {
-        .first => try b.appendSlice("-1"),
-        .second => try b.appendSlice("-2"),
+        .first => try b.writeAll("-1"),
+        .second => try b.writeAll("-2"),
         else => {
             try append_cng(p, b);
             return;
         },
     }
     switch (p.case) {
-        .nominative => try b.append('N'),
-        .accusative => try b.append('A'),
-        .genitive => try b.append('G'),
-        .dative => try b.append('D'),
-        .vocative => try b.append('V'),
+        .nominative => try b.writeByte('N'),
+        .accusative => try b.writeByte('A'),
+        .genitive => try b.writeByte('G'),
+        .dative => try b.writeByte('D'),
+        .vocative => try b.writeByte('V'),
         else => return,
     }
     switch (p.tense_form) {
-        .ref_singular => try b.append('S'),
-        .ref_plural => try b.append('P'),
+        .ref_singular => try b.writeByte('S'),
+        .ref_plural => try b.writeByte('P'),
         else => return,
     }
     return;
 }
 
-inline fn append_ref(p: Parsing, b: *std.ArrayList(u8)) !void {
+inline fn append_ref(p: Parsing, b: anytype) !void {
     switch (p.person) {
-        .first => try b.appendSlice("-1"),
-        .second => try b.appendSlice("-2"),
-        .third => try b.appendSlice("-3"),
+        .first => try b.writeAll("-1"),
+        .second => try b.writeAll("-2"),
+        .third => try b.writeAll("-3"),
         else => return,
     }
     switch (p.tense_form) {
-        .ref_singular => try b.appendSlice("S"),
-        .ref_plural => try b.appendSlice("P"),
+        .ref_singular => try b.writeAll("S"),
+        .ref_plural => try b.writeAll("P"),
         else => return,
     }
     switch (p.case) {
-        .nominative => try b.appendSlice("N"),
-        .accusative => try b.appendSlice("A"),
-        .genitive => try b.appendSlice("G"),
-        .dative => try b.appendSlice("D"),
-        .vocative => try b.appendSlice("V"),
+        .nominative => try b.writeAll("N"),
+        .accusative => try b.writeAll("A"),
+        .genitive => try b.writeAll("G"),
+        .dative => try b.writeAll("D"),
+        .vocative => try b.writeAll("V"),
         else => return,
     }
     switch (p.number) {
-        .singular => try b.append('S'),
-        .plural => try b.append('P'),
+        .singular => try b.writeByte('S'),
+        .plural => try b.writeByte('P'),
         else => return,
     }
     switch (p.gender) {
-        .masculine => try b.append('M'),
-        .feminine => try b.append('F'),
-        .neuter => try b.append('N'),
-        .masculine_feminine => try b.append('C'),
-        .masculine_neuter => try b.append('C'),
-        .masculine_feminine_neuter => try b.append('C'),
-        .unknown => try b.append('U'),
+        .masculine => try b.writeByte('M'),
+        .feminine => try b.writeByte('F'),
+        .neuter => try b.writeByte('N'),
+        .masculine_feminine => try b.writeByte('C'),
+        .masculine_neuter => try b.writeByte('C'),
+        .masculine_feminine_neuter => try b.writeByte('C'),
+        .unknown => try b.writeByte('U'),
     }
 }
 
-inline fn append_cng(p: Parsing, b: *std.ArrayList(u8)) !void {
+inline fn append_cng(p: Parsing, b: anytype) !void {
     switch (p.case) {
-        .nominative => try b.appendSlice("-N"),
-        .accusative => try b.appendSlice("-A"),
-        .genitive => try b.appendSlice("-G"),
-        .dative => try b.appendSlice("-D"),
-        .vocative => try b.appendSlice("-V"),
+        .nominative => try b.writeAll("-N"),
+        .accusative => try b.writeAll("-A"),
+        .genitive => try b.writeAll("-G"),
+        .dative => try b.writeAll("-D"),
+        .vocative => try b.writeAll("-V"),
         else => return,
     }
     switch (p.number) {
-        .singular => try b.append('S'),
-        .plural => try b.append('P'),
+        .singular => try b.writeByte('S'),
+        .plural => try b.writeByte('P'),
         else => return,
     }
     switch (p.gender) {
-        .masculine => try b.append('M'),
-        .feminine => try b.append('F'),
-        .neuter => try b.append('N'),
-        .masculine_feminine => try b.append('C'),
-        .masculine_neuter => try b.append('C'),
-        .masculine_feminine_neuter => try b.append('C'),
+        .masculine => try b.writeByte('M'),
+        .feminine => try b.writeByte('F'),
+        .neuter => try b.writeByte('N'),
+        .masculine_feminine => try b.writeByte('C'),
+        .masculine_neuter => try b.writeByte('C'),
+        .masculine_feminine_neuter => try b.writeByte('C'),
         .unknown => {},
-        //.unknown => try b.append('U'),
+        //.unknown => try b.writeByte('U'),
     }
 }
 
-inline fn append_fcng(p: Parsing, b: *std.ArrayList(u8)) !void {
+inline fn append_fcng(p: Parsing, b: anytype) !void {
     if (p.person != .unknown) {
-        try b.append('-');
+        try b.writeByte('-');
     }
     try append_person(p, b);
     switch (p.case) {
-        .nominative => try b.append('N'),
-        .accusative => try b.append('A'),
-        .genitive => try b.append('G'),
-        .dative => try b.append('D'),
-        .vocative => try b.append('V'),
+        .nominative => try b.writeByte('N'),
+        .accusative => try b.writeByte('A'),
+        .genitive => try b.writeByte('G'),
+        .dative => try b.writeByte('D'),
+        .vocative => try b.writeByte('V'),
         else => return,
     }
     switch (p.number) {
-        .singular => try b.append('S'),
-        .plural => try b.append('P'),
+        .singular => try b.writeByte('S'),
+        .plural => try b.writeByte('P'),
         else => return,
     }
     switch (p.gender) {
-        .masculine => try b.append('M'),
-        .feminine => try b.append('F'),
-        .neuter => try b.append('N'),
-        .masculine_feminine => try b.append('C'),
-        .masculine_neuter => try b.append('C'),
-        .masculine_feminine_neuter => try b.append('C'),
-        .unknown => try b.append('U'),
+        .masculine => try b.writeByte('M'),
+        .feminine => try b.writeByte('F'),
+        .neuter => try b.writeByte('N'),
+        .masculine_feminine => try b.writeByte('C'),
+        .masculine_neuter => try b.writeByte('C'),
+        .masculine_feminine_neuter => try b.writeByte('C'),
+        .unknown => try b.writeByte('U'),
     }
 }
 
-inline fn append_vp(p: Parsing, b: *std.ArrayList(u8)) !void {
+inline fn append_vp(p: Parsing, b: anytype) !void {
     switch (p.tense_form) {
-        .present => try b.appendSlice("-P"),
-        .imperfect => try b.appendSlice("-I"),
-        .future => try b.appendSlice("-F"),
-        .aorist => try b.appendSlice("-A"),
-        .perfect => try b.appendSlice("-R"),
-        .pluperfect => try b.appendSlice("-L"),
-        .second_aorist => try b.appendSlice("-2A"),
-        .second_future => try b.appendSlice("-2F"),
-        .second_perfect => try b.appendSlice("-2R"),
-        .second_pluperfect => try b.appendSlice("-2L"),
+        .present => try b.writeAll("-P"),
+        .imperfect => try b.writeAll("-I"),
+        .future => try b.writeAll("-F"),
+        .aorist => try b.writeAll("-A"),
+        .perfect => try b.writeAll("-R"),
+        .pluperfect => try b.writeAll("-L"),
+        .second_aorist => try b.writeAll("-2A"),
+        .second_future => try b.writeAll("-2F"),
+        .second_perfect => try b.writeAll("-2R"),
+        .second_pluperfect => try b.writeAll("-2L"),
         else => return,
     }
     switch (p.voice) {
-        .active => try b.append('A'),
-        .middle => try b.append('M'),
-        .passive => try b.append('P'),
-        .middle_or_passive => try b.append('E'),
-        .middle_deponent => try b.append('D'),
-        .passive_deponent => try b.append('O'),
-        .middle_or_passive_deponent => try b.append('N'),
+        .active => try b.writeByte('A'),
+        .middle => try b.writeByte('M'),
+        .passive => try b.writeByte('P'),
+        .middle_or_passive => try b.writeByte('E'),
+        .middle_deponent => try b.writeByte('D'),
+        .passive_deponent => try b.writeByte('O'),
+        .middle_or_passive_deponent => try b.writeByte('N'),
         else => return,
     }
     switch (p.mood) {
-        .indicative => try b.append('I'),
-        .subjunctive => try b.append('S'),
-        .optative => try b.append('O'),
-        .imperative => try b.append('M'),
+        .indicative => try b.writeByte('I'),
+        .subjunctive => try b.writeByte('S'),
+        .optative => try b.writeByte('O'),
+        .imperative => try b.writeByte('M'),
         .infinitive => {
-            try b.append('N');
+            try b.writeByte('N');
             return;
         },
         .participle => {
-            try b.append('P');
+            try b.writeByte('P');
             try append_cng(p, b);
             return;
         },
@@ -533,30 +533,30 @@ inline fn append_vp(p: Parsing, b: *std.ArrayList(u8)) !void {
     }
 
     switch (p.person) {
-        .first => try b.appendSlice("-1"),
-        .second => try b.appendSlice("-2"),
-        .third => try b.appendSlice("-3"),
+        .first => try b.writeAll("-1"),
+        .second => try b.writeAll("-2"),
+        .third => try b.writeAll("-3"),
         else => return,
     }
     switch (p.number) {
-        .singular => try b.append('S'),
-        .plural => try b.append('P'),
+        .singular => try b.writeByte('S'),
+        .plural => try b.writeByte('P'),
         else => return,
     }
 }
 
-inline fn append_flag(p: Parsing, b: *std.ArrayList(u8)) !void {
+inline fn append_flag(p: Parsing, b: anytype) !void {
     if (p.correlative) {
-        try b.appendSlice("-K");
+        try b.writeAll("-K");
     }
     if (p.crasis) {
-        try b.appendSlice("-K");
+        try b.writeAll("-K");
     }
     if (p.negative) {
-        try b.appendSlice("-N");
+        try b.writeAll("-N");
     }
     if (p.interrogative) {
-        try b.appendSlice("-I");
+        try b.writeAll("-I");
     }
 }
 
@@ -1362,7 +1362,7 @@ test "simple byz string tests" {
             .case = .nominative,
             .number = .singular,
             .gender = .masculine,
-        }).string(&out);
+        }).string(out.writer());
         try expectEqualStrings("N-NSM", out.items);
     }
 
@@ -1373,7 +1373,7 @@ test "simple byz string tests" {
             .case = .genitive,
             .number = .plural,
             .gender = .feminine,
-        }).string(&out);
+        }).string(out.writer());
         try expectEqualStrings("A-GPF", out.items);
     }
 
@@ -1387,7 +1387,7 @@ test "simple byz string tests" {
             .person = .first,
             .number = .plural,
         };
-        try p.string(&out);
+        try p.string(out.writer());
         try expectEqualStrings("V-PAI-1P", out.items);
     }
 
@@ -1399,7 +1399,7 @@ test "simple byz string tests" {
             .person = .first,
             .tense_form = .ref_singular,
         };
-        try p.string(&out);
+        try p.string(out.writer());
         try expectEqualStrings("P-1NS", out.items);
     }
 }
@@ -1422,7 +1422,7 @@ test "new_parsing" {
             };
             try expect(x.part_of_speech != .unknown);
             out.clearRetainingCapacity();
-            try x.string(&out);
+            try x.string(out.writer());
             try expectEqualStrings(item, out.items);
         }
     }
@@ -1455,7 +1455,7 @@ test "byz data test" {
             };
             out.clearRetainingCapacity();
             try expect(x.part_of_speech != .unknown);
-            try x.string(&out);
+            try x.string(out.writer());
             try expectEqualStrings(item, out.items);
         }
 
@@ -1473,7 +1473,7 @@ test "byz data test" {
                 return;
             };
             out.clearRetainingCapacity();
-            try x.string(&out);
+            try x.string(out.writer());
             try expectEqualStrings(item, out.items);
         }
 
@@ -1506,7 +1506,7 @@ test "byz data test" {
             return;
         };
         out.clearRetainingCapacity();
-        try x.string(&out);
+        try x.string(out.writer());
         try expectEqualStrings(item, out.items);
     }
 }

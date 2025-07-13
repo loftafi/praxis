@@ -20,10 +20,9 @@ pub fn create(allocator: std.mem.Allocator) !*Self {
     return s;
 }
 
-pub fn destroy(self: *Self) void {
-    const current_allocator = self.glosses.allocator;
-    self.deinit();
-    current_allocator.destroy(self);
+pub fn destroy(self: *Self, allocator: std.mem.Allocator) void {
+    self.deinit(allocator);
+    allocator.destroy(self);
 }
 
 pub fn init(self: *Self, allocator: std.mem.Allocator) !void {
@@ -37,9 +36,9 @@ pub fn init(self: *Self, allocator: std.mem.Allocator) !void {
     self.references = std.ArrayList(Reference).init(allocator);
 }
 
-pub fn deinit(self: *Self) void {
+pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
     if (self.word.len > 0) {
-        self.glosses.allocator.free(self.word);
+        allocator.free(self.word);
     }
     for (self.glosses.items) |gloss| {
         gloss.destroy();
@@ -50,9 +49,9 @@ pub fn deinit(self: *Self) void {
 
 /// Output the bytes representing the form. No terminator at
 /// end of record.
-pub fn write_binary(self: *Self, data: *std.ArrayList(u8)) !void {
-    try append_u24(data, self.uid);
-    try append_u32(data, @bitCast(self.parsing));
+pub fn writeBinary(self: *Self, allocator: std.mem.Allocator, data: *std.ArrayListUnmanaged(u8)) error{OutOfMemory}!void {
+    try append_u24(allocator, data, self.uid);
+    try append_u32(allocator, data, @bitCast(self.parsing));
     var flags: u8 = 0;
     if (self.preferred) {
         flags |= 0x1;
@@ -60,26 +59,26 @@ pub fn write_binary(self: *Self, data: *std.ArrayList(u8)) !void {
     if (self.incorrect) {
         flags |= 0x10;
     }
-    try append_u8(data, flags);
-    try data.appendSlice(self.word);
-    try data.append(US);
-    try append_u16(data, @intCast(self.glosses.items.len));
+    try append_u8(allocator, data, flags);
+    try data.appendSlice(allocator, self.word);
+    try data.append(allocator, US);
+    try append_u16(allocator, data, @intCast(self.glosses.items.len));
     for (self.glosses.items) |gloss| {
-        try data.append(@intFromEnum(gloss.lang));
+        try data.append(allocator, @intFromEnum(gloss.lang));
         for (gloss.entries.items) |item| {
-            try data.appendSlice(item);
-            try data.append(US);
+            try data.appendSlice(allocator, item);
+            try data.append(allocator, US);
         }
-        try data.append(RS);
+        try data.append(allocator, RS);
     }
     // References into linked modules
-    try append_u32(data, @intCast(self.references.items.len));
+    try append_u32(allocator, data, @intCast(self.references.items.len));
     for (self.references.items) |reference| {
-        try append_u16(data, @intFromEnum(reference.module));
-        try append_u16(data, @intFromEnum(reference.book));
-        try append_u16(data, reference.chapter);
-        try append_u16(data, reference.verse);
-        try append_u16(data, reference.word);
+        try append_u16(allocator, data, @intFromEnum(reference.module));
+        try append_u16(allocator, data, @intFromEnum(reference.book));
+        try append_u16(allocator, data, reference.chapter);
+        try append_u16(allocator, data, reference.verse);
+        try append_u16(allocator, data, reference.word);
     }
     //try data.append(0xff);
 }
@@ -318,7 +317,7 @@ const expectEqualSlices = std.testing.expectEqualSlices;
 test "read_form" {
     var data = Parser.init("ἄρτος|N-NSM|false|20||\nποῦ|N-NSM|true|21|en:fish|byz#Revelation 20:2 3,kjtr#Revelation 20:2 3\n");
     var form = try Self.create(std.testing.allocator);
-    defer form.destroy();
+    defer form.destroy(std.testing.allocator);
     try form.read_text(&data);
     try expectEqualStrings("ἄρτος", form.word);
     try expectEqual(20, form.uid);
@@ -327,7 +326,7 @@ test "read_form" {
     try expect(data.consume_if('\n'));
 
     var form2 = try Self.create(std.testing.allocator);
-    defer form2.destroy();
+    defer form2.destroy(std.testing.allocator);
     try form2.read_text(&data);
     try expectEqualStrings("ποῦ", form2.word);
     try expectEqual(21, form2.uid);
@@ -342,7 +341,7 @@ pub const std_options = struct {
 
 test "form_init" {
     var form = try Self.create(std.testing.allocator);
-    defer form.destroy();
+    defer form.destroy(std.testing.allocator);
     try expectEqual(0, form.word.len);
     try expectEqual(false, form.preferred);
     try expectEqual(false, form.incorrect);
@@ -353,12 +352,12 @@ test "form_init" {
 test "form_read_write_bytes" {
     var t = Parser.init("fish|N-NSM|true|20|en:swim:to arch#zh:你好|sbl#Mark 11:22 33,sr#Luke 1:2 3\n");
     var form = try Self.create(std.testing.allocator);
-    defer form.destroy();
+    defer form.destroy(std.testing.allocator);
     try form.read_text(&t);
 
-    var out = std.ArrayList(u8).init(std.testing.allocator);
-    defer out.deinit();
-    try form.write_binary(&out);
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(std.testing.allocator);
+    try form.writeBinary(std.testing.allocator, &out);
 
     try expectEqual(2, form.glosses.items.len);
     try expectEqual(2, form.references.items.len);
@@ -366,30 +365,14 @@ test "form_read_write_bytes" {
     try expectEqualSlices(
         u8,
         &.{
-            20,
-            0,
-            0,
-            3,
-            16,
-            132,
-            0,
-            1,
-            'f',
-            'i',
-            's',
-            'h',
-            31,
-            2,
-            0,
-            4,
-            's',
+            20, 0, 0, 3, 16, 132, 0, 1, 'f', 'i', 's', 'h', 31, 2, 0, 4, 's',
         },
         out.items[0..17],
     );
     try expectEqual(63, out.items.len);
 
     var form_loaded = try Self.create(std.testing.allocator);
-    defer form_loaded.destroy();
+    defer form_loaded.destroy(std.testing.allocator);
     var p = BinaryReader.init(out.items);
     try form_loaded.read_binary(&p);
 
@@ -399,27 +382,29 @@ test "form_read_write_bytes" {
 }
 
 test "form_read_write_two_items" {
+    const allocator = std.testing.allocator;
+
     var t = Parser.init(
         \\fish|N-NSM|true|20|en:swim|
         \\cars|N-NSM|true|21|en:to arch|sr#Luke 1:2 3,byz#Mark 11:22 33
     );
-    var form1 = try Self.create(std.testing.allocator);
-    defer form1.destroy();
-    var form2 = try Self.create(std.testing.allocator);
-    defer form2.destroy();
+    var form1 = try Self.create(allocator);
+    defer form1.destroy(allocator);
+    var form2 = try Self.create(allocator);
+    defer form2.destroy(allocator);
     try form1.read_text(&t);
     try form2.read_text(&t);
 
-    var out = std.ArrayList(u8).init(std.testing.allocator);
-    defer out.deinit();
-    try form1.write_binary(&out);
-    try form2.write_binary(&out);
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+    try form1.writeBinary(allocator, &out);
+    try form2.writeBinary(allocator, &out);
 
     //try expectEqualSlices(u8, &.{0}, out.items);
-    var form3 = try Self.create(std.testing.allocator);
-    defer form3.destroy();
-    var form4 = try Self.create(std.testing.allocator);
-    defer form4.destroy();
+    var form3 = try Self.create(allocator);
+    defer form3.destroy(allocator);
+    var form4 = try Self.create(allocator);
+    defer form4.destroy(allocator);
     var data = BinaryReader.init(out.items);
     try form3.read_binary(&data);
     try form4.read_binary(&data);
@@ -430,20 +415,22 @@ test "form_read_write_two_items" {
 }
 
 test "compare_form" {
+    const allocator = std.testing.allocator;
+
     {
         var data = Parser.init(
             \\ἄρτ|N-NSM|false|20|en:fish|
             \\ἄρτο|N-NSM|false|21|en:fish|
             \\ἄρτος|N-NSM|false|22|en:fish|
         );
-        var form1 = try Self.create(std.testing.allocator);
-        defer form1.destroy();
+        var form1 = try Self.create(allocator);
+        defer form1.destroy(allocator);
         try form1.read_text(&data);
-        var form2 = try Self.create(std.testing.allocator);
-        defer form2.destroy();
+        var form2 = try Self.create(allocator);
+        defer form2.destroy(allocator);
         try form2.read_text(&data);
-        var form3 = try Self.create(std.testing.allocator);
-        defer form3.destroy();
+        var form3 = try Self.create(allocator);
+        defer form3.destroy(allocator);
         try form3.read_text(&data);
         try expectEqual(true, lessThan({}, form1, form2));
         try expectEqual(true, lessThan({}, form1, form3));
@@ -456,14 +443,14 @@ test "compare_form" {
             \\ἄρτος|N-NSM|false|21|en:fish#zh:fish|
             \\ἄρτος|N-NSM|false|22|en:fish#zh:fishing#es:fishes|
         );
-        var form1 = try Self.create(std.testing.allocator);
-        defer form1.destroy();
+        var form1 = try Self.create(allocator);
+        defer form1.destroy(allocator);
         try form1.read_text(&data);
-        var form2 = try Self.create(std.testing.allocator);
-        defer form2.destroy();
+        var form2 = try Self.create(allocator);
+        defer form2.destroy(allocator);
         try form2.read_text(&data);
-        var form3 = try Self.create(std.testing.allocator);
-        defer form3.destroy();
+        var form3 = try Self.create(allocator);
+        defer form3.destroy(allocator);
         try form3.read_text(&data);
     }
     {
@@ -472,14 +459,14 @@ test "compare_form" {
             \\ἄρτος|N-NSM|true|21|en:fish#zh:fish|
             \\ἄρτος|N-NSM|false|22|en:fish#zh:fishing#es:fishes|
         );
-        var form1 = try Self.create(std.testing.allocator);
-        defer form1.destroy();
+        var form1 = try Self.create(allocator);
+        defer form1.destroy(allocator);
         try form1.read_text(&data);
-        var form2 = try Self.create(std.testing.allocator);
-        defer form2.destroy();
+        var form2 = try Self.create(allocator);
+        defer form2.destroy(allocator);
         try form2.read_text(&data);
-        var form3 = try Self.create(std.testing.allocator);
-        defer form3.destroy();
+        var form3 = try Self.create(allocator);
+        defer form3.destroy(allocator);
         try form3.read_text(&data);
 
         try expectEqual(false, form1.preferred);
@@ -497,7 +484,7 @@ test "compare_form" {
 test "read_invalid_form_parsing" {
     var data = Parser.init("ἄρτος|N-NZ|false|29||\nποῦ|N-NSM|true|21||\n");
     var form = try Self.create(std.testing.allocator);
-    defer form.destroy();
+    defer form.destroy(std.testing.allocator);
     const e = form.read_text(&data);
     try expectEqual(ParsingError.InvalidParsing, e);
 }
@@ -505,7 +492,7 @@ test "read_invalid_form_parsing" {
 test "read_incomplete_form_parsing" {
     var data = Parser.init("ἄρτος|N-NA|false|20||\nποῦ|N-NSM|true|21||\n");
     var form = try Self.create(std.testing.allocator);
-    defer form.destroy();
+    defer form.destroy(std.testing.allocator);
     const e = form.read_text(&data);
     try expectEqual(ParsingError.InvalidParsing, e);
 }

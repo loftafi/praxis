@@ -15,6 +15,7 @@ pub const stringLessThan = @import("sort.zig").lessThan;
 
 pub const parsing = @import("parsing.zig");
 pub const Parsing = parsing.Parsing;
+pub const parse = parsing.parse;
 pub const PartOfSpeech = parsing.PartOfSpeech;
 pub const Gender = parsing.Gender;
 pub const Number = parsing.Number;

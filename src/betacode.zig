@@ -311,7 +311,7 @@ inline fn lookup_greek_letter(c: u8, version: Type) u21 {
         'x' => return 'χ',
         'y' => return 'ψ',
         'z' => return 'ζ',
-        'A' => return 'α',
+        'A' => return 'Α',
         'B' => return 'Β',
         'D' => return 'Δ',
         'E' => return 'Ε',

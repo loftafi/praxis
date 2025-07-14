@@ -7,49 +7,51 @@ word: []const u8,
 parsing: Parsing = .{},
 preferred: bool = false,
 incorrect: bool = false,
-references: std.ArrayList(Reference) = undefined,
-glosses: std.ArrayList(*Gloss) = undefined,
+references: std.ArrayListUnmanaged(Reference) = .empty,
+glosses: std.ArrayListUnmanaged(*Gloss) = .empty,
 lexeme: ?*Lexeme = null,
 
 const Self = @This();
 
-pub fn create(allocator: std.mem.Allocator) !*Self {
+pub fn create(allocator: Allocator) error{OutOfMemory}!*Self {
     var s = try allocator.create(Self);
     errdefer allocator.destroy(Self);
-    try s.init(allocator);
+    s.init();
     return s;
 }
 
-pub fn destroy(self: *Self, allocator: std.mem.Allocator) void {
+pub fn destroy(self: *Self, allocator: Allocator) void {
     self.deinit(allocator);
     allocator.destroy(self);
 }
 
-pub fn init(self: *Self, allocator: std.mem.Allocator) !void {
-    self.uid = 0;
-    self.word = "";
-    self.parsing = .{};
-    self.lexeme = null;
-    self.preferred = false;
-    self.incorrect = false;
-    self.glosses = std.ArrayList(*Gloss).init(allocator);
-    self.references = std.ArrayList(Reference).init(allocator);
+pub fn init(self: *Self) void {
+    self.* = .{
+        .uid = 0,
+        .word = "",
+        .parsing = .{},
+        .lexeme = null,
+        .preferred = false,
+        .incorrect = false,
+        .glosses = .empty,
+        .references = .empty,
+    };
 }
 
-pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+pub fn deinit(self: *Self, allocator: Allocator) void {
     if (self.word.len > 0) {
         allocator.free(self.word);
     }
     for (self.glosses.items) |gloss| {
-        gloss.destroy();
+        gloss.destroy(allocator);
     }
-    self.glosses.deinit();
-    self.references.deinit();
+    self.glosses.deinit(allocator);
+    self.references.deinit(allocator);
 }
 
 /// Output the bytes representing the form. No terminator at
 /// end of record.
-pub fn writeBinary(self: *Self, allocator: std.mem.Allocator, data: *std.ArrayListUnmanaged(u8)) error{OutOfMemory}!void {
+pub fn writeBinary(self: *Self, allocator: Allocator, data: *std.ArrayListUnmanaged(u8)) error{OutOfMemory}!void {
     try append_u24(allocator, data, self.uid);
     try append_u32(allocator, data, @bitCast(self.parsing));
     var flags: u8 = 0;
@@ -213,7 +215,7 @@ pub fn read_u24(t: *Parser) error{InvalidU24}!u24 {
 ///  - gloss end RS (1)
 ///  - reference count (4)
 ///  - module, book, chapter, verse, word (2,2,2,2,2)
-pub fn read_binary(self: *Self, t: *BinaryReader) !void {
+pub fn readBinary(self: *Self, arena: Allocator, t: *BinaryReader) !void {
     self.uid = try t.u24();
     self.parsing = @bitCast(try t.u32());
     const flags = try t.u8();
@@ -221,11 +223,11 @@ pub fn read_binary(self: *Self, t: *BinaryReader) !void {
     self.incorrect = flags & 0x10 == 0x10;
     const word = t.string() catch return error.InvalidDictionaryFile;
     if (word.len > 0) {
-        self.word = try self.references.allocator.dupe(u8, word);
+        self.word = try arena.dupe(u8, word);
     } else {
         self.word = "";
     }
-    try read_binary_glosses(t, &self.glosses);
+    try readBinaryGlosses(arena, t, &self.glosses);
     const references_count = try t.u32();
     for (0..references_count) |_| {
         const module = try t.u16();
@@ -233,7 +235,7 @@ pub fn read_binary(self: *Self, t: *BinaryReader) !void {
         const chapter = try t.u16();
         const verse = try t.u16();
         const word_no = try t.u16();
-        try self.references.append(Reference{
+        try self.references.append(arena, Reference{
             .module = try Module.from_u16(@intCast(module)),
             .book = try Book.from_u16(book),
             .chapter = chapter,
@@ -249,14 +251,14 @@ pub fn read_binary(self: *Self, t: *BinaryReader) !void {
 ///
 /// `Ἀαρών|N-NSM|false|17||`
 /// `δράκοντα|N-ASM|false|37628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3`
-pub fn read_text(self: *Self, t: *Parser) !void {
+pub fn readText(self: *Self, arena: Allocator, t: *Parser) !void {
     _ = t.skip_whitespace_and_lines();
     //const start = t.index;
     const word_field = try read_field(t);
     if (word_field.len == 0) {
         self.word = "";
     } else {
-        self.word = try self.glosses.allocator.dupe(u8, word_field);
+        self.word = try arena.dupe(u8, word_field);
     }
     if (!t.consume_if('|')) {
         return error.MissingField;
@@ -273,14 +275,15 @@ pub fn read_text(self: *Self, t: *Parser) !void {
     if (!t.consume_if('|')) {
         return error.MissingField;
     }
-    _ = try read_text_glosses(t, &self.glosses); // Glosses
+    _ = try readTextGlosses(arena, t, &self.glosses); // Glosses
     if (!t.consume_if('|')) {
         return error.MissingField;
     }
-    try Reference.read_reference_list(t, &self.references); // References
+    try Reference.readReferenceList(arena, t, &self.references); // References
 }
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const Parser = @import("parser.zig");
 const Lexeme = @import("lexeme.zig");
 const Gloss = @import("gloss.zig");
@@ -296,8 +299,8 @@ const Module = @import("module.zig").Module;
 const is_eol = @import("parser.zig").is_eol;
 const is_whitespace = @import("parser.zig").is_whitespace;
 const is_whitespace_or_eol = @import("parser.zig").is_whitespace_or_eol;
-const read_text_glosses = @import("gloss.zig").read_text_glosses;
-const read_binary_glosses = @import("gloss.zig").read_binary_glosses;
+const readTextGlosses = @import("gloss.zig").readTextGlosses;
+const readBinaryGlosses = @import("gloss.zig").readBinaryGlosses;
 
 const BinaryWriter = @import("binary_writer.zig");
 const append_u8 = BinaryWriter.append_u8;
@@ -318,7 +321,7 @@ test "read_form" {
     var data = Parser.init("ἄρτος|N-NSM|false|20||\nποῦ|N-NSM|true|21|en:fish|byz#Revelation 20:2 3,kjtr#Revelation 20:2 3\n");
     var form = try Self.create(std.testing.allocator);
     defer form.destroy(std.testing.allocator);
-    try form.read_text(&data);
+    try form.readText(std.testing.allocator, &data);
     try expectEqualStrings("ἄρτος", form.word);
     try expectEqual(20, form.uid);
     try expectEqual(false, form.preferred);
@@ -327,7 +330,7 @@ test "read_form" {
 
     var form2 = try Self.create(std.testing.allocator);
     defer form2.destroy(std.testing.allocator);
-    try form2.read_text(&data);
+    try form2.readText(std.testing.allocator, &data);
     try expectEqualStrings("ποῦ", form2.word);
     try expectEqual(21, form2.uid);
     try expectEqual(true, form2.preferred);
@@ -353,7 +356,7 @@ test "form_read_write_bytes" {
     var t = Parser.init("fish|N-NSM|true|20|en:swim:to arch#zh:你好|sbl#Mark 11:22 33,sr#Luke 1:2 3\n");
     var form = try Self.create(std.testing.allocator);
     defer form.destroy(std.testing.allocator);
-    try form.read_text(&t);
+    try form.readText(std.testing.allocator, &t);
 
     var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(std.testing.allocator);
@@ -374,7 +377,7 @@ test "form_read_write_bytes" {
     var form_loaded = try Self.create(std.testing.allocator);
     defer form_loaded.destroy(std.testing.allocator);
     var p = BinaryReader.init(out.items);
-    try form_loaded.read_binary(&p);
+    try form_loaded.readBinary(std.testing.allocator, &p);
 
     try expectEqual(20, form_loaded.uid);
     try expectEqualStrings("fish", form_loaded.word);
@@ -392,8 +395,8 @@ test "form_read_write_two_items" {
     defer form1.destroy(allocator);
     var form2 = try Self.create(allocator);
     defer form2.destroy(allocator);
-    try form1.read_text(&t);
-    try form2.read_text(&t);
+    try form1.readText(allocator, &t);
+    try form2.readText(allocator, &t);
 
     var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
@@ -406,8 +409,8 @@ test "form_read_write_two_items" {
     var form4 = try Self.create(allocator);
     defer form4.destroy(allocator);
     var data = BinaryReader.init(out.items);
-    try form3.read_binary(&data);
-    try form4.read_binary(&data);
+    try form3.readBinary(allocator, &data);
+    try form4.readBinary(allocator, &data);
     try expectEqual(20, form3.uid);
     try expectEqual(21, form4.uid);
     try expectEqual(2, form4.references.items.len);
@@ -425,13 +428,13 @@ test "compare_form" {
         );
         var form1 = try Self.create(allocator);
         defer form1.destroy(allocator);
-        try form1.read_text(&data);
+        try form1.readText(allocator, &data);
         var form2 = try Self.create(allocator);
         defer form2.destroy(allocator);
-        try form2.read_text(&data);
+        try form2.readText(allocator, &data);
         var form3 = try Self.create(allocator);
         defer form3.destroy(allocator);
-        try form3.read_text(&data);
+        try form3.readText(allocator, &data);
         try expectEqual(true, lessThan({}, form1, form2));
         try expectEqual(true, lessThan({}, form1, form3));
         try expectEqual(false, lessThan({}, form3, form2));
@@ -445,13 +448,13 @@ test "compare_form" {
         );
         var form1 = try Self.create(allocator);
         defer form1.destroy(allocator);
-        try form1.read_text(&data);
+        try form1.readText(allocator, &data);
         var form2 = try Self.create(allocator);
         defer form2.destroy(allocator);
-        try form2.read_text(&data);
+        try form2.readText(allocator, &data);
         var form3 = try Self.create(allocator);
         defer form3.destroy(allocator);
-        try form3.read_text(&data);
+        try form3.readText(allocator, &data);
     }
     {
         var data = Parser.init(
@@ -461,13 +464,13 @@ test "compare_form" {
         );
         var form1 = try Self.create(allocator);
         defer form1.destroy(allocator);
-        try form1.read_text(&data);
+        try form1.readText(allocator, &data);
         var form2 = try Self.create(allocator);
         defer form2.destroy(allocator);
-        try form2.read_text(&data);
+        try form2.readText(allocator, &data);
         var form3 = try Self.create(allocator);
         defer form3.destroy(allocator);
-        try form3.read_text(&data);
+        try form3.readText(allocator, &data);
 
         try expectEqual(false, form1.preferred);
         try expectEqual(true, form2.preferred);
@@ -485,7 +488,7 @@ test "read_invalid_form_parsing" {
     var data = Parser.init("ἄρτος|N-NZ|false|29||\nποῦ|N-NSM|true|21||\n");
     var form = try Self.create(std.testing.allocator);
     defer form.destroy(std.testing.allocator);
-    const e = form.read_text(&data);
+    const e = form.readText(std.testing.allocator, &data);
     try expectEqual(ParsingError.InvalidParsing, e);
 }
 
@@ -493,6 +496,6 @@ test "read_incomplete_form_parsing" {
     var data = Parser.init("ἄρτος|N-NA|false|20||\nποῦ|N-NSM|true|21||\n");
     var form = try Self.create(std.testing.allocator);
     defer form.destroy(std.testing.allocator);
-    const e = form.read_text(&data);
+    const e = form.readText(std.testing.allocator, &data);
     try expectEqual(ParsingError.InvalidParsing, e);
 }

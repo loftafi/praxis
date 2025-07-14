@@ -149,11 +149,11 @@ pub inline fn read_article(t: *Self) !Gender {
     return Gender.parse(t.read_field());
 }
 
-pub inline fn read_strongs(t: *Self, numbers: *ArrayList(u16)) !void {
-    try t.read_u16s(numbers);
+pub inline fn readStrongs(t: *Self, allocator: Allocator, numbers: *std.ArrayListUnmanaged(u16)) error{ OutOfMemory, InvalidU16 }!void {
+    try t.read_u16s(allocator, numbers);
 }
 
-pub inline fn read_u16s(self: *Self, numbers: *std.ArrayList(u16)) !void {
+pub inline fn read_u16s(self: *Self, allocator: Allocator, numbers: *std.ArrayListUnmanaged(u16)) error{ OutOfMemory, InvalidU16 }!void {
     while (true) {
         if (self.eof()) {
             return;
@@ -175,7 +175,7 @@ pub inline fn read_u16s(self: *Self, numbers: *std.ArrayList(u16)) !void {
             _ = self.next();
             p = self.peek();
         }
-        try numbers.append(@intCast(value));
+        try numbers.append(allocator, @intCast(value));
     }
 }
 
@@ -219,6 +219,7 @@ pub fn read_field(t: *Self) []const u8 {
 }
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Lang = @import("lang.zig").Lang;
 const parsing = @import("parsing.zig");

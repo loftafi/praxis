@@ -106,7 +106,7 @@ pub const Dictionary = struct {
             if (!(c == SPACE or c == TAB)) {
                 var lexeme = try Lexeme.create(arena);
                 errdefer lexeme.destroy(arena);
-                lexeme.read_text(&data) catch |e| {
+                lexeme.readText(arena, &data) catch |e| {
                     std.debug.print("failed reading line: {any}. Error: {any}\n", .{ line, e });
                     lexeme.destroy(arena);
                     return e;
@@ -130,7 +130,7 @@ pub const Dictionary = struct {
             } else {
                 var form = try Form.create(arena);
                 errdefer form.destroy(arena);
-                form.read_text(&data) catch |e| {
+                form.readText(arena, &data) catch |e| {
                     std.debug.print("failed reading line: {any}. Error: {any}\n", .{ line, e });
                     return e;
                 };
@@ -143,7 +143,7 @@ pub const Dictionary = struct {
                 try self.by_form.add(arena, form.word, form);
                 if (current_lexeme != null) {
                     form.lexeme = current_lexeme.?;
-                    try current_lexeme.?.forms.append(form);
+                    try current_lexeme.?.forms.append(arena, form);
                 }
                 if (form.uid == 0) {
                     try form_needs_uid.append(form);
@@ -335,7 +335,7 @@ pub const Dictionary = struct {
         for (0..count) |i| {
             var lexeme = try Lexeme.create(arena);
             errdefer lexeme.destroy(arena);
-            lexeme.read_binary(&data) catch |e| {
+            lexeme.readBinary(arena, &data) catch |e| {
                 std.debug.print("failed reading word {any} at byte index: {any}. Error: {any}\n", .{ i, data.index, e });
                 if (i > 0) {
                     std.debug.print("previous word had uid {d}\n", .{self.lexemes.items[i - 1].uid});

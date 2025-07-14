@@ -15,7 +15,11 @@ pub fn clear(self: *Self) void {
 }
 
 /// Read a list of references to this word, i.e. "kjtr#Acts 7:40 2,sr#Acts 7:40 2"
-pub fn read_reference_list(t: *Parser, references: *std.ArrayList(Self)) !void {
+pub fn readReferenceList(
+    arena: Allocator,
+    t: *Parser,
+    references: *std.ArrayListUnmanaged(Self),
+) error{ OutOfMemory, invalid_reference, InvalidU16 }!void {
     var reference: Self = .{}; // Parse into a temporary variable
 
     while (true) {
@@ -85,7 +89,7 @@ pub fn read_reference_list(t: *Parser, references: *std.ArrayList(Self)) !void {
         }
 
         // Copy local variable onto ArrayList
-        try references.append(.{
+        try references.append(arena, .{
             .module = reference.module,
             .book = reference.book,
             .chapter = reference.chapter,
@@ -106,14 +110,15 @@ const Module = @import("module.zig").Module;
 const Book = @import("book.zig").Book;
 const Parser = @import("parser.zig");
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 test "read reference list" {
     const allocator = std.testing.allocator;
     {
         var p = Parser.init("byz#Mark 1:2 3");
-        var references = std.ArrayList(Self).init(allocator);
-        defer references.deinit();
-        try Self.read_reference_list(&p, &references);
+        var references: std.ArrayListUnmanaged(Self) = .empty;
+        defer references.deinit(allocator);
+        try Self.readReferenceList(allocator, &p, &references);
         try std.testing.expectEqual(1, references.items.len);
         try std.testing.expectEqual(Module.byzantine, references.items[0].module);
         try std.testing.expectEqual(Book.mark, references.items[0].book);
@@ -124,9 +129,9 @@ test "read reference list" {
     {
         //var p = Parser.init("byz#John 10:20 30");
         var p = Parser.init("byz#John 10:20 30,sr#mark 11:22 33");
-        var references = std.ArrayList(Self).init(allocator);
-        defer references.deinit();
-        try Self.read_reference_list(&p, &references);
+        var references: std.ArrayListUnmanaged(Self) = .empty;
+        defer references.deinit(allocator);
+        try Self.readReferenceList(allocator, &p, &references);
         try std.testing.expectEqual(2, references.items.len);
         try std.testing.expectEqual(10, references.items[0].chapter);
         try std.testing.expectEqual(20, references.items[0].verse);

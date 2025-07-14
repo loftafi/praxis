@@ -13,6 +13,8 @@ pub const lexemeLessThan = Lexeme.lessThan;
 pub const formLessThan = Form.lessThan;
 pub const stringLessThan = @import("sort.zig").lessThan;
 
+pub const betacode_to_greek = @import("betacode.zig").betacode_to_greek;
+
 pub const parsing = @import("parsing.zig");
 pub const Parsing = parsing.Parsing;
 pub const parse = parsing.parse;

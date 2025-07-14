@@ -85,18 +85,20 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
         }
 
         /// Return a `SearchResult` record corresponding to a search `keyword`.
-        fn getOrCreateSearchResult(
+        inline fn getOrCreateSearchResult(
             self: *Self,
             allocator: Allocator,
             keyword: []const u8,
         ) error{OutOfMemory}!*SearchResult {
-            var value = self.index.get(keyword);
-            if (value == null) {
-                const key = try allocator.dupe(u8, keyword);
-                value = try SearchResult.create(allocator, key);
-                try self.index.put(allocator, key, value.?);
+            const result = try self.index.getOrPut(allocator, keyword);
+            if (result.found_existing) {
+                return result.value_ptr.*;
             }
-            return value.?;
+            const key = try allocator.dupe(u8, keyword);
+            errdefer allocator.free(key);
+            result.key_ptr.* = key; // Is this right?
+            result.value_ptr.* = try SearchResult.create(allocator, key);
+            return result.value_ptr.*;
         }
 
         pub fn lookup(self: *Self, word: []const u8) ?*SearchResult {
@@ -260,13 +262,17 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
 
             pub fn create(allocator: Allocator, word: []const u8) error{OutOfMemory}!*SearchResult {
                 const sr = try allocator.create(SearchResult);
-                sr.* = .{
+                sr.* = SearchResult.init(word);
+                return sr;
+            }
+
+            pub fn init(word: []const u8) SearchResult {
+                return .{
                     .keyword = word,
                     .exact_accented = .empty,
                     .exact_unaccented = .empty,
                     .partial_match = .empty,
                 };
-                return sr;
             }
 
             pub fn destroy(self: *SearchResult, allocator: Allocator) void {

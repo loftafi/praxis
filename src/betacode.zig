@@ -44,6 +44,8 @@ pub const ConversionError = struct {
     character: u21,
 };
 
+pub const max_utf8_character_length: usize = 4;
+
 /// Convert a betacode ascii string into a Greek unicode string.
 ///
 /// Space or punctuation characters should not appear at the start or end of
@@ -108,7 +110,6 @@ pub fn betacode_to_greek(
         text.len -= 1;
 
         if (c == 0) {
-            std.log.err("unexpected 0 char", .{});
             break;
         }
         if (c > 127) {
@@ -145,7 +146,7 @@ pub fn betacode_to_greek(
         // Is this recognised letter of the alphabet (not an accent)
         const letter = lookup_greek_letter(c, version);
 
-        if (letter != 0) {
+        if (letter > 0) {
             // This is a recognised Greek letter.
             if (accents != 0 and carryover == 0) {
                 // There is a hanging accent to apply to it.
@@ -164,7 +165,7 @@ pub fn betacode_to_greek(
                     const e = try apply_accent(carryover, accents);
                     try buffer.appendSlice(e);
                 } else {
-                    var buff: [10]u8 = undefined;
+                    var buff: [max_utf8_character_length]u8 = undefined;
                     const len = try std.unicode.utf8Encode(carryover, &buff);
                     try buffer.appendSlice(buff[0..len]);
                 }
@@ -184,7 +185,7 @@ pub fn betacode_to_greek(
             if (buffer.len == 0) {
                 // Accent appears at first character, carry
                 // it over to the next letter.
-                accents = valid;
+                accents = accents | valid;
                 continue;
             }
 
@@ -201,8 +202,6 @@ pub fn betacode_to_greek(
         if (c == '\'') {
             text.len += 1;
             text.ptr -= 1;
-        } else {
-            std.log.err("breaking on {d}", .{c});
         }
         break;
     }
@@ -279,6 +278,7 @@ const ASCII_ROUGH_ACUTE: u16 = ASCII_ROUGH + ASCII_ACUTE;
 const ASCII_ROUGH_GRAVE: u16 = ASCII_ROUGH + ASCII_GRAVE;
 const ASCII_CIRCUMFLEX_ROUGH: u16 = ASCII_ROUGH + ASCII_CIRCUMFLEX;
 const ASCII_CIRCUMFLEX_SMOOTH: u16 = ASCII_SMOOTH + ASCII_CIRCUMFLEX;
+const ASCII_CIRCUMFLEX_IOTA: u16 = ASCII_IOTA + ASCII_CIRCUMFLEX;
 const ASCII_DIAERESIS_ACUTE: u16 = ASCII_DIAERESIS + ASCII_ACUTE;
 const ASCII_DIAERESIS_GRAVE: u16 = ASCII_DIAERESIS + ASCII_GRAVE;
 
@@ -451,6 +451,13 @@ inline fn apply_accent(c: u21, accents: u21) error{UnexpectedAccent}![]const u8 
         'α' => comptime &ue('ᾳ'),
         'η' => comptime &ue('ῃ'),
         'ω' => comptime &ue('ῳ'),
+        else => error.UnexpectedAccent,
+    };
+
+    if (accents == ASCII_CIRCUMFLEX_IOTA) return switch (c) {
+        'α' => comptime &ue('ᾷ'),
+        'η' => comptime &ue('ῇ'),
+        'ω' => comptime &ue('ῷ'),
         else => error.UnexpectedAccent,
     };
 
@@ -643,10 +650,14 @@ test "valid_default_encoding" {
     try eq(try betacode_to_greek("xristou^", .default, &buffer), "χριστοῦ");
 }
 
-test "trailing accents" {
+test "trailing_accents" {
     var buffer = try std.BoundedArray(u8, MAX_WORD_SIZE).init(0);
-    try eq(try betacode_to_greek("a)", .default, &buffer), "ἀ");
-    try eq(try betacode_to_greek("kai\\ ", .default, &buffer), "καὶ");
+    try eq("τῷ", try betacode_to_greek("tw=|", .default, &buffer));
+    try eq("ῷτ", try betacode_to_greek("w=|t", .default, &buffer));
+    try eq("τῶ", try betacode_to_greek("tw=", .default, &buffer));
+    try eq("τῳ", try betacode_to_greek("tw|", .default, &buffer));
+    try eq("ἀ", try betacode_to_greek("a)", .default, &buffer));
+    try eq("καὶ", try betacode_to_greek("kai\\ ", .default, &buffer));
 }
 
 test "leading accents" {
@@ -672,10 +683,12 @@ test "valid_tlg_encoding" {
     try eq(try betacode_to_greek("*QEO/S", .tlg, &buffer), "Θεός");
     try eq(try betacode_to_greek("xri", .tlg, &buffer), "χρι");
     try eq(try betacode_to_greek("XRI", .tlg, &buffer), "χρι");
+    try eq(try betacode_to_greek("TW|", .tlg, &buffer), "τῳ");
     try eq(try betacode_to_greek("*XRI", .tlg, &buffer), "Χρι");
     try eq(try betacode_to_greek("qeo/s1", .tlg, &buffer), "θεόσ");
     try eq(try betacode_to_greek("qeo/s2", .tlg, &buffer), "θεός");
     try eq(try betacode_to_greek("qeo/s3", .tlg, &buffer), "θεόϲ");
+    try eq("ἀρχῇ", try betacode_to_greek("A)RXH=|", .tlg, &buffer));
 }
 
 test "invalid_tlg_encoding" {

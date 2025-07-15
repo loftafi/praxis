@@ -3,6 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const test_filters = b.option([]const []const u8, "test-filter", "Skip tests that do not match any filter") orelse &[0][]const u8{};
 
     const lib_mod = b.addModule("praxis", .{
         .root_source_file = b.path("src/praxis.zig"),
@@ -17,9 +18,9 @@ pub fn build(b: *std.Build) void {
     });
 
     b.installArtifact(lib);
-
     const lib_unit_tests = b.addTest(.{
         .root_source_file = b.path("src/test.zig"),
+        .filters = test_filters,
     });
     lib_unit_tests.root_module.addAnonymousImport("byz_parsing", .{
         .root_source_file = b.path("./test/byz-parsing.txt"),

@@ -98,7 +98,8 @@ pub fn betacode_to_greek(
     var carryover: u21 = 0;
 
     // The first character may be an accent and carry over onto
-    // the next letter. Normally its after the character.
+    // the next letter. Normally its after the character. Each bit
+    // represents a different accent.
     var accents: u16 = 0;
 
     // Next letter was requested to be uppercase
@@ -128,9 +129,13 @@ pub fn betacode_to_greek(
 
         if (version == .tlg) {
             if (uppercase == true) {
-                if (c >= 'a' and c <= 'z')
+                if (c >= 'a' and c <= 'z') {
                     c -= 'a' - 'A';
-                uppercase = false;
+                    uppercase = false;
+                }
+                if (c >= 'A' and c <= 'Z') {
+                    uppercase = false;
+                }
             } else {
                 if (c >= 'A' and c <= 'Z')
                     c += 'a' - 'A';
@@ -147,21 +152,19 @@ pub fn betacode_to_greek(
         const letter = lookup_greek_letter(c, version);
 
         if (letter > 0) {
-            // This is a recognised Greek letter.
-            if (accents != 0 and carryover == 0) {
-                // There is a hanging accent to apply to it.
-                const e = try apply_accent(letter, accents);
-                try buffer.appendSlice(e);
-                accents = 0;
+            if (carryover == 0) {
+                // Dont output letter, carry it over to the next iteration
+                // of the loop in case there are accents to apply.
+                carryover = letter;
                 continue;
             }
 
             // There is a hanging letter to go before this new letter.
-            if (carryover != 0) {
+            if (carryover > 0) {
                 // Found a Greek letter, no accent waiting to go on it.
                 // We encountered the next letter, if we just read a previous
                 // letter, push it onto the return string.
-                if (accents != 0) {
+                if (accents > 0) {
                     const e = try apply_accent(carryover, accents);
                     try buffer.appendSlice(e);
                 } else {
@@ -182,27 +185,15 @@ pub fn betacode_to_greek(
         // What we saw wasn't a Greek letter, was it a Greek accent?
         const valid = is_valid_betacode_symbol(c);
         if (valid > 0) {
-            if (buffer.len == 0) {
-                // Accent appears at first character, carry
-                // it over to the next letter.
-                accents = accents | valid;
-                continue;
-            }
-
-            // We see a betacode accent character, but
-            // not a Greek letter just before it.
-            if (carryover == 0)
-                return error.UnexpectedCharacter;
-
+            // Collate accent characters until we are ready
+            // to output a letter.
             accents = accents | valid;
             continue;
         }
         // This character is not an alphabetic letter, not a
         // whitespace, and not a valid betacode symbol.
-        if (c == '\'') {
-            text.len += 1;
-            text.ptr -= 1;
-        }
+        text.len += 1;
+        text.ptr -= 1;
         break;
     }
     // End of reading loop
@@ -279,8 +270,18 @@ const ASCII_ROUGH_GRAVE: u16 = ASCII_ROUGH + ASCII_GRAVE;
 const ASCII_CIRCUMFLEX_ROUGH: u16 = ASCII_ROUGH + ASCII_CIRCUMFLEX;
 const ASCII_CIRCUMFLEX_SMOOTH: u16 = ASCII_SMOOTH + ASCII_CIRCUMFLEX;
 const ASCII_CIRCUMFLEX_IOTA: u16 = ASCII_IOTA + ASCII_CIRCUMFLEX;
+const ASCII_CIRCUMFLEX_IOTA_ROUGH: u16 = ASCII_IOTA + ASCII_CIRCUMFLEX + ASCII_ROUGH;
+const ASCII_CIRCUMFLEX_IOTA_SMOOTH: u16 = ASCII_IOTA + ASCII_CIRCUMFLEX + ASCII_SMOOTH;
+const ASCII_ACUTE_IOTA: u16 = ASCII_IOTA + ASCII_ACUTE;
+const ASCII_GRAVE_IOTA: u16 = ASCII_IOTA + ASCII_GRAVE;
+const ASCII_SMOOTH_IOTA: u16 = ASCII_IOTA + ASCII_SMOOTH;
+const ASCII_ROUGH_IOTA: u16 = ASCII_IOTA + ASCII_ROUGH;
 const ASCII_DIAERESIS_ACUTE: u16 = ASCII_DIAERESIS + ASCII_ACUTE;
 const ASCII_DIAERESIS_GRAVE: u16 = ASCII_DIAERESIS + ASCII_GRAVE;
+const ASCII_ROUGH_ACUTE_IOTA: u16 = ASCII_IOTA + ASCII_ACUTE + ASCII_ROUGH;
+const ASCII_SMOOTH_ACUTE_IOTA: u16 = ASCII_IOTA + ASCII_ACUTE + ASCII_SMOOTH;
+const ASCII_ROUGH_GRAVE_IOTA: u16 = ASCII_IOTA + ASCII_GRAVE + ASCII_ROUGH;
+const ASCII_SMOOTH_GRAVE_IOTA: u16 = ASCII_IOTA + ASCII_GRAVE + ASCII_SMOOTH;
 
 inline fn is_ascii_whitespace(c: u8) bool {
     return (c == ' ' or c == '\r' or c == '\n' or c == '\t' or c == 0);
@@ -363,7 +364,7 @@ inline fn lookup_greek_letter(c: u8, version: Type) u21 {
 }
 
 inline fn apply_accent(c: u21, accents: u21) error{UnexpectedAccent}![]const u8 {
-    @setEvalBranchQuota(5000);
+    @setEvalBranchQuota(50000);
     if (accents == ASCII_SMOOTH) return switch (c) {
         'α' => comptime &ue('ἀ'),
         'ε' => comptime &ue('ἐ'),
@@ -451,6 +452,9 @@ inline fn apply_accent(c: u21, accents: u21) error{UnexpectedAccent}![]const u8 
         'α' => comptime &ue('ᾳ'),
         'η' => comptime &ue('ῃ'),
         'ω' => comptime &ue('ῳ'),
+        'Α' => comptime &ue('ᾼ'),
+        'Η' => comptime &ue('ῌ'),
+        'Ω' => comptime &ue('ῼ'),
         else => error.UnexpectedAccent,
     };
 
@@ -458,6 +462,60 @@ inline fn apply_accent(c: u21, accents: u21) error{UnexpectedAccent}![]const u8 
         'α' => comptime &ue('ᾷ'),
         'η' => comptime &ue('ῇ'),
         'ω' => comptime &ue('ῷ'),
+        else => error.UnexpectedAccent,
+    };
+
+    if (accents == ASCII_SMOOTH_IOTA) return switch (c) {
+        'α' => comptime &ue('ᾀ'),
+        'η' => comptime &ue('ᾐ'),
+        'ω' => comptime &ue('ᾠ'),
+        'Α' => comptime &ue('ᾈ'),
+        'Η' => comptime &ue('ᾘ'),
+        'Ω' => comptime &ue('ᾨ'),
+        else => error.UnexpectedAccent,
+    };
+
+    if (accents == ASCII_ROUGH_IOTA) return switch (c) {
+        'α' => comptime &ue('ᾁ'),
+        'η' => comptime &ue('ᾑ'),
+        'ω' => comptime &ue('ᾡ'),
+        'Α' => comptime &ue('ᾉ'),
+        'Η' => comptime &ue('ᾙ'),
+        'Ω' => comptime &ue('ᾩ'),
+        else => error.UnexpectedAccent,
+    };
+
+    if (accents == ASCII_ACUTE_IOTA) return switch (c) {
+        'α' => comptime &ue('ᾴ'),
+        'η' => comptime &ue('ῄ'),
+        'ω' => comptime &ue('ῴ'),
+        else => error.UnexpectedAccent,
+    };
+
+    if (accents == ASCII_GRAVE_IOTA) return switch (c) {
+        'α' => comptime &ue('ᾲ'),
+        'η' => comptime &ue('ῂ'),
+        'ω' => comptime &ue('ῲ'),
+        else => error.UnexpectedAccent,
+    };
+
+    if (accents == ASCII_CIRCUMFLEX_IOTA_ROUGH) return switch (c) {
+        'α' => comptime &ue('ᾇ'),
+        'η' => comptime &ue('ᾗ'),
+        'ω' => comptime &ue('ᾧ'),
+        'Α' => comptime &ue('ᾏ'),
+        'Η' => comptime &ue('ᾟ'),
+        'Ω' => comptime &ue('ᾯ'),
+        else => error.UnexpectedAccent,
+    };
+
+    if (accents == ASCII_CIRCUMFLEX_IOTA_SMOOTH) return switch (c) {
+        'α' => comptime &ue('ᾆ'),
+        'η' => comptime &ue('ᾖ'),
+        'ω' => comptime &ue('ᾦ'),
+        'Α' => comptime &ue('ᾎ'),
+        'Η' => comptime &ue('ᾞ'),
+        'Ω' => comptime &ue('ᾮ'),
         else => error.UnexpectedAccent,
     };
 
@@ -602,6 +660,46 @@ inline fn apply_accent(c: u21, accents: u21) error{UnexpectedAccent}![]const u8 
         else => error.UnexpectedAccent,
     };
 
+    if (accents == ASCII_SMOOTH_ACUTE_IOTA) return switch (c) {
+        'α' => comptime &ue('ᾄ'),
+        'η' => comptime &ue('ᾔ'),
+        'ω' => comptime &ue('ᾤ'),
+        'Α' => comptime &ue('ᾌ'),
+        'Η' => comptime &ue('ᾜ'),
+        'Ω' => comptime &ue('ᾬ'),
+        else => error.UnexpectedAccent,
+    };
+
+    if (accents == ASCII_ROUGH_ACUTE_IOTA) return switch (c) {
+        'α' => comptime &ue('ᾅ'),
+        'η' => comptime &ue('ᾕ'),
+        'ω' => comptime &ue('ᾥ'),
+        'Α' => comptime &ue('ᾍ'),
+        'Η' => comptime &ue('ᾝ'),
+        'Ω' => comptime &ue('ᾭ'),
+        else => error.UnexpectedAccent,
+    };
+
+    if (accents == ASCII_SMOOTH_GRAVE_IOTA) return switch (c) {
+        'α' => comptime &ue('ᾂ'),
+        'η' => comptime &ue('ᾒ'),
+        'ω' => comptime &ue('ᾢ'),
+        'Α' => comptime &ue('ᾊ'),
+        'Η' => comptime &ue('ᾚ'),
+        'Ω' => comptime &ue('ᾪ'),
+        else => error.UnexpectedAccent,
+    };
+
+    if (accents == ASCII_ROUGH_GRAVE_IOTA) return switch (c) {
+        'α' => comptime &ue('ᾃ'),
+        'η' => comptime &ue('ᾕ'),
+        'ω' => comptime &ue('ᾥ'),
+        'Α' => comptime &ue('ᾋ'),
+        'Η' => comptime &ue('ᾝ'),
+        'Ω' => comptime &ue('ᾭ'),
+        else => error.UnexpectedAccent,
+    };
+
     return error.UnexpectedAccent;
 }
 
@@ -637,6 +735,7 @@ test "valid_default_encoding" {
     try eq(try betacode_to_greek("a)bba", .default, &buffer), "ἀββα");
     try eq(try betacode_to_greek("a)p'", .default, &buffer), "ἀπ᾽");
     try eq(try betacode_to_greek(" d' ", .default, &buffer), "δ᾽");
+    try eq(try betacode_to_greek("d'", .default, &buffer), "δ᾽");
     try eq(try betacode_to_greek(" a(ll", .default, &buffer), "ἁλλ");
     try eq(try betacode_to_greek("cri", .default, &buffer), "χρι");
     try eq(try betacode_to_greek("criv", .default, &buffer), "χρις");
@@ -666,6 +765,10 @@ test "leading accents" {
     try eq(try betacode_to_greek(")a", .default, &buffer), "ἀ");
     try eq(try betacode_to_greek("(a", .default, &buffer), "ἁ");
     try eq(try betacode_to_greek("\\a", .default, &buffer), "ὰ");
+    try eq(try betacode_to_greek("(/adou", .tlg, &buffer), "ἅδου");
+    try eq(try betacode_to_greek("(/a|dou", .tlg, &buffer), "ᾅδου");
+    try eq(try betacode_to_greek("*(/ADOU", .tlg, &buffer), "Ἅδου");
+    try eq(try betacode_to_greek("*(/A|DOU", .tlg, &buffer), "ᾍδου");
 }
 
 test "invalid_default_encoding" {
@@ -689,8 +792,11 @@ test "valid_tlg_encoding" {
     try eq(try betacode_to_greek("qeo/s2", .tlg, &buffer), "θεός");
     try eq(try betacode_to_greek("qeo/s3", .tlg, &buffer), "θεόϲ");
     try eq("ἀρχῇ", try betacode_to_greek("A)RXH=|", .tlg, &buffer));
+    try eq("ἡρ", try betacode_to_greek("(HR", .tlg, &buffer));
+    try eq("Ηρ", try betacode_to_greek("*HR", .tlg, &buffer));
+    try eq("Ἡρ", try betacode_to_greek("*(HR", .tlg, &buffer));
+    try eq("Ἡρῴδου", try betacode_to_greek("*(HRW/|DOU", .tlg, &buffer));
 }
-
 test "invalid_tlg_encoding" {
     var buffer = try std.BoundedArray(u8, MAX_WORD_SIZE).init(0);
     try std.testing.expectError(error.UnexpectedCharacter, betacode_to_greek("a\\b'a", .tlg, &buffer));

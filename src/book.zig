@@ -376,7 +376,7 @@ pub const NAMES = [_]BookInfo{
         .value = .malachi,
     },
     .{
-        .names = &.{ "matthew", "matt", "mt" },
+        .names = &.{ "matthew", "matt", "mt", "mat" },
         .english = "Matthew",
         .english_short = "Matt",
         .value = .matthew,

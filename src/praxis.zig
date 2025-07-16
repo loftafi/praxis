@@ -31,6 +31,7 @@ pub const TenseForm = parsing.TenseForm;
 pub const Module = @import("module.zig").Module;
 pub const Book = @import("book.zig").Book;
 pub const Reference = @import("reference.zig");
+pub const parse_reference = Reference.parse;
 
 pub const Parser = @import("parser.zig");
 pub const pos_to_english = @import("part_of_speech.zig").english;

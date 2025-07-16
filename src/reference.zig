@@ -14,6 +14,62 @@ pub fn clear(self: *Self) void {
     self.word = 0;
 }
 
+/// Read a bible reference, i.e. "Acts 7:40", "1 John 2:4"
+pub inline fn parse(text: []const u8) error{
+    OutOfMemory,
+    invalid_reference,
+    InvalidU16,
+}!Self {
+    return readReference(Parser.init(text));
+}
+
+/// Read a bible reference, i.e. "Acts 7:40", "1 John 2:4"
+pub fn readReference(
+    t: *Parser,
+) error{ OutOfMemory, invalid_reference, InvalidU16 }!Self {
+    var reference: Self = .{};
+
+    // Because a book name can contain multiple words,
+    // read until the chapter number.
+    var c = t.peek();
+    const start = t.index;
+    while (c >= '0' and c <= '9') {
+        _ = t.next();
+        c = t.peek();
+    }
+    var end = t.index;
+    while (true) {
+        if (c == ' ') {
+            end = t.index;
+        }
+        if (c == '\n' or c == '\t' or c == '|' or c == 0 or c == '#' or c == ',' or c == '.' or (c >= '0' and c <= '9')) {
+            reference.book = Book.parse(t.data[start..end]).value;
+            //std.debug.print("aargh {any} {any} `{s}` \n", .{ c, reference.book, t.data[start..end] });
+            break;
+        }
+        _ = t.next();
+        c = t.peek();
+    }
+    if (reference.book == .unknown) {
+        return error.invalid_reference;
+    }
+
+    if (try t.read_u16()) |chapter| {
+        reference.chapter = chapter;
+    }
+    c = t.peek();
+    if (c != ':') {
+        return error.invalid_reference;
+    }
+    _ = t.next();
+
+    if (try t.read_u16()) |verse| {
+        reference.verse = verse;
+    }
+
+    return reference;
+}
+
 /// Read a list of references to this word, i.e. "kjtr#Acts 7:40 2,sr#Acts 7:40 2"
 pub fn readReferenceList(
     arena: Allocator,
@@ -111,6 +167,37 @@ const Book = @import("book.zig").Book;
 const Parser = @import("parser.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+
+test "read verse" {
+    {
+        var p = Parser.init("Mark 1:2");
+        const reference = try Self.readReference(&p);
+        try std.testing.expectEqual(.mark, reference.book);
+        try std.testing.expectEqual(1, reference.chapter);
+        try std.testing.expectEqual(2, reference.verse);
+    }
+    {
+        var p = Parser.init("Rev 19:28");
+        const reference = try Self.readReference(&p);
+        try std.testing.expectEqual(.revelation, reference.book);
+        try std.testing.expectEqual(19, reference.chapter);
+        try std.testing.expectEqual(28, reference.verse);
+    }
+    {
+        var p = Parser.init("1 John 123:456");
+        const reference = try Self.readReference(&p);
+        try std.testing.expectEqual(.first_john, reference.book);
+        try std.testing.expectEqual(123, reference.chapter);
+        try std.testing.expectEqual(456, reference.verse);
+    }
+    {
+        var p = Parser.init("1Th 3:4");
+        const reference = try Self.readReference(&p);
+        try std.testing.expectEqual(.first_thessalonians, reference.book);
+        try std.testing.expectEqual(3, reference.chapter);
+        try std.testing.expectEqual(4, reference.verse);
+    }
+}
 
 test "read reference list" {
     const allocator = std.testing.allocator;

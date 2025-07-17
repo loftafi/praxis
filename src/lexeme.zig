@@ -14,7 +14,6 @@ tags: ?[][]const u8 = null,
 root: []const u8 = undefined,
 genitiveSuffix: []const u8 = undefined,
 adjective: []const u8 = undefined,
-alt: []const u8 = undefined,
 note: []const u8 = undefined,
 
 const Self = @This();
@@ -48,7 +47,6 @@ pub fn init(self: *Self) void {
         .root = "",
         .genitiveSuffix = "",
         .adjective = "",
-        .alt = "",
     };
 }
 
@@ -71,9 +69,6 @@ pub fn deinit(self: *Self, allocator: Allocator) void {
     }
     if (self.root.len > 0) {
         allocator.free(self.root);
-    }
-    if (self.alt.len > 0) {
-        allocator.free(self.alt);
     }
     if (self.adjective.len > 0) {
         allocator.free(self.adjective);
@@ -285,25 +280,18 @@ pub fn readText(self: *Self, arena: Allocator, t: *Parser) !void {
     _ = t.skip_whitespace_and_lines();
     //const start = t.index;
     const word_field = try form.read_field(t);
-    if (word_field.len == 0) {
-        self.word = "";
-    } else {
-        self.word = try arena.dupe(u8, word_field);
-    }
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+    if (word_field.len == 0) return error.EmptyField;
+    self.word = try arena.dupe(u8, word_field);
+
+    if (!t.consume_if('|')) return error.MissingField;
     self.lang = try t.read_lang();
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
-    const alt = try form.read_field(t);
-    if (alt.len > 0) {
-        self.alt = try arena.dupe(u8, alt);
-    }
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+
+    // Remove
+    if (!t.consume_if('|')) return error.MissingField;
+    _ = try form.read_field(t);
+    //self.alt = "";
+
+    if (!t.consume_if('|')) return error.MissingField;
     self.uid = try form.read_u24(t); // Lexeme UID
     if (!t.consume_if('|')) {
         return error.MissingField;
@@ -342,9 +330,8 @@ pub fn readText(self: *Self, arena: Allocator, t: *Parser) !void {
     if (adjectives.len > 0) {
         self.adjective = try arena.dupe(u8, adjectives);
     }
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+
+    if (!t.consume_if('|')) return error.MissingField;
     const tag_set = try form.read_field(t); // Tags
     var i = std.mem.tokenizeAny(u8, tag_set, " ,\n\r\t");
     var buffer = std.BoundedArray([]const u8, 10){};
@@ -353,16 +340,52 @@ pub fn readText(self: *Self, arena: Allocator, t: *Parser) !void {
         if (buffer.len == buffer.capacity()) break;
         buffer.appendAssumeCapacity(tag);
     }
+
     self.tags = try arena.alloc([]const u8, buffer.len);
     for (buffer.slice(), 0..) |tag, x| {
         self.tags.?[x] = try arena.dupe(u8, tag);
     }
     _ = try form.read_field(t); // ??
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
-    _ = try form.read_field(t); // ??
+
+    if (!t.consume_if('|')) return error.MissingField;
+    self.note = try form.read_field(t);
     _ = t.read_until_eol();
+}
+
+pub fn writeText(self: *Self, writer: anytype) error{OutOfMemory}!void {
+    try writer.writeAll(self.word);
+    try writer.writeByte('|');
+    try writer.writeAll(self.lang.to_code());
+    try writer.writeByte('|');
+    try writer.writeByte('|');
+    try writer.print("{d}", .{self.uid});
+    try writer.writeByte('|');
+    for (self.strongs.items, 0..) |sn, i| {
+        if (i > 0) try writer.writeByte(',');
+        try writer.print("{d}", .{sn});
+    }
+    try writer.writeByte('|');
+    try writer.writeAll(self.article.articles()); // M, F, M/F...
+    try writer.writeByte('|');
+    try writer.writeAll(english_camel_case(self.pos));
+    try writer.writeByte('|');
+    try writer.writeAll(self.genitiveSuffix);
+    try writer.writeByte('|');
+    try writer.writeAll(self.root);
+    // root
+    try writer.writeByte('|');
+    try writeTextGlosses(writer, &self.glosses);
+    try writer.writeByte('|');
+    try writer.writeAll(self.adjective);
+    try writer.writeByte('|');
+    if (self.tags) |tags| {
+        for (tags, 0..) |tag, i| {
+            if (i > 0) try writer.writeAll(", ");
+            try writer.writeAll(tag);
+        }
+    }
+    try writer.writeByte('|');
+    try writer.writeAll(self.note);
 }
 
 const std = @import("std");
@@ -373,6 +396,7 @@ const is_whitespace = @import("parser.zig").is_whitespace;
 const form = @import("form.zig");
 const Form = @import("form.zig");
 const is_whitespace_or_eol = @import("parser.zig").is_whitespace_or_eol;
+const english_camel_case = @import("part_of_speech.zig").english_camel_case;
 pub const PartOfSpeech = @import("part_of_speech.zig").PartOfSpeech;
 const parse_pos = @import("part_of_speech.zig").parse_pos;
 pub const Parsing = @import("parsing.zig").Parsing;
@@ -380,6 +404,7 @@ pub const parse = @import("parsing.zig").parse;
 pub const Gender = @import("parsing.zig").Gender;
 pub const Gloss = @import("gloss.zig");
 pub const Lang = @import("lang.zig").Lang;
+pub const writeTextGlosses = @import("gloss.zig").writeTextGlosses;
 
 const BinaryReader = @import("binary_reader.zig");
 const BinaryWriter = @import("binary_writer.zig");
@@ -433,7 +458,6 @@ test "read_lexeme2" {
     try expectEqual(2, lexeme.strongs.items.len);
     try expectEqual(55, lexeme.strongs.items[1]);
     try expectEqual(1, lexeme.glosses.items.len);
-    try expectEqualStrings("ἀγγεῖο", lexeme.alt);
     try expectEqualStrings("a b c", lexeme.adjective);
     try expectEqualStrings("-ου", lexeme.genitiveSuffix);
 }

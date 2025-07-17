@@ -419,78 +419,12 @@ pub const Dictionary = struct {
         data: *ArrayListUnmanaged(u8),
     ) !void {
         for (self.lexemes.items) |lexeme| {
-            try data.appendSlice(allocator, lexeme.word);
-            try data.append(allocator, '|');
-            try data.appendSlice(allocator, lexeme.lang.to_code());
-            try data.append(allocator, '|');
-            try data.appendSlice(allocator, lexeme.alt);
-            try data.append(allocator, '|');
-            try data.writer(allocator).print("{}", .{lexeme.uid});
-            try data.append(allocator, '|');
-            for (lexeme.strongs.items, 0..) |sn, i| {
-                if (i > 0) {
-                    try data.append(allocator, ',');
-                }
-                try data.writer(allocator).print("{}", .{sn});
-            }
-            try data.append(allocator, '|');
-            try data.appendSlice(allocator, lexeme.article.articles()); // M, F, M/F...
-            try data.append(allocator, '|');
-            try data.appendSlice(allocator, pos.english_camel_case(lexeme.pos));
-            try data.append(allocator, '|');
-            try data.appendSlice(allocator, lexeme.genitiveSuffix);
-            try data.append(allocator, '|');
-            try data.appendSlice(allocator, lexeme.root);
-            // root
-            try data.append(allocator, '|');
-            for (lexeme.glosses.items, 0..) |gloss, i| {
-                if (i > 0) {
-                    try data.append(allocator, '#');
-                }
-                try data.appendSlice(allocator, gloss.lang.to_code());
-                for (gloss.glosses()) |item| {
-                    try data.append(allocator, ':');
-                    try data.appendSlice(allocator, item);
-                }
-            }
-            try data.append(allocator, '|');
-            try data.appendSlice(allocator, lexeme.adjective);
-            try data.append(allocator, '|');
-            if (lexeme.tags) |tags| {
-                for (tags, 0..) |tag, i| {
-                    if (i > 0) {
-                        try data.appendSlice(allocator, ", ");
-                    }
-                    try data.appendSlice(allocator, tag);
-                }
-            }
-            try data.append(allocator, '|');
+            try lexeme.writeText(data.writer(allocator));
+
             for (lexeme.forms.items) |form| {
                 try data.append(allocator, LF);
                 try data.appendSlice(allocator, "  ");
-                try data.appendSlice(allocator, form.word);
-                try data.append(allocator, '|');
-                try form.parsing.string(data.writer(allocator));
-                try data.append(allocator, '|');
-                if (form.preferred) {
-                    try data.appendSlice(allocator, "true");
-                } else {
-                    try data.appendSlice(allocator, "false");
-                }
-                try data.append(allocator, '|');
-                try data.writer(allocator).print("{}", .{form.uid});
-                try data.append(allocator, '|');
-                for (form.glosses.items, 0..) |*gloss, i| {
-                    if (i > 0) {
-                        try data.append(allocator, '#');
-                    }
-                    try data.appendSlice(allocator, gloss.*.lang.to_code());
-                    for (gloss.*.glosses()) |item| {
-                        try data.append(allocator, ':');
-                        try data.appendSlice(allocator, item);
-                    }
-                }
-                try data.append(allocator, '|');
+                try form.writeText(data.writer(allocator));
                 // References into linked modules
                 for (form.references.items, 0..) |*reference, i| {
                     if (i > 0) {

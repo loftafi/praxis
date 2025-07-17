@@ -20,7 +20,8 @@ pub inline fn parse(text: []const u8) error{
     invalid_reference,
     InvalidU16,
 }!Self {
-    return readReference(Parser.init(text));
+    var p = Parser.init(text);
+    return readReference(&p);
 }
 
 /// Read a bible reference, i.e. "Acts 7:40", "1 John 2:4"

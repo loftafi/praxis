@@ -95,14 +95,12 @@ pub fn readText(self: *Self, arena: Allocator, t: *Parser) error{OutOfMemory}!vo
     }
 }
 
-pub fn write_text(self: *const Self, w: *std.ArrayList(u8)) !void {
-    try w.writer().writeAll(self.lang.to_code());
-    try w.writer().writeByte(':');
+pub fn writeText(self: *const Self, writer: anytype) !void {
+    try writer.writeAll(self.lang.to_code());
+    try writer.writeByte(':');
     for (self.entries.items, 0..) |token, i| {
-        if (i > 0) {
-            try w.writer().writeByte(':');
-        }
-        try w.writer().writeAll(token);
+        if (i > 0) try writer.writeByte(':');
+        try writer.writeAll(token);
     }
 }
 
@@ -119,14 +117,22 @@ pub fn readTextGlosses(
         try gloss.readText(arena, t);
         try entries.append(arena, gloss);
         c = t.peek();
-        if (t.index == loc) {
-            break;
-        }
+        if (t.index == loc) break;
         if (c == '#') {
             c = t.next();
             c = t.peek();
         }
         loc = t.index;
+    }
+}
+
+pub fn writeTextGlosses(
+    writer: anytype,
+    entries: *std.ArrayListUnmanaged(*Self),
+) error{OutOfMemory}!void {
+    for (entries.items, 0..) |gloss, i| {
+        if (i > 0) try writer.writeByte('#');
+        try gloss.writeText(writer);
     }
 }
 
@@ -176,23 +182,30 @@ const expectEqual = std.testing.expectEqual;
 const expectEqualStrings = std.testing.expectEqualStrings;
 
 test "read_gloss" {
+    const allocator = std.testing.allocator;
+
     var data = Parser.init("en:fish:cat#ko:apple|");
-    var gloss = try Self.create(std.testing.allocator);
-    defer gloss.destroy(std.testing.allocator);
-    try gloss.readText(std.testing.allocator, &data);
+    var gloss = try Self.create(allocator);
+    defer gloss.destroy(allocator);
+    try gloss.readText(allocator, &data);
     try expectEqual(Lang.english, gloss.lang);
     try expectEqual(2, gloss.glosses().len);
     try expectEqualStrings("fish", gloss.glosses()[0]);
     try expectEqualStrings("cat", gloss.glosses()[1]);
     try expect(data.consume_if('#'));
 
-    var gloss2 = try Self.create(std.testing.allocator);
-    defer gloss2.destroy(std.testing.allocator);
-    try gloss2.readText(std.testing.allocator, &data);
+    var gloss2 = try Self.create(allocator);
+    defer gloss2.destroy(allocator);
+    try gloss2.readText(allocator, &data);
     try expectEqual(Lang.korean, gloss2.lang);
     try expectEqual(1, gloss2.glosses().len);
     try expectEqualStrings("apple", gloss2.glosses()[0]);
     try expect(data.consume_if('|'));
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+    try gloss.writeText(out.writer(allocator));
+    try expectEqualStrings("en:fish:cat", out.items);
 }
 
 test "read_bad_gloss1" {
@@ -279,6 +292,12 @@ test "read_text_glosses" {
     try expectEqual(Lang.english, list.items[0].lang);
     try expectEqual(Lang.chinese, list.items[1].lang);
     try expectEqual(Lang.spanish, list.items[2].lang);
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+    try writeTextGlosses(out.writer(allocator), &list);
+    try expectEqualStrings("en:Aaron#zh:亞倫#es:Aarón", out.items);
+
     for (list.items) |i| {
         i.destroy(allocator);
     }

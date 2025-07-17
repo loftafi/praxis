@@ -245,6 +245,23 @@ pub fn readBinary(self: *Self, arena: Allocator, t: *BinaryReader) !void {
     }
 }
 
+pub fn writeText(self: *Self, writer: anytype) error{ OutOfMemory, Incomplete }!void {
+    try writer.writeAll(self.word);
+    try writer.writeByte('|');
+    try self.parsing.string(writer);
+    try writer.writeByte('|');
+    if (self.preferred) {
+        try writer.writeAll("true");
+    } else {
+        try writer.writeAll("false");
+    }
+    try writer.writeByte('|');
+    try writer.print("{d}", .{self.uid});
+    try writer.writeByte('|');
+    try writeTextGlosses(writer, &self.glosses);
+    try writer.writeByte('|');
+}
+
 /// Read a single text line that contains a human readable description of a word form.
 ///
 /// Examples of this format:
@@ -300,6 +317,7 @@ const is_eol = @import("parser.zig").is_eol;
 const is_whitespace = @import("parser.zig").is_whitespace;
 const is_whitespace_or_eol = @import("parser.zig").is_whitespace_or_eol;
 const readTextGlosses = @import("gloss.zig").readTextGlosses;
+const writeTextGlosses = @import("gloss.zig").writeTextGlosses;
 const readBinaryGlosses = @import("gloss.zig").readBinaryGlosses;
 
 const BinaryWriter = @import("binary_writer.zig");
@@ -350,6 +368,21 @@ test "form_init" {
     try expectEqual(false, form.incorrect);
     try expectEqual(0, form.glosses.items.len);
     try expectEqual(0, form.references.items.len);
+}
+
+test "form_read_write_text" {
+    const allocator = std.testing.allocator;
+    const in = "fish|N-NSM|true|20|en:swim:to arch#zh:你好|sbl#Mark 11:22 33,sr#Luke 1:2 3\n";
+    var t = Parser.init(in);
+    var form = try Self.create(allocator);
+    defer form.destroy(allocator);
+    try form.readText(allocator, &t);
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+    try form.writeText(out.writer(allocator));
+    const text = "fish|N-NSM|true|20|en:swim:to arch#zh:你好|";
+    try expectEqualStrings(text, out.items);
 }
 
 test "form_read_write_bytes" {

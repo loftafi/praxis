@@ -542,10 +542,10 @@ test "basic_dictionary" {
     defer dictionary.destroy(allocator);
 
     const data =
-        \\δράκων|el||80000|1404|ὁ|Noun|-οντος|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
+        \\δράκων|el|80000|Noun|ὁ|-οντος|1404|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
         \\  δράκων|N-NSM|false|70000||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
         \\  δράκοντα|N-ASM|false|70001|en:the sneaky|byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
-        \\λύω|el||80001|3089||Verb||λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
+        \\λύω|el|80001|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
         \\  λύω|V-PAI-1S|false|70002|en:I untie:I release:I loose|
         \\  λύεις|V-PAI-2S|false|70003|en:You untie:You release|
         \\  λύει|V-PAI-3S|false|70004|en:You untie:You release|
@@ -653,10 +653,10 @@ test "unaccented dictionary search" {
     const dictionary = try Dictionary.create(allocator);
     defer dictionary.destroy(allocator);
     const data =
-        \\λύω|el||63667|3089||Verb||λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
+        \\λύω|el|63667|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
         \\  λύω|V-PAI-1S|false|85589|en:I untie:I release:I loose|
         \\  λύεις|V-PAI-2S|false|85590|en:You untie:You release|
-        \\δράκων|el||27959|1404|ὁ|Noun|-οντος|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
+        \\δράκων|el|27959|Noun|ὁ|-οντος|1404|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
         \\  δράκων|N-NSM|false|37627||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
         \\  δράκοντα|N-ASM|false|37628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;
@@ -674,7 +674,7 @@ test "load_count" {
     const dictionary = try Dictionary.create(allocator);
     defer dictionary.destroy(allocator);
     const data =
-        \\στόμαχος|el||96019|4751|ὁ|Noun|-ου|στόμαχ|en:stomach|||
+        \\στόμαχος|el|96019|Noun|ὁ|-ου|4751|στόμαχ|en:stomach|||
         \\  στόμαχος|N-NSM|false|128624||
         \\  στόμαχον|N-ASM|false|128625||byz#1 Timothy 5:23 10,kjtr#1 Timothy 5:23 9,sbl#1 Timothy 5:23 9,sr#1 Timothy 5:23 10
     ;
@@ -690,11 +690,11 @@ test "gloss_fallback" {
     const dictionary = try Dictionary.create(allocator);
     defer dictionary.destroy(allocator);
     const data =
-        \\λύω|el||90|3089||Verb||λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
+        \\λύω|el|90|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
         \\  λύω|V-PAI-1S|false|50|en:I untie:I release:I loose|
         \\  λύεις|V-PAI-2S|false|51|en:You untie:You release|
         \\  λύει|V-PAI-3S|false|52||
-        \\δράκων|el||27959|91|ὁ|Noun|-οντος|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
+        \\δράκων|el|27959|Noun|ὁ|-οντος|91|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
         \\  δράκων|N-NSM|false|150||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
         \\  δράκοντα|N-ASM|false|151||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;
@@ -727,11 +727,11 @@ test "arena_check" {
     const dictionary = try Dictionary.create(allocator);
     defer dictionary.destroy(allocator);
     const data =
-        \\λύω|el||90|3089||Verb||λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
+        \\λύω|el|90|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
         \\  λύω|V-PAI-1S|false|50|en:I untie:I release:I loose|
         \\  λύεις|V-PAI-2S|false|51|en:You untie:You release|
         \\  λύει|V-PAI-3S|false|52||
-        \\δράκων|el||27959|91|ὁ|Noun|-οντος|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
+        \\δράκων|el|27959|Noun|ὁ|-οντος|91|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
         \\  δράκων|N-NSM|false|150||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
         \\  δράκοντα|N-ASM|false|151||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;
@@ -795,10 +795,10 @@ test "dictionary_destroy" {
     const dictionary = try Dictionary.create(allocator);
     defer dictionary.destroy(allocator);
     const data =
-        \\λύω|el||63667|3089||Verb||λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
+        \\λύω|el|63667|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
         \\  λύω|V-PAI-1S|false|85589|en:I untie:I release:I loose|
         \\  λύεις|V-PAI-2S|false|85590|en:You untie:You release|
-        \\δράκων|el||27959|1404|ὁ|Noun|-οντος|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
+        \\δράκων|el|27959|Noun|ὁ|-οντος|1404|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
         \\  δράκων|N-NSM|false|37627||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
         \\  δράκοντα|N-ASM|false|37628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;
@@ -820,7 +820,7 @@ test "dictionary_destroy1" {
     const dictionary = try Dictionary.create(allocator);
     defer dictionary.destroy(allocator);
     const data =
-        \\λύω|el||63667|3089||Verb||λύ|en:untie:hi|||
+        \\λύω|el|63667|Verb|||3089|λύ|en:untie:hi|||
     ;
     try dictionary.loadTextData(allocator, allocator, data);
 }
@@ -831,7 +831,7 @@ test "dictionary_destroy2" {
     const dictionary = try Dictionary.create(allocator);
     defer dictionary.destroy(allocator);
     const data =
-        \\λύω|el||63667|3089||Verb||λύ||||
+        \\λύω|el|63667|Verb|||3089|λύ||||
     ;
     try dictionary.loadTextData(allocator, allocator, data);
 }
@@ -841,10 +841,10 @@ test "partial dictionary search" {
     const dictionary = try Dictionary.create(allocator);
     defer dictionary.destroy(allocator);
     const data =
-        \\λύω|el||63667|3089||Verb||λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
+        \\λύω|el|63667|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
         \\  λύω|V-PAI-1S|false|85589|en:I untie:I release:I loose|
         \\  λύεις|V-PAI-2S|false|85590|en:You untie:You release|
-        \\δράκων|el||27959|1404|ὁ|Noun|-οντος|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
+        \\δράκων|el|27959|Noun|ὁ|-οντος|1404|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
         \\  δράκων|N-NSM|false|37627||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
         \\  δράκοντα|N-ASM|false|37628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;

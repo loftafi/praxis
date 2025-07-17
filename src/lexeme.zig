@@ -278,7 +278,7 @@ pub fn writeBinary(self: *Self, allocator: Allocator, data: *std.ArrayListUnmana
 /// Ἀαρών|el||17|2|ὁ|ProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
 pub fn readText(self: *Self, arena: Allocator, t: *Parser) !void {
     _ = t.skip_whitespace_and_lines();
-    //const start = t.index;
+
     const word_field = try form.read_field(t);
     if (word_field.len == 0) return error.EmptyField;
     self.word = try arena.dupe(u8, word_field);
@@ -286,35 +286,25 @@ pub fn readText(self: *Self, arena: Allocator, t: *Parser) !void {
     if (!t.consume_if('|')) return error.MissingField;
     self.lang = try t.read_lang();
 
-    // Remove
-    if (!t.consume_if('|')) return error.MissingField;
-    _ = try form.read_field(t);
-    //self.alt = "";
-
     if (!t.consume_if('|')) return error.MissingField;
     self.uid = try form.read_u24(t); // Lexeme UID
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
-    _ = try t.readStrongs(arena, &self.strongs);
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
-    self.article = try t.read_article();
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+
+    if (!t.consume_if('|')) return error.MissingField;
     self.pos = t.read_pos();
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+
+    if (!t.consume_if('|')) return error.MissingField;
+    self.article = try t.read_article();
+
+    if (!t.consume_if('|')) return error.MissingField;
     const suffix = try form.read_field(t); // Genitive suffix
     if (suffix.len > 0) {
         self.genitiveSuffix = try arena.dupe(u8, suffix);
     }
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+
+    if (!t.consume_if('|')) return error.MissingField;
+    _ = try t.readStrongs(arena, &self.strongs);
+
+    if (!t.consume_if('|')) return error.MissingField;
     const root = try form.read_field(t); // Lexeme root
     if (root.len > 0) {
         self.root = try arena.dupe(u8, root);
@@ -322,6 +312,7 @@ pub fn readText(self: *Self, arena: Allocator, t: *Parser) !void {
     if (!t.consume_if('|')) {
         return error.MissingField;
     }
+
     try readTextGlosses(arena, t, &self.glosses); // Glosses
     if (!t.consume_if('|')) {
         return error.MissingField;
@@ -357,19 +348,18 @@ pub fn writeText(self: *Self, writer: anytype) error{OutOfMemory}!void {
     try writer.writeByte('|');
     try writer.writeAll(self.lang.to_code());
     try writer.writeByte('|');
-    try writer.writeByte('|');
     try writer.print("{d}", .{self.uid});
+    try writer.writeByte('|');
+    try writer.writeAll(english_camel_case(self.pos));
+    try writer.writeByte('|');
+    try writer.writeAll(self.article.articles()); // M, F, M/F...
+    try writer.writeByte('|');
+    try writer.writeAll(self.genitiveSuffix);
     try writer.writeByte('|');
     for (self.strongs.items, 0..) |sn, i| {
         if (i > 0) try writer.writeByte(',');
         try writer.print("{d}", .{sn});
     }
-    try writer.writeByte('|');
-    try writer.writeAll(self.article.articles()); // M, F, M/F...
-    try writer.writeByte('|');
-    try writer.writeAll(english_camel_case(self.pos));
-    try writer.writeByte('|');
-    try writer.writeAll(self.genitiveSuffix);
     try writer.writeByte('|');
     try writer.writeAll(self.root);
     // root
@@ -427,7 +417,7 @@ const expectEqualStrings = std.testing.expectEqualStrings;
 //Ἀαρών|el||17|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
 //   Ἀαρών|N-NSM|false|17||
 test "read_lexeme" {
-    var data = Parser.init("Ἀαρών|el||17|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|");
+    var data = Parser.init("Ἀαρών|el|17|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|");
     var lexeme = try Self.create(std.testing.allocator);
     defer lexeme.destroy(std.testing.allocator);
     try lexeme.readText(std.testing.allocator, &data);
@@ -448,7 +438,7 @@ test "read_lexeme" {
 
 test "read_lexeme2" {
     var data = Parser.init(
-        \\ἀγγεῖον|el|ἀγγεῖο|388|30,55|τό|Noun|-ου|ἀγγεῖ|en:vessel:flask:container:can|a b c|tag|
+        \\ἀγγεῖον|el|388|Noun|τό|-ου|30,55|ἀγγεῖ|en:vessel:flask:container:can|a b c|tag|
     );
     var lexeme = try Self.create(std.testing.allocator);
     defer lexeme.destroy(std.testing.allocator);
@@ -464,7 +454,7 @@ test "read_lexeme2" {
 
 test "lexeme_bytes" {
     const allocator = std.testing.allocator;
-    var data = Parser.init("cat|el||17|2|ὁ|IndeclinableProperNoun||cat|en:cat#zh:ara#es:nat||person|");
+    var data = Parser.init("cat|el|17|IndeclinableProperNoun|ὁ||2|cat|en:cat#zh:ara#es:nat||person|");
     var lexeme = try Self.create(allocator);
     defer lexeme.destroy(allocator);
     try lexeme.readText(std.testing.allocator, &data);
@@ -490,17 +480,15 @@ test "lexeme_bytes" {
     try expectEqual(0, out.items[14]);
     try expectEqual(@intFromEnum(Lang.english), out.items[15]);
     try expectEqual('c', out.items[16]);
-
-    //try std.testing.expectEqualSlices(u8, &[_]u8{}, out.items);
 }
 
 test "compare_lexeme" {
     const allocator = std.testing.allocator;
     {
         var data = Parser.init(
-            \\Ἀαρώ|el||17|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
-            \\Ἀαρών|el||18|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
-            \\Ἀαρώνα|el||19|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
+            \\Ἀαρώ|el|17|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
+            \\Ἀαρών|el|18|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
+            \\Ἀαρώνα|el|19|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
         );
         var lexeme1 = try Self.create(allocator);
         defer lexeme1.destroy(allocator);
@@ -518,9 +506,9 @@ test "compare_lexeme" {
     }
     {
         var data = Parser.init(
-            \\Ἀαρών|el||17|2|ὁ|IndeclinableProperNoun||Ἀαρών|||person|
-            \\Ἀαρών|el||18|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫||person|
-            \\Ἀαρών|el||19|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
+            \\Ἀαρών|el|17|IndeclinableProperNoun||ὁ|3|Ἀαρών|||person|
+            \\Ἀαρών|el|18|IndeclinableProperNoun||ὁ|3|Ἀαρών|en:Aaron#zh:亞倫||person|
+            \\Ἀαρών|el|19|IndeclinableProperNoun||ὁ|3|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
         );
         var lexeme1 = try Self.create(allocator);
         defer lexeme1.destroy(allocator);
@@ -548,10 +536,10 @@ test "return_correct_preferred_form" {
         defer dictionary.destroy(allocator);
 
         const data =
-            \\δράκων|el||80000|1404|ὁ|Noun|-οντος|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
+            \\δράκων|el|80000|Noun|ὁ|-οντος|1404|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
             \\  δράκων|N-NSM|false|70000||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
             \\  δράκοντα|N-ASM|false|70001|en:the sneaky|byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
-            \\λύω|el||80001|3089||Verb||λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
+            \\λύω|el|80001|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
             \\  λύω|V-PAI-1S|false|70002|en:I untie:I release:I loose|
             \\  λύω|V-PAI-1S|false|70003||
             \\  λύεις|V-PAI-2S|false|70004||
@@ -612,7 +600,7 @@ test "return_correct_preferred_form" {
 
 test "binary_lexeme_load_save" {
     const allocator = std.testing.allocator;
-    var data = Parser.init("ἅγιος|el||519|40,39||Adjective||ἅγι|en:holy:set apart:sacred#zh:聖潔的:至聖所:聖所:聖徒:聖:聖潔#es:santo:apartado:sagrado|ἅγιος,-α,-ον|worship, church|\n");
+    var data = Parser.init("ἅγιος|el|519|Adjective|||40,39|ἅγι|en:holy:set apart:sacred#zh:聖潔的:至聖所:聖所:聖徒:聖:聖潔#es:santo:apartado:sagrado|ἅγιος,-α,-ον|worship, church|\n");
     var lexeme = try Self.create(allocator);
     defer lexeme.destroy(allocator);
     try lexeme.readText(allocator, &data);
@@ -635,7 +623,7 @@ test "binary_lexeme_load_save" {
 }
 
 test "read_invalid_lexeme_id" {
-    var data = Parser.init("Ἀαρών|el||nana|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|\n");
+    var data = Parser.init("Ἀαρών|el|nana|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|\n");
     var lexeme = try Self.create(std.testing.allocator);
     defer lexeme.destroy(std.testing.allocator);
     const e = lexeme.readText(std.testing.allocator, &data);

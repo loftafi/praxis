@@ -436,7 +436,14 @@ pub const Dictionary = struct {
         allocator: Allocator,
         data: *ArrayListUnmanaged(u8),
     ) !void {
+        var unsorted: ArrayListUnmanaged(*Lexeme) = .empty;
+        defer unsorted.deinit(allocator);
         for (self.lexemes.items) |lexeme| {
+            try unsorted.append(allocator, lexeme);
+        }
+        std.mem.sort(*Lexeme, unsorted.items, {}, Lexeme.lessThan);
+
+        for (unsorted.items) |lexeme| {
             try lexeme.writeText(data.writer(allocator));
 
             for (lexeme.forms.items) |form| {

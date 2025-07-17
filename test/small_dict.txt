@@ -1,20 +1,20 @@
-ἐγώ|el|30314|PersonalPronoun|||1473|ἐγώ|en:I#zh:我#ru:я#es:Yo|||
-  ἐγώ|P-1NS|false|40558|en:I|byz#Matthew 3:11,sbl#Matthew 3:11,byz#Matthew 3:14 8
-  με|P-1AS|true|40559|en:me|byz#Matthew 3:14 19,sbl#Matthew 3:14 16
-  ἐμέ|P-1AS|false|40560|en:me|byz#Matthew 10:37 6
-  μέ|P-1AS|false|40561|en:me|byz#John 19:11 21
-  μου|P-1GS|false|40562|en:of me:my|byz#Matthew 2:6 25,sbl#Matthew 2:6 25
-  ἐμοῦ|P-1GS|false|40563|en:of me:my|byz#Matthew 5:11 20,sbl#Matthew 5:11 16
-  μοῦ|P-1GS|true|153697||
-  μού|P-1GS|false|40564||sbl#Matthew 3:11 15,byz#Luke 8:46 6,sbl#Luke 8:46 5
-  μοι|P-1DS|true|40565|en:to me:for me|byz#Matthew 2:8 19,sbl#Matthew 2:8 18
-  ἐμοί|P-1DS|false|40566|en:to me:for me|byz#Matthew 10:32 5
-  μοί|P-1DS|false|40567|en:to me:for me|sbl#Luke 9:38 20
-  ἡμεῖς|P-1NP|false|40568|en:we|byz#Matthew 6:12 9,sbl#Matthew 6:12 10,byz#Matthew 9:14 12
-  ἡμᾶς|P-1AP|false|40569|en:us|byz#Matthew 6:13 3,byz#Matthew 6:13 9
-  ἡμῶν|P-1GP|false|40570|en:of us:our|byz#Matthew 1:23 23
-  ἡμῖν|P-1DP|false|40571|en:to us|
-  ἐγώ|O-NS|false|40572|en:I|kjtr#Matthew 3:11
+ἐγώ|el|830314|PersonalPronoun|||1473|ἐγώ|en:I#zh:我#ru:я#es:Yo|||
+  ἐγώ|P-1NS|false|840558|en:I|byz#Matthew 3:11,sbl#Matthew 3:11,byz#Matthew 3:14 8
+  με|P-1AS|true|840559|en:me|byz#Matthew 3:14 19,sbl#Matthew 3:14 16
+  ἐμέ|P-1AS|false|840560|en:me|byz#Matthew 10:37 6
+  μέ|P-1AS|false|840561|en:me|byz#John 19:11 21
+  μου|P-1GS|false|840562|en:of me:my|byz#Matthew 2:6 25,sbl#Matthew 2:6 25
+  ἐμοῦ|P-1GS|false|840563|en:of me:my|byz#Matthew 5:11 20,sbl#Matthew 5:11 16
+  μοῦ|P-1GS|true|8153697||
+  μού|P-1GS|false|840564||sbl#Matthew 3:11 15,byz#Luke 8:46 6,sbl#Luke 8:46 5
+  μοι|P-1DS|true|840565|en:to me:for me|byz#Matthew 2:8 19,sbl#Matthew 2:8 18
+  ἐμοί|P-1DS|false|840566|en:to me:for me|byz#Matthew 10:32 5
+  μοί|P-1DS|false|840567|en:to me:for me|sbl#Luke 9:38 20
+  ἡμεῖς|P-1NP|false|840568|en:we|byz#Matthew 6:12 9,sbl#Matthew 6:12 10,byz#Matthew 9:14 12
+  ἡμᾶς|P-1AP|false|840569|en:us|byz#Matthew 6:13 3,byz#Matthew 6:13 9
+  ἡμῶν|P-1GP|false|840570|en:of us:our|byz#Matthew 1:23 23
+  ἡμῖν|P-1DP|false|840571|en:to us|
+  ἐγώ|O-NS|false|840572|en:I|kjtr#Matthew 3:11
   ἡμεῖς|O-NP|false|40574|en:we|kjtr#Matthew 6:12 10,sr#Matthew 6:12 10
   με|O-AS|false|40575|en:me|kjtr#Matthew 3:14 19,sr#Matthew 3:14 18
   ἐμέ|O-AS|false|40576|en:me|kjtr#Matthew 10:37 6,kjtr#Matthew 10:37 19
@@ -57,14 +57,14 @@
   ἄρτους|N-APM|false|20461|en:bread#es:pan|brenton#Genesis 14:18 5
   ἄρτων|N-GPM|false|20462|en:of bread|brenton#Genesis 41:55 13,brenton#Genesis 47:19 17
   ἄρτοις|N-DPM|false|20463|en:to bread|brenton#Genesis 47:17 30,brenton#Leviticus 7:13 1
-ἤ|el|46132|Conjunction|||2228|ἤ|en:or:than#zh:或:或者:比#ru:или; чем#es:o||question|
-  ἤ|ADV|false|61576||
-  ἤ|CONJ|false|61577|en:or#zh:than|kjtr#Matthew 5:17 9,sr#Matthew 5:17 9,kjtr#Matthew 5:18 16,sr#Matthew 5:18 17
-  ἤ|PRT|false|61580|en:or|byz#Matthew 1:18 20,kjtr#Matthew 1:18 20,sbl#Matthew 1:18 19,sr#Matthew 1:18 20
-ἦ|el|46133|Particle|||2229|ἦ|en:truly:surely|||
-  ἦ|ADV|false|61583||kjtr#Hebrews 6:14 2
-  ἦ|PRT|false|61584|en:undefined|byz#Hebrews 6:14 2
-εἰμί|el|30789|Verb|||1510|εἰ|en:am:be:exist#zh:是:有#ru:быть:существовать#es:soy||question|
+ἤ|el|746132|Conjunction|||2228|ἤ|en:or:than#zh:或:或者:比#ru:или; чем#es:o||question|
+  ἤ|ADV|false|961576||
+  ἤ|CONJ|false|561577|en:or#zh:than|kjtr#Matthew 5:17 9,sr#Matthew 5:17 9,kjtr#Matthew 5:18 16,sr#Matthew 5:18 17
+  ἤ|PRT|false|761580|en:or|byz#Matthew 1:18 20,kjtr#Matthew 1:18 20,sbl#Matthew 1:18 19,sr#Matthew 1:18 20
+ἦ|el|846133|Particle|||2229|ἦ|en:truly:surely|||
+  ἦ|ADV|false|6561583||kjtr#Hebrews 6:14 2
+  ἦ|PRT|false|6561584|en:undefined|byz#Hebrews 6:14 2
+εἰμί|el|530789|Verb|||1510|εἰ|en:am:be:exist#zh:是:有#ru:быть:существовать#es:soy||question|
   εἰμί|V-PAI-1S|true|41172|en:I am:am#zh:我是#es:soy|byz#Matthew 3:11 20,kjtr#Matthew 3:11 20
   εἶ|V-PAI-2S|false|41174|en:is:are:You are (sg.)#es:sé:ser|byz#Matthew 2:6 9,kjtr#Matthew 2:6 9
   ἐστίν|V-PAI-3S|true|41175|en:he is:she is:it is#es:él es; ella es|byz#Matthew 2:2 3,byz#Matthew 3:11 16
@@ -113,12 +113,12 @@
   ἤμεθα|V-IEI-1P|false|41218||sbl#Matthew 23:30 3,sbl#Matthew 23:30 13,sbl#Acts 27:37,sbl#Galatians 4:3 13,sbl#Ephesians 2:3 24
   ἦτε|V-IEI-2P|false|41219||
   ἦσαν|V-IEI-3P|false|41220|en:They were|
-Δαυίδ|el|9995|IndeclinableProperNoun|ὁ||1138|Δαυίδ|en:David#zh:大衛#ru:Давид#es:David||person|
-  Δαυίδ|N-NSM|false|99990|en:David|kjtr#Matthew 1:6 8
-  Δαυίδ|N-ASM|false|99991|en:David|kjtr#Matthew 1:6 4
+Δαυίδ|el|879995|IndeclinableProperNoun|ὁ||1138|Δαυίδ|en:David#zh:大衛#ru:Давид#es:David||person|
+  Δαυίδ|N-NSM|false|8799990|en:David|kjtr#Matthew 1:6 8
+  Δαυίδ|N-ASM|false|8599991|en:David|kjtr#Matthew 1:6 4
 ὑδρία|el|105327|Noun|ἡ|-ας|5201|ὑδρί|en:water pot:jar:urn#zh:水罐:罐子:甕#es:tinajuelas:cántaro||object,container|
-  ὑδρία|N-NSF|false|140850||
-  ὑδρίαν|N-ASF|false|140851||byz#John 4:28 3,kjtr#John 4:28 3
+  ὑδρία|N-NSF|false|5140850||
+  ὑδρίαν|N-ASF|false|5140851||byz#John 4:28 3,kjtr#John 4:28 3
 ὥρα|el|115178|Noun|ἡ|-ας|5610|ὥρ|en:hour:occasion:season#zh:時刻:小時:小時:時辰#ru:час#es:estación:hora||time|
   ὥρα|N-NSF|false|153302||byz#Matthew 14:15 19,kjtr#Matthew 14:15 19,sbl#Matthew 14:15 14,sr#Matthew 14:15 17
   ὥραν|N-ASF|false|153303||byz#Matthew 20:3 4,kjtr#Matthew 20:3 5,sbl#Matthew 20:3 4,sr#Matthew 20:3 4

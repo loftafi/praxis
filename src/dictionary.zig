@@ -268,12 +268,13 @@ pub const Dictionary = struct {
     pub fn saveBinaryFile(
         self: *const Dictionary,
         filename: []const u8,
+        trim: bool,
     ) !void {
         var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer temp_arena.deinit();
         var data: std.ArrayListUnmanaged(u8) = .empty;
         defer data.deinit(temp_arena);
-        try self.writeBinaryData(temp_arena, &data);
+        try self.writeBinaryData(temp_arena, &data, trim);
         debug("binary data size: {any}\n", .{data.items.len});
         try write_bytes_to_file(data.items, filename);
     }
@@ -284,6 +285,7 @@ pub const Dictionary = struct {
         self: *const Dictionary,
         allocator: Allocator,
         data: *std.ArrayListUnmanaged(u8),
+        trim: bool,
     ) error{ OutOfMemory, IndexTooLarge }!void {
         try data.append(allocator, 99);
         try data.append(allocator, 1);
@@ -298,6 +300,7 @@ pub const Dictionary = struct {
         //try append_u32(data, @intCast(self.lexemes.items.len));
 
         for (self.lexemes.items) |*lexeme| {
+            if (trim and lexeme.*.glosses.items.len == 0) continue;
             include_words += 1;
             try lexeme.*.writeBinary(allocator, data);
             try append_u16(allocator, data, @intCast(lexeme.*.forms.items.len));
@@ -419,12 +422,13 @@ pub const Dictionary = struct {
         self: *const Dictionary,
         allocator: Allocator,
         filename: []const u8,
+        trim: bool,
     ) !void {
         var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer temp_arena.deinit();
         var data: std.ArrayListUnmanaged(u8) = .empty;
         defer data.deinit(allocator);
-        try self.writeTextData(allocator, &data);
+        try self.writeTextData(allocator, &data, trim);
         std.debug.print("text data size: {any}\n", .{data.items.len});
         try write_bytes_to_file(data.items, filename);
     }
@@ -435,10 +439,12 @@ pub const Dictionary = struct {
         self: *const Dictionary,
         allocator: Allocator,
         data: *ArrayListUnmanaged(u8),
+        trim: bool,
     ) !void {
         var unsorted: ArrayListUnmanaged(*Lexeme) = .empty;
         defer unsorted.deinit(allocator);
         for (self.lexemes.items) |lexeme| {
+            if (trim and lexeme.glosses.items.len == 0) continue;
             try unsorted.append(allocator, lexeme);
         }
         std.mem.sort(*Lexeme, unsorted.items, {}, Lexeme.lessThan);
@@ -636,7 +642,7 @@ test "basic_dictionary" {
     {
         var out: std.ArrayListUnmanaged(u8) = .empty;
         defer out.deinit(allocator);
-        try dictionary.writeTextData(allocator, &out);
+        try dictionary.writeTextData(allocator, &out, false);
         try expectEqualDeep(data, out.items);
     }
 
@@ -644,7 +650,7 @@ test "basic_dictionary" {
     {
         var out: std.ArrayListUnmanaged(u8) = .empty;
         defer out.deinit(allocator);
-        try dictionary.writeBinaryData(allocator, &out);
+        try dictionary.writeBinaryData(allocator, &out, false);
 
         const header: []const u8 = &.{ 99, 1, 2, 0, 0, 0 };
         try expect(out.items.len > 50);
@@ -738,12 +744,12 @@ test "gloss_fallback" {
     var bin2: std.ArrayListUnmanaged(u8) = .empty;
     defer bin2.deinit(allocator);
     {
-        try dictionary.writeBinaryData(allocator, &bin1);
+        try dictionary.writeBinaryData(allocator, &bin1, false);
         const dictionary2 = try Dictionary.create(allocator);
         defer dictionary2.destroy(allocator);
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
         try dictionary2.loadBinaryData(allocator, allocator, bin1.items);
-        try dictionary2.writeBinaryData(allocator, &bin2);
+        try dictionary2.writeBinaryData(allocator, &bin2, false);
     }
     try expectEqualSlices(u8, bin1.items, bin2.items);
 
@@ -775,12 +781,12 @@ test "arena_check" {
     var out2: std.ArrayListUnmanaged(u8) = .empty;
     defer out2.deinit(allocator);
     {
-        try dictionary.writeBinaryData(allocator, &out);
+        try dictionary.writeBinaryData(allocator, &out, false);
         const dictionary2 = try Dictionary.create(allocator);
         defer dictionary2.destroy(allocator);
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
         try dictionary2.loadBinaryData(allocator, allocator, out.items);
-        try dictionary2.writeBinaryData(allocator, &out2);
+        try dictionary2.writeBinaryData(allocator, &out2, false);
     }
     try expectEqualSlices(u8, out.items, out2.items);
 
@@ -837,7 +843,7 @@ test "dictionary_destroy" {
     // Check for memory leaks in binary loader
     var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
-    try dictionary.writeBinaryData(allocator, &out);
+    try dictionary.writeBinaryData(allocator, &out, true);
     const dictionary2 = try Dictionary.create(allocator);
     defer dictionary2.destroy(allocator);
     //try expectEqualSlices(u8, &[_]u8{}, out.items);

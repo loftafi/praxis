@@ -273,8 +273,8 @@ pub const Dictionary = struct {
         var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer temp_arena.deinit();
         var data: std.ArrayListUnmanaged(u8) = .empty;
-        defer data.deinit(temp_arena);
-        try self.writeBinaryData(temp_arena, &data, trim);
+        defer data.deinit(temp_arena.allocator());
+        try self.writeBinaryData(temp_arena.allocator(), &data, trim);
         debug("binary data size: {any}\n", .{data.items.len});
         try write_bytes_to_file(data.items, filename);
     }

@@ -6,12 +6,16 @@ word: u16 = 0,
 
 const Self = @This();
 
+pub const unknown: Self = .{
+    .module = .unknown,
+    .book = .unknown,
+    .chapter = 0,
+    .verse = 0,
+    .word = 0,
+};
+
 pub fn clear(self: *Self) void {
-    self.module = .unknown;
-    self.book = .unknown;
-    self.chapter = 0;
-    self.verse = 0;
-    self.word = 0;
+    self.* = .unknown;
 }
 
 /// Read a bible reference, i.e. "Acts 7:40", "1 John 2:4"

@@ -1,3 +1,5 @@
+//! Group a set of word forms into a set of tables of grammatical forms.
+
 const Self = @This();
 
 lexeme: *Lexeme,

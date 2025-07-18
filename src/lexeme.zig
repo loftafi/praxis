@@ -21,7 +21,6 @@ const Self = @This();
 /// Create this structure then use `init` to set up the fields.
 pub fn create(allocator: std.mem.Allocator) error{OutOfMemory}!*Self {
     var s = try allocator.create(Self);
-    errdefer allocator.destroy(Self);
     s.init();
     return s;
 }
@@ -274,8 +273,8 @@ pub fn writeBinary(self: *Self, allocator: Allocator, data: *std.ArrayListUnmana
 /// about a lexeme. Reads one line only. Does not read
 /// form entries on the following lines.
 ///
-/// Ἀαρών|el||17|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
-/// Ἀαρών|el||17|2|ὁ|ProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
+/// Ἀαρών|el|17|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
+/// Ἀαρών|el|17|ProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
 pub fn readText(self: *Self, arena: Allocator, t: *Parser) !void {
     _ = t.skip_whitespace_and_lines();
 
@@ -434,6 +433,15 @@ test "read_lexeme" {
     try expect(lexeme.glosses_by_lang(.english) != null);
     try expectEqual(1, lexeme.glosses_by_lang(.spanish).?.glosses().len);
     try expectEqualStrings("Aarón", lexeme.glosses_by_lang(.spanish).?.glosses()[0]);
+}
+
+test "read_lexeme_short" {
+    var data = Parser.init("α|el|123123|Letter|||||en:alpha||alphabet|");
+    var lexeme = try Self.create(std.testing.allocator);
+    defer lexeme.destroy(std.testing.allocator);
+    try lexeme.readText(std.testing.allocator, &data);
+    try expectEqualStrings("α", lexeme.word);
+    try expectEqual(123123, lexeme.uid);
 }
 
 test "read_lexeme2" {

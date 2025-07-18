@@ -35,5 +35,9 @@ pub const parse_reference = Reference.parse;
 
 pub const Parser = @import("parser.zig");
 pub const pos_to_english = @import("part_of_speech.zig").english;
-
 pub const transliterate = @import("transliterate.zig").transliterate_word;
+
+pub const seed = @import("random.zig").seed;
+pub const random = @import("random.zig").random;
+pub const random_u24 = @import("random.zig").random_u24;
+pub const random_u64 = @import("random.zig").random_u64;

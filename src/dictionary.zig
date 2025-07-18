@@ -113,12 +113,10 @@ pub const Dictionary = struct {
                 errdefer lexeme.destroy(arena);
                 lexeme.readText(arena, &data) catch |e| {
                     err("Failed reading line: {d}. Error: {any}", .{ line, e });
-                    lexeme.destroy(arena);
                     return e;
                 };
                 if (lexeme.word.len == 0) {
                     err("missing lexeme word field on line: {d}", .{line});
-                    lexeme.destroy(arena);
                     break;
                 }
                 current_lexeme = lexeme;

@@ -281,8 +281,10 @@ pub fn readText(self: *Self, arena: Allocator, t: *Parser) !void {
     const word_field = try form.read_field(t);
     if (word_field.len == 0) return error.EmptyField;
     self.word = try arena.dupe(u8, word_field);
-
-    if (!t.consume_if('|')) return error.MissingField;
+    if (!t.consume_if('|')) {
+        err("expected |, found {d} while reading line {d} (word={s})", .{ t.peek(), t.line, word_field });
+        return error.MissingField;
+    }
     self.lang = try t.read_lang();
 
     if (!t.consume_if('|')) return error.MissingField;
@@ -376,42 +378,6 @@ pub fn writeText(self: *Self, writer: anytype) error{OutOfMemory}!void {
     try writer.writeByte('|');
     try writer.writeAll(self.note);
 }
-
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-pub const Parser = @import("parser.zig");
-const is_eol = @import("parser.zig").is_eol;
-const is_whitespace = @import("parser.zig").is_whitespace;
-const form = @import("form.zig");
-const Form = @import("form.zig");
-const is_whitespace_or_eol = @import("parser.zig").is_whitespace_or_eol;
-const english_camel_case = @import("part_of_speech.zig").english_camel_case;
-pub const PartOfSpeech = @import("part_of_speech.zig").PartOfSpeech;
-const parse_pos = @import("part_of_speech.zig").parse_pos;
-pub const Parsing = @import("parsing.zig").Parsing;
-pub const parse = @import("parsing.zig").parse;
-pub const Gender = @import("parsing.zig").Gender;
-pub const Gloss = @import("gloss.zig");
-pub const Lang = @import("lang.zig").Lang;
-pub const writeTextGlosses = @import("gloss.zig").writeTextGlosses;
-
-const BinaryReader = @import("binary_reader.zig");
-const BinaryWriter = @import("binary_writer.zig");
-const append_u8 = BinaryWriter.append_u8;
-const append_u16 = BinaryWriter.append_u16;
-const append_u24 = BinaryWriter.append_u24;
-const append_u32 = BinaryWriter.append_u32;
-const RS = BinaryWriter.RS;
-const US = BinaryWriter.US;
-
-const readTextGlosses = @import("gloss.zig").readTextGlosses;
-const readBinaryGlosses = @import("gloss.zig").readBinaryGlosses;
-
-const eql = @import("std").mem.eql;
-const expect = std.testing.expect;
-const expectEqualDeep = std.testing.expectEqualDeep;
-const expectEqual = std.testing.expectEqual;
-const expectEqualStrings = std.testing.expectEqualStrings;
 
 //Ἀαρών|el||17|2|ὁ|IndeclinableProperNoun||Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
 //   Ἀαρών|N-NSM|false|17||
@@ -534,8 +500,6 @@ test "compare_lexeme" {
     }
 }
 
-const Dictionary = @import("dictionary.zig").Dictionary;
-
 test "return_correct_preferred_form" {
     const allocator = std.testing.allocator;
 
@@ -637,3 +601,43 @@ test "read_invalid_lexeme_id" {
     const e = lexeme.readText(std.testing.allocator, &data);
     try expectEqual(e, error.InvalidU24);
 }
+
+const std = @import("std");
+const err = std.log.err;
+const Allocator = std.mem.Allocator;
+
+pub const Parser = @import("parser.zig");
+const is_eol = @import("parser.zig").is_eol;
+const is_whitespace = @import("parser.zig").is_whitespace;
+const form = @import("form.zig");
+const Form = @import("form.zig");
+const is_whitespace_or_eol = @import("parser.zig").is_whitespace_or_eol;
+const english_camel_case = @import("part_of_speech.zig").english_camel_case;
+pub const PartOfSpeech = @import("part_of_speech.zig").PartOfSpeech;
+const parse_pos = @import("part_of_speech.zig").parse_pos;
+pub const Parsing = @import("parsing.zig").Parsing;
+pub const parse = @import("parsing.zig").parse;
+pub const Gender = @import("parsing.zig").Gender;
+pub const Gloss = @import("gloss.zig");
+pub const Lang = @import("lang.zig").Lang;
+pub const writeTextGlosses = @import("gloss.zig").writeTextGlosses;
+
+const BinaryReader = @import("binary_reader.zig");
+const BinaryWriter = @import("binary_writer.zig");
+const append_u8 = BinaryWriter.append_u8;
+const append_u16 = BinaryWriter.append_u16;
+const append_u24 = BinaryWriter.append_u24;
+const append_u32 = BinaryWriter.append_u32;
+const RS = BinaryWriter.RS;
+const US = BinaryWriter.US;
+
+const Dictionary = @import("dictionary.zig").Dictionary;
+
+const readTextGlosses = @import("gloss.zig").readTextGlosses;
+const readBinaryGlosses = @import("gloss.zig").readBinaryGlosses;
+
+const eql = @import("std").mem.eql;
+const expect = std.testing.expect;
+const expectEqualDeep = std.testing.expectEqualDeep;
+const expectEqual = std.testing.expectEqual;
+const expectEqualStrings = std.testing.expectEqualStrings;

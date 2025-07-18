@@ -49,8 +49,8 @@ pub const Dictionary = struct {
         allocator.destroy(self);
     }
 
-    /// Load dictionary data. Detect if the data is text or binary format.
-    /// See `loadTextData()` and `loadBinaryData()` for details.
+    /// Load dictionary data from a file. Detect if the data is text or
+    /// binary format. See `loadTextData()` and `loadBinaryData()` for details.
     pub fn loadFile(
         self: *Dictionary,
         arena: Allocator,

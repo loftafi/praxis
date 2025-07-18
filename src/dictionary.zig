@@ -273,7 +273,7 @@ pub const Dictionary = struct {
         var data: std.ArrayListUnmanaged(u8) = .empty;
         defer data.deinit(temp_arena.allocator());
         try self.writeBinaryData(temp_arena.allocator(), &data, trim);
-        debug("binary data size: {any}\n", .{data.items.len});
+        debug("binary data size: {any}", .{data.items.len});
         try write_bytes_to_file(data.items, filename);
     }
 

@@ -382,7 +382,7 @@ pub const NAMES = [_]BookInfo{
         .value = .matthew,
     },
     .{
-        .names = &.{ "mark", "mrk", "mk", "mr" },
+        .names = &.{ "mark", "mrk", "mk", "mr", "mar" },
         .english = "Mark",
         .english_short = "Mark",
         .value = .mark,

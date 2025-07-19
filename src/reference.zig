@@ -14,6 +14,14 @@ pub const unknown: Self = .{
     .word = 0,
 };
 
+pub fn eql(self: *const Self, other: *const Self) bool {
+    return (self.word == other.word and
+        self.verse == other.verse and
+        self.chapter == other.chapter and
+        self.book == other.book and
+        self.module == other.module);
+}
+
 pub fn clear(self: *Self) void {
     self.* = .unknown;
 }
@@ -201,6 +209,25 @@ test "read verse" {
         try std.testing.expectEqual(.first_thessalonians, reference.book);
         try std.testing.expectEqual(3, reference.chapter);
         try std.testing.expectEqual(4, reference.verse);
+    }
+    {
+        var p1 = Parser.init("1Th 3:4");
+        const r1 = try Self.readReference(&p1);
+        var p2 = Parser.init("1Th 3:4");
+        var r2 = try Self.readReference(&p2);
+        try std.testing.expect(r1.eql(&r2));
+
+        p2 = Parser.init("1Th 3:5");
+        r2 = try Self.readReference(&p2);
+        try std.testing.expect(!r1.eql(&r2));
+
+        p2 = Parser.init("1Th 2:4");
+        r2 = try Self.readReference(&p2);
+        try std.testing.expect(!r1.eql(&r2));
+
+        p2 = Parser.init("Mark 3:4");
+        r2 = try Self.readReference(&p2);
+        try std.testing.expect(!r1.eql(&r2));
     }
 }
 

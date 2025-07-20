@@ -27,6 +27,8 @@ pub const Case = parsing.Case;
 pub const Voice = parsing.Voice;
 pub const Person = parsing.Person;
 pub const TenseForm = parsing.TenseForm;
+pub const parsing_ccat = @import("parsing_ccat.zig");
+pub const parse_ccat = parsing_ccat.parse;
 
 pub const Module = @import("module.zig").Module;
 pub const Book = @import("book.zig").Book;

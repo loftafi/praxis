@@ -20,6 +20,8 @@ pub const Parsing = packed struct(u32) {
     crasis: bool = false,
     unused: bool = false,
 
+    pub const default: Parsing = @bitCast(@as(u32, 0));
+
     pub fn string(p: Parsing, b: anytype) !void {
         switch (p.part_of_speech) {
             .unknown => {

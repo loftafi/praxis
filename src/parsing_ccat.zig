@@ -149,8 +149,8 @@ fn verbParsing(tag: []const u8, parsing_: Parsing) !Parsing {
         'I' => .imperfect,
         'F' => .future,
         'A' => .aorist,
-        'X' => .perfect,
-        'Y' => .pluperfect,
+        'X', 'E' => .perfect,
+        'Y', 'L' => .pluperfect,
         else => {
             err("invalid tense form: {c} (Parsing={any})", .{ tag[0], parsing });
             return error.InvalidTenseForm;

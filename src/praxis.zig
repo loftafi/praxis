@@ -63,6 +63,10 @@ pub const parse_ccat = parsing_ccat.parse;
 pub const parsing_cntr = @import("parsing_cntr.zig");
 pub const parse_cntr = parsing_cntr.parse;
 
+/// Load a `Parsing` struct with parsing in the CCAT format.
+pub const parsing_morphgnt = @import("parsing_morphgnt.zig");
+pub const parse_morphgnt = parsing_morphgnt.parse;
+
 /// The `Module` enum represnts names of common modules.
 pub const Module = @import("module.zig").Module;
 

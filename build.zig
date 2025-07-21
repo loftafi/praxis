@@ -31,6 +31,9 @@ pub fn build(b: *std.Build) void {
     lib_unit_tests.root_module.addAnonymousImport("ccat_parsing", .{
         .root_source_file = b.path("./test/ccat-test.txt"),
     });
+    lib_unit_tests.root_module.addAnonymousImport("sbl_parsing", .{
+        .root_source_file = b.path("./test/sbl-parsing.txt"),
+    });
     lib_unit_tests.root_module.addAnonymousImport("small_dict", .{
         .root_source_file = b.path("./test/small_dict.txt"),
     });

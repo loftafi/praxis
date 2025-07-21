@@ -95,7 +95,7 @@ pub fn parse(value: []const u8) !Parsing {
         'I' => .imperfect,
         'E' => .perfect,
         'L' => .pluperfect,
-        ' ', '-', '.' => .unknown,
+        'U', ' ', '-', '.' => .unknown,
         else => return error.UnknownTenseForm,
     };
 

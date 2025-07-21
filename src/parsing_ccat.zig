@@ -282,7 +282,7 @@ fn caseNumberGender(tag_: []const u8, parsing_: Parsing) error{
     return parsing;
 }
 
-test "basic lxx parsing" {
+test "basic ccat parsing" {
     {
         const p = try parse("VF  FMI3S");
         try ee(.verb, p.part_of_speech);

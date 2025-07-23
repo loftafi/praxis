@@ -4,7 +4,7 @@
 var seeded: bool = false;
 var value: usize = 99;
 
-/// Return a number greate than zero, and less than the `limit`. Call `seed()`
+/// Return a number zero or greater but less than the `limit`. Call `seed()`
 /// first if you do not want a predictable sequence of numbers.
 ///
 /// This is _not_ cryptographically secure.

@@ -1,6 +1,6 @@
 .{
     .name = .praxis,
-    .version = "0.1.15",
+    .version = "0.1.16",
     .fingerprint = 0x9db9462b35f6f714,
     .minimum_zig_version = "0.14.1",
     .dependencies = .{},
@@ -11,10 +11,10 @@
         "src",
         "LICENSE.md",
         "README.md",
-        "byz-parsing.txt",
-        "ccat-test.txt",
-        "larger_dict.txt",
-        "other-parsing.txt",
-        "small_dict.txt",
+        "test/byz-parsing.txt",
+        "test/ccat-test.txt",
+        "test/larger_dict.txt",
+        "test/other-parsing.txt",
+        "test/small_dict.txt",
     },
 }

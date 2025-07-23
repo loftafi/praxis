@@ -16,6 +16,9 @@ pub fn build(b: *std.Build) void {
         .name = "praxis",
         .root_module = lib_mod,
     });
+    lib.root_module.addAnonymousImport("larger_dict", .{
+        .root_source_file = b.path("./test/larger_dict.txt"),
+    });
 
     b.installArtifact(lib);
     const lib_unit_tests = b.addTest(.{

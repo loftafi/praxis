@@ -991,19 +991,13 @@ test "accented_vs_unaccented" {
     try expect(results1.?.exact_accented.items[0].uid != results2.?.exact_accented.items[0].uid);
 }
 
-var local_test_dictionary: ?*Dictionary = null;
-
-fn test_dictionary(allocator: Allocator) !*Dictionary {
-    if (local_test_dictionary == null) {
-        const larger_dict = @embedFile("larger_dict");
-        local_test_dictionary = try Dictionary.create(allocator);
-        local_test_dictionary.?.loadTextData(allocator, allocator, larger_dict) catch |e| {
-            debug("dictionary load failed: {any}", .{e});
-            @panic("load test dictionary failed");
-        };
-    }
-    if (local_test_dictionary == null) {
+/// Create a small sample dictionary object for test cases.
+pub fn test_dictionary(allocator: Allocator) error{OutOfMemory}!*Dictionary {
+    const larger_dict = @embedFile("larger_dict");
+    var local_test_dictionary = try Dictionary.create(allocator);
+    local_test_dictionary.loadTextData(allocator, allocator, larger_dict) catch |e| {
+        debug("dictionary load failed: {any}", .{e});
         @panic("load test dictionary failed");
-    }
-    return local_test_dictionary.?;
+    };
+    return local_test_dictionary;
 }

@@ -108,3 +108,6 @@ pub const random_u64 = @import("random.zig").random_u64;
 /// Deprecated. Was used to share a standard way to read a sequence of
 /// ascii or unicode characters from a string. Will be removed in the future.
 pub const Parser = @import("parser.zig");
+
+/// Return a placeholder dictionary for testing.
+pub const test_dictionary = @import("dictionary.zig").test_dictionary;

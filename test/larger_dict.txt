@@ -150,3 +150,43 @@
   Δαυίδ|N-PRI|true|31334||byz#Matthew 1:1 6,byz#Matthew 1:6 4,byz#Matthew 1:6 9,byz#Matthew 1:17 8,byz#Matthew 1:17 14,byz#Matthew 1:20 19,byz#Matthew 9:27 20,byz#Matthew 12:3 9,byz#Matthew 12:23 13,byz#Matthew 15:22 21,byz#Matthew 20:30 25,byz#Matthew 20:31 21,byz#Matthew 21:9 15,byz#Matthew 21:15 26,byz#Matthew 22:42 17,byz#Matthew 22:43 5,byz#Matthew 22:45 2,byz#Mark 2:25 9,byz#Mark 10:47 15,byz#Mark 10:48 15,byz#Mark 11:10 10,byz#Mark 12:35 21,byz#Mark 12:36 2,byz#Mark 12:37 2,byz#Luke 1:27 11,byz#Luke 1:32 17,byz#Luke 1:69 8,byz#Luke 2:4 18,byz#Luke 2:4 32,byz#Luke 2:11 13,byz#Luke 3:31 13,byz#Luke 6:3 14,byz#Luke 18:38 8,byz#Luke 18:39 15,byz#Luke 20:41 11,byz#Luke 20:42 2,byz#Luke 20:44,byz#John 7:42 8,byz#John 7:42 18,byz#Acts 1:16 17,byz#Acts 2:25,byz#Acts 2:29 12,byz#Acts 2:34 2,byz#Acts 4:25 3,byz#Acts 7:45 28,byz#Acts 13:22 7,byz#Acts 13:22 17,byz#Acts 13:34 20,byz#Acts 13:36,byz#Acts 15:16 8,byz#Romans 1:3 9,byz#Romans 4:6 2,byz#Romans 11:9 1,byz#2 Timothy 2:8 9,byz#Hebrews 4:7 8,byz#Hebrews 11:32 21,byz#Revelation 3:7 24,byz#Revelation 5:5 24,byz#Revelation 22:16 21
   Δαυείδ|N-PRI|false|31335||sbl#Matthew 1:1 5,sbl#Matthew 1:6 4,sbl#Matthew 1:6 8,sbl#Matthew 1:17 8,sbl#Matthew 1:17 14,sbl#Matthew 1:20 14,sbl#Matthew 9:27 15,sbl#Matthew 12:3 8,sbl#Matthew 12:23 12,sbl#Matthew 15:22 16,sbl#Matthew 20:30 22,sbl#Matthew 20:31 19,sbl#Matthew 21:9 14,sbl#Matthew 21:15 24,sbl#Matthew 22:42 15,sbl#Matthew 22:43 4,sbl#Matthew 22:45 2,sbl#Mark 2:25 8,sbl#Mark 10:47 12,sbl#Mark 10:48 13,sbl#Mark 11:10 7,sbl#Mark 12:35 17,sbl#Mark 12:36 1,sbl#Mark 12:37 1,sbl#Luke 1:27 10,sbl#Luke 1:32 16,sbl#Luke 1:69 7,sbl#Luke 2:4 15,sbl#Luke 2:4 28,sbl#Luke 2:11 13,sbl#Luke 3:31 9,sbl#Luke 6:3 12,sbl#Luke 18:38 5,sbl#Luke 18:39 14,sbl#Luke 20:41 9,sbl#Luke 20:42 2,sbl#Luke 20:44,sbl#John 7:42 8,sbl#John 7:42 17,sbl#Acts 1:16 15,sbl#Acts 2:25,sbl#Acts 2:29 12,sbl#Acts 2:34 2,sbl#Acts 4:25 8,sbl#Acts 7:45 27,sbl#Acts 13:22 5,sbl#Acts 13:22 15,sbl#Acts 13:34 19,sbl#Acts 13:36,sbl#Acts 15:16 7,sbl#Romans 1:3 8,sbl#Romans 4:6 2,sbl#Romans 11:9 1,sbl#2 Timothy 2:8 9,sbl#Hebrews 4:7 8,sbl#Hebrews 11:32 20,sbl#Revelation 3:7 21,sbl#Revelation 5:5 22,sbl#Revelation 22:16 21
   Δαβίδ|N-PRI|false|31336||
+ὁ|el|16378541|DefiniteArticle|||3588|ὁ|en:the:this one:that one#zh:那:他:她:它:這個:那個#ru:артикль: этот:тот; он:она:оно#es:el:los:la:las|ὁ,ἡ,τό||
+  ὁ|T-NSM|false|3100891|en:the#es:el|
+  ὅ|T-NSM|false|13825387|en:the#es:el|
+  οἱ|T-NPM|false|16042613|en:the#es:los|
+  οἵ|T-NPM|false|1872702|en:the#es:los|
+  οἱ|T-NPM|false|7382454|en:the#es:los|
+  τόν|T-ASM|false|7387775|en:the|
+  τούς|T-APM|false|821031|en:the|
+  τοῦ|T-GSM|false|13402527|en:of the:of:the|
+  τῶν|T-GPM|false|9251113|en:of the:of:the|
+  τῷ|T-DSM|false|13418496|en:the|
+  τοῖς|T-DPM|false|4532458|en:the|
+  ὁ|T-VSM|false|14463389|en:the#es:el|
+  οἱ|T-VPM|false|13659213|en:the#es:los|
+  ἡ|T-NSF|false|11477031|en:the#es:la|
+  ἥ|T-NSF|false|795325|en:the#es:la|
+  ἡ|T-NSF|false|4400867|en:the#es:la|
+  αἱ|T-NPF|false|8725489|en:the#es:las|
+  αἵ|T-NPF|false|7836791|en:the#es:las|
+  τήν|T-ASF|false|8765199|en:the#es:la|
+  τάς|T-APF|false|12935755|en:the|
+  τῆς|T-GSF|false|8336059|en:of the:of:the|
+  τῶν|T-GPF|false|8750208|en:of the:of:the|
+  τῇ|T-DSF|false|11907934||
+  ταῖς|T-DPF|false|6806986||
+  ἡ|T-VSF|false|7894533|en:the#es:la|
+  αἱ|T-VPF|false|16252662|en:the#es:las|
+  τό|T-NSN|false|15263541|en:the|
+  τά|T-NPN|false|13519905|en:the|
+  τό|T-ASN|false|10014761|en:the|
+  τά|T-APN|false|3516054|en:the|
+  τοῦ|T-GSN|false|4383726|en:of the:of:the|
+  τῶν|T-GPN|false|848150|en:of the:of:the|
+  τῷ|T-DSN|false|2648254|en:to the:to:the|
+  τοῖς|T-DPN|false|8517626|en:to the:to:the|
+  τό|T-VSN|false|4306762|en:the|
+  τά|T-VPN|false|7930374|en:the|
+ποῦ|el|11016044|Particle|||4226|ποῦ|en:where?#zh:哪裡:何處#ru:где?#es:¿dónde?||question|
+  ποῦ|ADV|false|1009057|en:where|
+  ποῦ|ADV-I|false|7020408|en:where|

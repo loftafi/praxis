@@ -1,6 +1,8 @@
 pub const Dictionary = @import("dictionary.zig").Dictionary;
 pub const SearchIndex = @import("search_index.zig").SearchIndex;
 pub const normalise_word = @import("search_index.zig").normalise_word;
+pub const lowercase = @import("search_index.zig").lowercase;
+pub const remove_accent = @import("search_index.zig").remove_accent;
 pub const MAX_WORD_SIZE = @import("search_index.zig").MAX_WORD_SIZE;
 
 /// Contains information about a lexeme and its associated forms

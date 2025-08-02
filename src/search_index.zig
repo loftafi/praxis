@@ -361,6 +361,7 @@ pub fn normalise_word(
 
     while (i.nextCodepointSlice()) |slice| {
         const c = try std.unicode.utf8Decode(slice);
+        if (c == ' ' or c == '\t') saw_accent = false;
 
         // Unaccent processing
         const d = unaccent(c);
@@ -559,7 +560,7 @@ pub fn normalise_char(c: u21) u21 {
 // lowercase returns a unicode array containing the lowercase equivalent
 // of the requested letter. It is assumed that the array returned is equal
 // or shoter in length to the original array used to build the character.
-fn lowercase(c: u21) ?[]const u8 {
+pub fn lowercase(c: u21) ?[]const u8 {
     return switch (c) {
         'Α' => comptime &ue('α'),
         'Ἀ' => comptime &ue('ἀ'),
@@ -673,7 +674,7 @@ fn lowercase(c: u21) ?[]const u8 {
 /// Remove accent marks, but retain breathing marks. Returns an array that is
 /// equal or shoter in length to the original array used to build the character
 /// to prevent memory overrun.
-fn remove_accent(c: u21) ?[]const u8 {
+pub fn remove_accent(c: u21) ?[]const u8 {
     return switch (c) {
         'ά', 'ὰ', 'Ά', 'Ὰ', 'ᾶ' => comptime &ue('α'),
         'Ἄ', 'Ἂ', 'ἄ', 'ἂ' => comptime &ue('ἀ'),
@@ -789,6 +790,17 @@ test "normalise simple" {
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("ωρα", unaccented_word.slice());
         try se("ὥρα", normalised_word.slice());
+    }
+}
+
+test "normalise sentence" {
+    {
+        var unaccented_sentence = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_sentence = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "ὁ Πέτρος λέγει·";
+        try normalise_word(word, &unaccented_sentence, &normalised_sentence);
+        try se("ο πετροσ λεγει·", unaccented_sentence.slice());
+        try se("ὁ πέτρος λέγει·", normalised_sentence.slice());
     }
 }
 

@@ -431,6 +431,7 @@ pub fn keywordify(
         const c = std.unicode.utf8Decode(character_slice) catch {
             return error.InvalidUtf8;
         };
+        if (c == ' ' or c == '\t') saw_accent = false;
         character_count += 1;
 
         // Removes accents and capitalisation

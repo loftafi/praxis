@@ -34,6 +34,14 @@ pub inline fn random_u64() u64 {
     return @as(u64, random(std.math.maxInt(u64)));
 }
 
+/// Return a random u64 value. Call `seed()` first if you do not want a
+/// predictable number sequence.
+///
+/// This is _not_ cryptographically secure.
+pub inline fn random_u16() u16 {
+    return @intCast(random(std.math.maxInt(u16)));
+}
+
 /// Seed the random number generator with the current time
 pub fn seed() void {
     if (seeded) return;

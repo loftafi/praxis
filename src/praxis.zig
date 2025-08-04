@@ -107,6 +107,11 @@ pub const random_u24 = @import("random.zig").random_u24;
 /// but exported for convenience.
 pub const random_u64 = @import("random.zig").random_u64;
 
+/// Generate a predictable random number sequence. Use `seed()` if you don't
+/// want the same sequence of numbers each time. Not used by this library
+/// but exported for convenience.
+pub const random_u16 = @import("random.zig").random_u16;
+
 /// Deprecated. Was used to share a standard way to read a sequence of
 /// ascii or unicode characters from a string. Will be removed in the future.
 pub const Parser = @import("parser.zig");

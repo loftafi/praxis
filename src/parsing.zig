@@ -22,6 +22,21 @@ pub const Parsing = packed struct(u32) {
 
     pub const default: Parsing = @bitCast(@as(u32, 0));
 
+    pub fn format(
+        parsing: Parsing,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        parsing.string(writer) catch |e| {
+            if (e == error.Incomplete) {
+                try writer.writeAll("[incomplete]");
+            } else {
+                return e;
+            }
+        };
+    }
+
     pub fn string(p: Parsing, b: anytype) !void {
         switch (p.part_of_speech) {
             .unknown => {

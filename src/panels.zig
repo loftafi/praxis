@@ -33,7 +33,7 @@ pub fn setLexeme(self: *Self, lexeme: *Lexeme) void {
 pub const Panel = struct {
     title: []const u8 = "",
     subtitle: []const u8 = "",
-    gender: praxis.Gender = .unknown,
+    gender: Gender = .unknown,
     top: [5]?*Form = [_]?*Form{ null, null, null, null, null },
     bottom: [5]?*Form = [_]?*Form{ null, null, null, null, null },
     count: u8,
@@ -414,12 +414,12 @@ pub fn panels(self: *Self) ![]Panel {
 /// voice must be active, middle, passive. Do not use other voice options.
 pub fn ff(
     forms: []*Form,
-    pos: praxis.PartOfSpeech,
-    tense_form: praxis.TenseForm,
-    voice: praxis.Voice,
-    mood: praxis.Mood,
-    person: praxis.Person,
-    number: praxis.Number,
+    pos: PartOfSpeech,
+    tense_form: TenseForm,
+    voice: Voice,
+    mood: Mood,
+    person: Person,
+    number: Number,
 ) ?*Form {
     for (forms) |form| {
         if (form.parsing.part_of_speech != pos) {
@@ -462,10 +462,10 @@ pub fn ff(
 
 pub fn nf(
     forms: []*Form,
-    pos: praxis.PartOfSpeech,
-    case: praxis.Case,
-    gender: praxis.Gender,
-    number: praxis.Number,
+    pos: PartOfSpeech,
+    case: Case,
+    gender: Gender,
+    number: Number,
 ) ?*Form {
     for (forms) |form| {
         if (form.parsing.part_of_speech != pos) {
@@ -487,16 +487,16 @@ pub fn nf(
 
 pub fn pp(
     forms: []*Form,
-    pos: praxis.PartOfSpeech,
-    case: praxis.Case,
-    number: praxis.Number,
-    person: praxis.Person,
+    pos: PartOfSpeech,
+    case: Case,
+    number: Number,
+    person: Person,
 ) ?*Form {
     for (forms) |form| {
         const ref = switch (number) {
-            .singular => praxis.TenseForm.ref_singular,
-            .plural => praxis.TenseForm.ref_plural,
-            else => praxis.TenseForm.unknown,
+            .singular => TenseForm.ref_singular,
+            .plural => TenseForm.ref_plural,
+            else => TenseForm.unknown,
         };
         if (form.parsing.part_of_speech != pos) {
             continue;
@@ -517,6 +517,13 @@ pub fn pp(
 
 const std = @import("std");
 const ArrayList = std.ArrayList;
-const praxis = @import("praxis.zig");
-const Lexeme = praxis.Lexeme;
-const Form = praxis.Form;
+const Lexeme = @import("lexeme.zig");
+const PartOfSpeech = @import("parsing.zig").PartOfSpeech;
+const Gender = @import("parsing.zig").Gender;
+const Person = @import("parsing.zig").Person;
+const TenseForm = @import("parsing.zig").TenseForm;
+const Voice = @import("parsing.zig").Voice;
+const Number = @import("parsing.zig").Number;
+const Case = @import("parsing.zig").Case;
+const Mood = @import("parsing.zig").Mood;
+const Form = @import("form.zig");

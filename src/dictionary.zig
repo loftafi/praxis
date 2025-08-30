@@ -266,13 +266,13 @@ pub const Dictionary = struct {
     pub fn saveBinaryFile(
         self: *const Dictionary,
         filename: []const u8,
-        trim: bool,
+        save_mode: SaveMode,
     ) !void {
         var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer temp_arena.deinit();
         var data: std.ArrayListUnmanaged(u8) = .empty;
         defer data.deinit(temp_arena.allocator());
-        try self.writeBinaryData(temp_arena.allocator(), &data, trim);
+        try self.writeBinaryData(temp_arena.allocator(), &data, save_mode);
         debug("binary data size: {any}", .{data.items.len});
         try write_bytes_to_file(data.items, filename);
     }
@@ -283,7 +283,7 @@ pub const Dictionary = struct {
         self: *const Dictionary,
         allocator: Allocator,
         data: *std.ArrayListUnmanaged(u8),
-        trim: bool,
+        save_mode: SaveMode,
     ) error{ OutOfMemory, IndexTooLarge }!void {
         try data.append(allocator, 99);
         try data.append(allocator, 1);
@@ -298,7 +298,7 @@ pub const Dictionary = struct {
         //try append_u32(data, @intCast(self.lexemes.items.len));
 
         for (self.lexemes.items) |*lexeme| {
-            if (trim and lexeme.*.glosses.items.len == 0) continue;
+            if (save_mode == .gnt_words and lexeme.*.glosses.items.len == 0) continue;
             include_words += 1;
             try lexeme.*.writeBinary(allocator, data);
             try append_u16(allocator, data, @intCast(lexeme.*.forms.items.len));
@@ -420,13 +420,13 @@ pub const Dictionary = struct {
         self: *const Dictionary,
         allocator: Allocator,
         filename: []const u8,
-        trim: bool,
+        save_mode: SaveMode,
     ) !void {
         var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer temp_arena.deinit();
         var data: std.ArrayListUnmanaged(u8) = .empty;
         defer data.deinit(allocator);
-        try self.writeTextData(allocator, &data, trim);
+        try self.writeTextData(allocator, &data, save_mode);
         std.debug.print("text data size: {any}\n", .{data.items.len});
         try write_bytes_to_file(data.items, filename);
     }
@@ -437,12 +437,12 @@ pub const Dictionary = struct {
         self: *const Dictionary,
         allocator: Allocator,
         data: *ArrayListUnmanaged(u8),
-        trim: bool,
+        save_mode: SaveMode,
     ) !void {
         var unsorted: ArrayListUnmanaged(*Lexeme) = .empty;
         defer unsorted.deinit(allocator);
         for (self.lexemes.items) |lexeme| {
-            if (trim and lexeme.glosses.items.len == 0) continue;
+            if (save_mode == .gnt_words and lexeme.glosses.items.len == 0) continue;
             try unsorted.append(allocator, lexeme);
         }
         std.mem.sort(*Lexeme, unsorted.items, {}, Lexeme.lessThan);
@@ -526,6 +526,11 @@ pub inline fn append_u8(data: *std.ArrayList(u8), value: u32) !void {
     std.debug.assert(value <= 0xff);
     try data.append(@intCast(value));
 }
+
+pub const SaveMode = enum {
+    all_words,
+    gnt_words,
+};
 
 pub const SPACE = ' ';
 pub const TAB = '\t';

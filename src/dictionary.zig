@@ -1,6 +1,6 @@
 //! Contain a set of `Lexeme` and lexeme `Form` objects. Search
 //! for forms and glosses that start with a desired string.
-
+const minimum_uid: u24 = 100000;
 /// It is recommended to use an arena allocator to store the dictionary
 /// information.
 ///
@@ -122,7 +122,7 @@ pub const Dictionary = struct {
                 current_lexeme = lexeme;
                 try self.lexemes.append(arena, lexeme);
                 try self.by_lexeme.add(arena, lexeme.word, lexeme);
-                if (lexeme.uid == 0) {
+                if (lexeme.uid < minimum_uid) {
                     try lexeme_needs_uid.append(lexeme);
                 } else {
                     try lexeme_uid.put(lexeme.uid, lexeme);
@@ -148,7 +148,7 @@ pub const Dictionary = struct {
                     form.lexeme = current_lexeme.?;
                     try current_lexeme.?.forms.append(arena, form);
                 }
-                if (form.uid == 0) {
+                if (form.uid < minimum_uid) {
                     try form_needs_uid.append(form);
                 } else {
                     try form_uid.put(form.uid, form);
@@ -254,7 +254,7 @@ pub const Dictionary = struct {
     ) u24 {
         while (true) {
             const next = random_u24();
-            if (next < 100000) continue;
+            if (next < minimum_uid) continue;
             if (lexeme_uid.get(next) != null) continue;
             if (form_uid.get(next) != null) continue;
             return next;

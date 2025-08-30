@@ -81,6 +81,9 @@ pub const Dictionary = struct {
         temp_allocator: Allocator,
         content: []const u8,
     ) !void {
+        // Don't load duplicate lexeme entries
+        var lexeme_seen: std.StringHashMapUnmanaged(bool) = .empty;
+        defer lexeme_seen.deinit(temp_allocator);
 
         // Keep a cache of seen lexemes, and track which lexemes need a uid.
         var lexeme_uid = std.AutoHashMap(u24, *Lexeme).init(temp_allocator);
@@ -119,6 +122,12 @@ pub const Dictionary = struct {
                     err("missing lexeme word field on line: {d}", .{line});
                     break;
                 }
+                if (lexeme_seen.contains(lexeme.word)) {
+                    debug("Skip duplicate root {s} on line {d}", .{ lexeme.word, line });
+                    lexeme.destroy(arena);
+                    continue;
+                }
+                try lexeme_seen.put(temp_allocator, lexeme.word, true);
                 current_lexeme = lexeme;
                 try self.lexemes.append(arena, lexeme);
                 try self.by_lexeme.add(arena, lexeme.word, lexeme);
@@ -645,7 +654,7 @@ test "basic_dictionary" {
     {
         var out: std.ArrayListUnmanaged(u8) = .empty;
         defer out.deinit(allocator);
-        try dictionary.writeTextData(allocator, &out, false);
+        try dictionary.writeTextData(allocator, &out, .all_words);
         try expectEqualDeep(data, out.items);
     }
 
@@ -653,7 +662,7 @@ test "basic_dictionary" {
     {
         var out: std.ArrayListUnmanaged(u8) = .empty;
         defer out.deinit(allocator);
-        try dictionary.writeBinaryData(allocator, &out, false);
+        try dictionary.writeBinaryData(allocator, &out, .all_words);
 
         const header: []const u8 = &.{ 99, 1, 2, 0, 0, 0 };
         try expect(out.items.len > 50);
@@ -747,12 +756,12 @@ test "gloss_fallback" {
     var bin2: std.ArrayListUnmanaged(u8) = .empty;
     defer bin2.deinit(allocator);
     {
-        try dictionary.writeBinaryData(allocator, &bin1, false);
+        try dictionary.writeBinaryData(allocator, &bin1, .all_words);
         const dictionary2 = try Dictionary.create(allocator);
         defer dictionary2.destroy(allocator);
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
         try dictionary2.loadBinaryData(allocator, allocator, bin1.items);
-        try dictionary2.writeBinaryData(allocator, &bin2, false);
+        try dictionary2.writeBinaryData(allocator, &bin2, .all_words);
     }
     try expectEqualSlices(u8, bin1.items, bin2.items);
 
@@ -784,12 +793,12 @@ test "arena_check" {
     var out2: std.ArrayListUnmanaged(u8) = .empty;
     defer out2.deinit(allocator);
     {
-        try dictionary.writeBinaryData(allocator, &out, false);
+        try dictionary.writeBinaryData(allocator, &out, .all_words);
         const dictionary2 = try Dictionary.create(allocator);
         defer dictionary2.destroy(allocator);
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
         try dictionary2.loadBinaryData(allocator, allocator, out.items);
-        try dictionary2.writeBinaryData(allocator, &out2, false);
+        try dictionary2.writeBinaryData(allocator, &out2, .all_words);
     }
     try expectEqualSlices(u8, out.items, out2.items);
 
@@ -846,7 +855,7 @@ test "dictionary_destroy" {
     // Check for memory leaks in binary loader
     var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
-    try dictionary.writeBinaryData(allocator, &out, true);
+    try dictionary.writeBinaryData(allocator, &out, .all_words);
     const dictionary2 = try Dictionary.create(allocator);
     defer dictionary2.destroy(allocator);
     //try expectEqualSlices(u8, &[_]u8{}, out.items);

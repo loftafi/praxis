@@ -18,12 +18,10 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
         /// Holds allocated copies of each `keyword` in the `index`.
         slices: ArrayListUnmanaged([]const u8),
 
-        pub fn init() Self {
-            return Self{
-                .index = .empty,
-                .slices = .empty,
-            };
-        }
+        pub const empty: Self = .{
+            .index = .empty,
+            .slices = .empty,
+        };
 
         /// `deinit` is required if do not use an arena allocator.
         pub fn deinit(self: *Self, allocator: Allocator) void {
@@ -876,7 +874,7 @@ test "search_index basics" {
             return std.mem.lessThan(u8, a.word, b.word);
         }
     };
-    var index = SearchIndex(*Thing, Thing.lessThan).init();
+    var index: SearchIndex(*Thing, Thing.lessThan) = .empty;
     defer index.deinit(allocator);
 
     var f1 = Thing{ .word = "ἄρτος" };
@@ -960,7 +958,7 @@ test "search_index_duplicates" {
             return std.mem.lessThan(u8, a.word, b.word);
         }
     };
-    var index = SearchIndex(*Thing, Thing.lessThan).init();
+    var index: SearchIndex(*Thing, Thing.lessThan) = .empty;
     defer index.deinit(allocator);
 
     var f1 = Thing{ .word = "περιπατεῖτε" };
@@ -993,7 +991,7 @@ test "search_index arena" {
             return std.mem.lessThan(u8, a.word, b.word);
         }
     };
-    var index = SearchIndex(*Thing, Thing.lessThan).init();
+    var index: SearchIndex(*Thing, Thing.lessThan) = .empty;
     defer index.deinit(allocator);
 
     var f1 = Thing{ .word = "ἄρτος" };

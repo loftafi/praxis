@@ -17,36 +17,45 @@ pub const Dictionary = struct {
     lexemes: ArrayListUnmanaged(*Lexeme),
     forms: ArrayListUnmanaged(*Form),
 
-    pub fn create(allocator: Allocator) error{OutOfMemory}!*Dictionary {
-        const dictionary: *Dictionary = try allocator.create(Dictionary);
+    // When loading via text file, track which forms have been seen
+    seen_lexemes: std.StringHashMapUnmanaged(bool) = .empty,
+
+    /// Create a dictionary object with an allocator that may be an
+    /// arena, or a general purpose allocator.
+    pub fn create(arena: Allocator) error{OutOfMemory}!*Dictionary {
+        const dictionary: *Dictionary = try arena.create(Dictionary);
         seed();
         dictionary.* = .{
-            .by_lexeme = SearchIndex(*Lexeme, Lexeme.lessThan).init(),
-            .by_form = SearchIndex(*Form, Form.autocompleteLessThan).init(),
-            .by_gloss = SearchIndex(*Form, Form.autocompleteLessThan).init(),
-            .by_transliteration = SearchIndex(*Form, Form.autocompleteLessThan).init(),
-            .lexemes = try ArrayListUnmanaged(*Lexeme).initCapacity(allocator, 180000),
-            .forms = try ArrayListUnmanaged(*Form).initCapacity(allocator, 180000),
+            .by_lexeme = .empty,
+            .by_form = .empty,
+            .by_gloss = .empty,
+            .by_transliteration = .empty,
+            .lexemes = try ArrayListUnmanaged(*Lexeme).initCapacity(arena, 180000),
+            .forms = try ArrayListUnmanaged(*Form).initCapacity(arena, 180000),
+            .seen_lexemes = .empty,
         };
         return dictionary;
     }
 
-    pub fn destroy(self: *Dictionary, allocator: Allocator) void {
-        self.by_lexeme.deinit(allocator);
+    /// Destroy a dictionary with the same allocator that it was created with.
+    /// This is usually an arena, but it does not have to be.
+    pub fn destroy(self: *Dictionary, arena: Allocator) void {
+        self.by_lexeme.deinit(arena);
         for (self.lexemes.items) |*item| {
-            item.*.destroy(allocator);
+            item.*.destroy(arena);
         }
-        self.lexemes.deinit(allocator);
+        self.lexemes.deinit(arena);
 
-        self.by_form.deinit(allocator);
+        self.by_form.deinit(arena);
         for (self.forms.items) |*item| {
-            item.*.destroy(allocator);
+            item.*.destroy(arena);
         }
-        self.forms.deinit(allocator);
+        self.forms.deinit(arena);
 
-        self.by_gloss.deinit(allocator);
-        self.by_transliteration.deinit(allocator);
-        allocator.destroy(self);
+        self.by_gloss.deinit(arena);
+        self.by_transliteration.deinit(arena);
+        self.seen_lexemes.deinit(arena);
+        arena.destroy(self);
     }
 
     /// Load dictionary data from a file. Detect if the data is text or
@@ -54,49 +63,47 @@ pub const Dictionary = struct {
     pub fn loadFile(
         self: *Dictionary,
         arena: Allocator,
+        gpa: Allocator,
         filename: []const u8,
     ) !void {
-        var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        defer temp_arena.deinit();
-
-        const data = read_bytes_from_file(filename, temp_arena.allocator()) catch {
-            err("Could not read {s}", .{filename});
+        const data = read_bytes_from_file(filename, gpa) catch |e| {
+            err("Could not read '{s}'. Error: {any}", .{ filename, e });
             return;
         };
+        defer gpa.free(data);
 
         if (data.len > 10 and data[0] == 99 and data[1] == 1) {
-            try self.loadBinaryData(arena, temp_arena.allocator(), data);
+            try self.loadBinaryData(arena, gpa, data);
         } else {
-            try self.loadTextData(arena, temp_arena.allocator(), data);
+            try self.loadTextData(arena, gpa, data);
         }
     }
 
     /// Load dictionary data that has been stored in a
     /// user readable text format. The `arena` allocator stores
-    /// data for the lifetime of the dictionary and the `temp_allocator`
+    /// data for the lifetime of the dictionary and the `gpa`
     /// stores trandient data used while loading the dictionary.
     pub fn loadTextData(
         self: *Dictionary,
         arena: Allocator,
-        temp_allocator: Allocator,
+        gpa: Allocator,
         content: []const u8,
     ) !void {
         // Don't load duplicate lexeme entries
-        var lexeme_seen: std.StringHashMapUnmanaged(bool) = .empty;
-        defer lexeme_seen.deinit(temp_allocator);
+        var skip_lexeme: bool = false;
 
         // Keep a cache of seen lexemes, and track which lexemes need a uid.
-        var lexeme_uid = std.AutoHashMap(u24, *Lexeme).init(temp_allocator);
+        var lexeme_uid = std.AutoHashMap(u24, *Lexeme).init(gpa);
         defer lexeme_uid.deinit();
         var max_lexeme_uid: u24 = 0;
-        var lexeme_needs_uid = std.ArrayList(*Lexeme).init(temp_allocator);
+        var lexeme_needs_uid = std.ArrayList(*Lexeme).init(gpa);
         defer lexeme_needs_uid.deinit();
 
         // Keep a cache of seen forms, and track which forms need a uid.
-        var form_uid = std.AutoHashMap(u24, *Form).init(temp_allocator);
+        var form_uid = std.AutoHashMap(u24, *Form).init(gpa);
         defer form_uid.deinit();
         var max_form_uid: u24 = 0;
-        var form_needs_uid = std.ArrayList(*Form).init(temp_allocator);
+        var form_needs_uid = std.ArrayList(*Form).init(gpa);
         defer form_needs_uid.deinit();
 
         var data = Parser.init(content);
@@ -122,12 +129,14 @@ pub const Dictionary = struct {
                     err("missing lexeme word field on line: {d}", .{line});
                     break;
                 }
-                if (lexeme_seen.contains(lexeme.word)) {
+                if (self.seen_lexemes.contains(lexeme.word)) {
                     debug("Skip duplicate root {s} on line {d}", .{ lexeme.word, line });
+                    skip_lexeme = true;
                     lexeme.destroy(arena);
                     continue;
                 }
-                try lexeme_seen.put(temp_allocator, lexeme.word, true);
+                skip_lexeme = false;
+                try self.seen_lexemes.put(gpa, lexeme.word, true);
                 current_lexeme = lexeme;
                 try self.lexemes.append(arena, lexeme);
                 try self.by_lexeme.add(arena, lexeme.word, lexeme);
@@ -151,6 +160,11 @@ pub const Dictionary = struct {
                     form.destroy(arena);
                     break;
                 }
+                if (skip_lexeme) {
+                    form.destroy(arena);
+                    continue;
+                }
+
                 try self.forms.append(arena, form);
                 try self.by_form.add(arena, form.word, form);
                 if (current_lexeme != null) {
@@ -189,7 +203,7 @@ pub const Dictionary = struct {
         }
 
         // Build a search index of the glosses for each word.
-        var seen = StringSet.init(temp_allocator);
+        var seen = StringSet.init(gpa);
         defer seen.deinit();
         for (self.lexemes.items) |lexeme| {
             if (lexeme.forms.items.len == 0) {
@@ -338,7 +352,7 @@ pub const Dictionary = struct {
     pub fn loadBinaryData(
         self: *Dictionary,
         arena: Allocator,
-        temp_allocator: Allocator,
+        gpa: Allocator,
         content: []const u8,
     ) !void {
         var data = BinaryReader.init(content);
@@ -353,7 +367,7 @@ pub const Dictionary = struct {
         };
 
         // Keep a cache of seen forms for index loading
-        var form_uid = std.AutoHashMap(u24, *Form).init(temp_allocator);
+        var form_uid = std.AutoHashMap(u24, *Form).init(gpa);
         defer form_uid.deinit();
         try form_uid.ensureTotalCapacity(count);
         try self.lexemes.ensureTotalCapacity(arena, count);
@@ -908,7 +922,7 @@ test "dictionary_file" {
     const allocator = std.testing.allocator;
     const dictionary = try Dictionary.create(allocator);
     defer dictionary.destroy(allocator);
-    try dictionary.loadFile(allocator, "./test/small_dict.txt");
+    try dictionary.loadFile(allocator, allocator, "./test/small_dict.txt");
     var results = dictionary.by_form.lookup("δρα");
     try expect(results == null);
     results = dictionary.by_form.lookup("αρτο");
@@ -943,7 +957,7 @@ test "search" {
     const allocator = std.testing.allocator;
     const dict = try Dictionary.create(allocator);
     defer dict.destroy(allocator);
-    try dict.loadFile(allocator, "./test/small_dict.txt");
+    try dict.loadFile(allocator, allocator, "./test/small_dict.txt");
     var results = dict.by_form.lookup("Δαυιδ");
     try expect(results != null);
     try expectEqual(0, results.?.exact_accented.items.len);

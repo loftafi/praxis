@@ -617,18 +617,18 @@ test "return_correct_preferred_form" {
         defer dictionary.destroy(allocator);
 
         const data =
-            \\δράκων|el|80000|Noun|ὁ|-οντος|1404|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
-            \\  δράκων|N-NSM|false|70000||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
-            \\  δράκοντα|N-ASM|false|70001|en:the sneaky|byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
-            \\λύω|el|80001|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
-            \\  λύω|V-PAI-1S|false|70002|en:I untie:I release:I loose|
-            \\  λύω|V-PAI-1S|false|70003||
-            \\  λύεις|V-PAI-2S|false|70004||
-            \\  λύεις|V-PAI-2S|false|70005|en:You untie:You release|
-            \\  λύει|V-PAI-3S|true|70006|en:You untie:You release|
-            \\  λύει|V-PAI-3S|false|70007|en:You untie:You release|
-            \\  λύετε|V-PAI-2P|false|70008||
-            \\  λύετε|V-PAI-2P|true|70009||
+            \\δράκων|el|180000|Noun|ὁ|-οντος|1404|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
+            \\  δράκων|N-NSM|false|170000||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
+            \\  δράκοντα|N-ASM|false|170001|en:the sneaky|byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
+            \\λύω|el|180001|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
+            \\  λύω|V-PAI-1S|false|170002|en:I untie:I release:I loose|
+            \\  λύω|V-PAI-1S|false|170003||
+            \\  λύεις|V-PAI-2S|false|170004||
+            \\  λύεις|V-PAI-2S|false|170005|en:You untie:You release|
+            \\  λύει|V-PAI-3S|true|170006|en:You untie:You release|
+            \\  λύει|V-PAI-3S|false|170007|en:You untie:You release|
+            \\  λύετε|V-PAI-2P|false|170008||
+            \\  λύετε|V-PAI-2P|true|170009||
             \\
         ;
         try dictionary.loadTextData(allocator, allocator, data);
@@ -639,43 +639,43 @@ test "return_correct_preferred_form" {
         var results = dictionary.by_form.lookup("λύω");
         try expect(results != null);
         try expectEqual(2, results.?.exact_accented.items.len);
-        try expectEqual(70002, results.?.exact_accented.items[0].uid);
+        try expectEqual(170002, results.?.exact_accented.items[0].uid);
 
         results = dictionary.by_form.lookup("λύεις");
         try expect(results != null);
         try expectEqual(2, results.?.exact_accented.items.len);
-        try expectEqual(70005, results.?.exact_accented.items[0].uid);
+        try expectEqual(170005, results.?.exact_accented.items[0].uid);
 
         results = dictionary.by_form.lookup("λύει");
         try expect(results != null);
         try expectEqual(2, results.?.exact_accented.items.len);
-        try expectEqual(70006, results.?.exact_accented.items[0].uid);
+        try expectEqual(170006, results.?.exact_accented.items[0].uid);
 
         results = dictionary.by_form.lookup("λύετε");
         try expect(results != null);
         try expectEqual(2, results.?.exact_accented.items.len);
-        try expectEqual(70009, results.?.exact_accented.items[0].uid);
+        try expectEqual(170009, results.?.exact_accented.items[0].uid);
 
         const words = dictionary.by_lexeme.lookup("λύω");
         try expect(words != null);
         try expectEqual(1, words.?.exact_accented.items.len);
         var f = words.?.exact_accented.items[0].primaryForm();
-        try expectEqual(70002, f.?.uid);
+        try expectEqual(170002, f.?.uid);
 
         try expect(words != null);
         try expectEqual(1, words.?.exact_accented.items.len);
         f = words.?.exact_accented.items[0].formByParsing(try parse("V-PAI-2S"));
-        try expectEqual(70005, f.?.uid);
+        try expectEqual(170005, f.?.uid);
 
         try expect(words != null);
         try expectEqual(1, words.?.exact_accented.items.len);
         f = words.?.exact_accented.items[0].formByParsing(try parse("V-PAI-3S"));
-        try expectEqual(70006, f.?.uid);
+        try expectEqual(170006, f.?.uid);
 
         try expect(words != null);
         try expectEqual(1, words.?.exact_accented.items.len);
         f = words.?.exact_accented.items[0].formByParsing(try parse("V-PAI-2P"));
-        try expectEqual(70009, f.?.uid);
+        try expectEqual(170009, f.?.uid);
     }
 }
 

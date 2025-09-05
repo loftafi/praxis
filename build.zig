@@ -21,8 +21,14 @@ pub fn build(b: *std.Build) void {
     });
 
     b.installArtifact(lib);
-    const lib_unit_tests = b.addTest(.{
+
+    const test_mod = b.addModule("test", .{
         .root_source_file = b.path("src/test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const lib_unit_tests = b.addTest(.{
+        .root_module = test_mod,
         .filters = test_filters,
     });
     lib_unit_tests.root_module.addAnonymousImport("byz_parsing", .{

@@ -90,6 +90,14 @@ pub fn glosses_by_lang(self: *const Self, lang: Lang) ?*Gloss {
     return null;
 }
 
+pub fn has_tag(self: *const Self, tag: []const u8) bool {
+    if (self.tags) |tags|
+        for (tags) |i|
+            if (std.ascii.eqlIgnoreCase(i, tag))
+                return true;
+    return false;
+}
+
 pub const VERB_PRIMARY = [_]Parsing{
     parse("V-PAI-1S") catch unreachable,
     parse("V-PEI-1S") catch unreachable,
@@ -479,6 +487,8 @@ test "read_lexeme" {
     try expect(lexeme.glosses_by_lang(.english) != null);
     try expectEqual(1, lexeme.glosses_by_lang(.spanish).?.glosses().len);
     try expectEqualStrings("Aarón", lexeme.glosses_by_lang(.spanish).?.glosses()[0]);
+    try expectEqual(false, lexeme.has_tag("nothing"));
+    try expectEqual(true, lexeme.has_tag("person"));
 }
 
 test "read_lexeme_short" {

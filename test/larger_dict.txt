@@ -190,3 +190,8 @@
 ποῦ|el|11016044|Particle|||4226|ποῦ|en:where?#zh:哪裡:何處#ru:где?#es:¿dónde?||question|
   ποῦ|ADV|false|1009057|en:where|
   ποῦ|ADV-I|false|7020408|en:where|
+λίθος|el|14227601|Noun|ὁ|-ου|3037|λίθ|en:stone#zh:石頭:石#ru:камень#es:piedra:piedras||object|
+  λίθος|N-NSM|false|9946734|en:stone|
+  λίθον|N-ASM|false|8913861|en:stone|
+  λίθου|N-GSM|false|10396170||
+  λίθῳ|N-DSM|false|4414700||

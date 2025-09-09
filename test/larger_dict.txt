@@ -195,3 +195,33 @@
   λίθον|N-ASM|false|8913861|en:stone|
   λίθου|N-GSM|false|10396170||
   λίθῳ|N-DSM|false|4414700||
+περιπατέω|el|12534725|Verb|||4043|περιπατέ|en:walk#ru:ходить#zh:步行#es:camino||movement|
+  περιπατῶ|V-PAI-1S|true|108683|en:I walk#zh:我步行#es:camino|
+  περιπατέω|V-PAI-1S|false|108684|en:I walk#zh:我步行#es:camino|
+  περιπατεῖς|V-PAI-2S|false|108685|en:you walk|
+  περιπατεῖ|V-PAI-3S|false|108686|en:he walks:she walks:it walks|
+  περιπατοῦμεν|V-PAI-1P|false|108687|en:we walk|
+  περιπατεῖτε|V-PAI-2P|false|108688|en:you walk|
+  περιπατοῦσιν|V-PAI-3P|true|108689|en:they walk|
+  περιπατοῦσι|V-PAI-3P|false|108690|en:they walk|
+  περιπατήσω|V-FAI-1S|true|108691|en:I will walk|
+  περιπατήσεις|V-FAI-2S|true|108692|en:you will walk|
+  περιπατήσει|V-FAI-3S|true|108693|en:he will walk:she will walk:it will walk|
+  περιπατήσομεν|V-FAI-1P|true|108694|en:we will walk|
+  περιπατήσετε|V-FAI-2P|true|108695|en:y'all will walk|
+  περιπατήσουσιν|V-FAI-3P|false|108696|en:they will walk|
+  περιπατήσουσι|V-FAI-3P|false|108697|en:they will walk|
+  περιεπάτησα|V-AAI-1S|false|108698||
+  περιεπάτησας|V-AAI-2S|false|108699||
+  περιεπάτησεν|V-AAI-3S|true|108700||
+  περιεπάτησε|V-AAI-3S|false|108701||
+  περιεπατήσαμεν|V-AAI-1P|false|108702||
+  περιεπατήσατε|V-AAI-2P|false|108703||
+  περιεπάτησαν|V-AAI-3P|false|108704||
+  περιεπάτουν|V-IAI-1S|false|156497||
+  περιεπάτεις|V-IAI-2S|false|108705||
+  περιεπάτει|V-IAI-3S|false|108706||
+  περιεπατοῦμεν|V-IAI-1P|false|156707||
+  περιεπάτεῖτε|V-IAI-2P|false|157440||
+  περιεπάτουν|V-IAI-3P|false|108707||
+  περιπεπατήκη|V-LAI-1S|false|157441||

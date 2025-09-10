@@ -681,23 +681,23 @@ pub fn lowercase(c: u21) ?[]const u8 {
 pub fn remove_accent(c: u21) ?[]const u8 {
     return switch (c) {
         'ά', 'ὰ', 'Ά', 'Ὰ', 'ᾶ' => comptime &ue('α'),
-        'Ἄ', 'Ἂ', 'ἄ', 'ἂ' => comptime &ue('ἀ'),
-        'Ἅ', 'Ἃ', 'ἅ', 'ἃ' => comptime &ue('ἁ'),
+        'Ἄ', 'Ἂ', 'ἄ', 'ἂ', 'ἆ', 'Ἆ' => comptime &ue('ἀ'),
+        'Ἅ', 'Ἃ', 'ἅ', 'ἃ', 'ἇ', 'Ἇ' => comptime &ue('ἁ'),
         'έ', 'ὲ', 'Έ', 'Ὲ' => comptime &ue('ε'),
         'ἔ', 'ἒ', 'Ἔ', 'Ἒ' => comptime &ue('ἐ'),
         'ἕ', 'ἓ', 'Ἕ', 'Ἓ' => comptime &ue('ἑ'),
         'ή', 'ὴ', 'Ή', 'Ὴ', 'ῆ' => comptime &ue('η'),
-        'ἤ', 'ἢ', 'Ἤ', 'Ἢ' => comptime &ue('ἠ'),
-        'ἥ', 'ἣ', 'Ἥ', 'Ἣ' => comptime &ue('ἡ'),
+        'ἤ', 'ἢ', 'Ἤ', 'Ἢ', 'ἦ', 'Ἦ' => comptime &ue('ἠ'),
+        'ἥ', 'ἣ', 'Ἥ', 'Ἣ', 'ἧ', 'Ἧ' => comptime &ue('ἡ'),
         'ί', 'ὶ', 'Ί', 'Ὶ', 'ῖ' => comptime &ue('ι'),
-        'ἴ', 'ἲ', 'Ἴ', 'Ἲ' => comptime &ue('ἰ'),
-        'ἵ', 'ἳ', 'Ἵ', 'Ἳ' => comptime &ue('ἱ'),
+        'ἴ', 'ἲ', 'Ἴ', 'Ἲ', 'ἶ', 'Ἶ' => comptime &ue('ἰ'),
+        'ἵ', 'ἳ', 'Ἵ', 'Ἳ', 'ἷ', 'Ἷ' => comptime &ue('ἱ'),
         'ό', 'ὸ', 'Ό', 'Ὸ' => comptime &ue('ο'),
         'ὄ', 'ὂ', 'Ὄ', 'Ὂ' => comptime &ue('ὀ'),
         'ὅ', 'ὃ', 'Ὅ', 'Ὃ' => comptime &ue('ὁ'),
         'ύ', 'ὺ', 'Ύ', 'Ὺ', 'ῦ' => comptime &ue('υ'),
-        'ὔ', 'ὒ' => comptime &ue('ὐ'),
-        'ὕ', 'ὓ', 'Ὕ', 'Ὓ' => comptime &ue('ὑ'),
+        'ὔ', 'ὒ', 'ὖ' => comptime &ue('ὐ'),
+        'ὕ', 'ὓ', 'Ὕ', 'Ὓ', 'ὗ', 'Ὗ' => comptime &ue('ὑ'),
         'ώ', 'ὼ', 'Ώ', 'Ὼ', 'ῶ', 'ῷ', 'ῳ' => comptime &ue('ω'),
         'ὥ', 'ὣ', 'ὧ', 'ᾧ', 'Ὥ', 'Ὣ', 'Ὧ', 'ᾯ' => comptime &ue('ὡ'),
         'ὦ', 'ὤ', 'ὢ', 'ᾦ', 'Ὦ', 'Ὤ', 'Ὢ', 'ᾮ' => comptime &ue('ὠ'),
@@ -856,6 +856,22 @@ test "normalise simple" {
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("το", unaccented_word.slice());
         try se("τό", normalised_word.slice());
+    }
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "οἶκός";
+        try normalise_word(word, &unaccented_word, &normalised_word);
+        try se("οικοσ", unaccented_word.slice());
+        try se("οἶκος", normalised_word.slice());
+    }
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "οὗτός";
+        try normalise_word(word, &unaccented_word, &normalised_word);
+        try se("ουτοσ", unaccented_word.slice());
+        try se("οὗτος", normalised_word.slice());
     }
 }
 

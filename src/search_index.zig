@@ -785,6 +785,14 @@ test "normalise simple" {
     {
         var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
         var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "ἄρτόσ";
+        try normalise_word(word, &unaccented_word, &normalised_word);
+        try se("αρτοσ", unaccented_word.slice());
+        try se("ἄρτος", normalised_word.slice());
+    }
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
         const word = "ὥρα";
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("ωρα", unaccented_word.slice());

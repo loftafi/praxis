@@ -361,7 +361,7 @@ pub fn normalise_word(
         const c = try std.unicode.utf8Decode(slice);
         if (c == ' ' or c == '\t') saw_accent = false;
 
-        // Unaccent processing
+        // Build unaccented version
         const d = unaccent(c);
         if (d) |s| {
             try unaccented.appendSlice(s);
@@ -371,7 +371,7 @@ pub fn normalise_word(
             try unaccented.appendSlice(slice);
         }
 
-        // Normalisation processing
+        // Build normalised version
         if (remove_accent(c)) |rm| {
             if (saw_accent) {
                 try normalised.appendSlice(rm);
@@ -379,16 +379,21 @@ pub fn normalise_word(
                 try normalised.appendSlice(lc);
             } else {
                 saw_accent = true;
-                try normalised.appendSlice(slice);
+                if (fix_grave(c)) |fixed|
+                    try normalised.appendSlice(fixed)
+                else
+                    try normalised.appendSlice(slice);
             }
+            continue;
+        }
+
+        // Special cases for end of normalised version
+        if ((c == 'σ' or c == 'Σ' or c == 'ς') and (i.i == word.len)) {
+            try normalised.appendSlice(comptime &ue('ς'));
+        } else if (lowercase(c)) |lc| {
+            try normalised.appendSlice(lc);
         } else {
-            if ((c == 'σ' or c == 'Σ' or c == 'ς') and (i.i == word.len)) {
-                try normalised.appendSlice(comptime &ue('ς'));
-            } else if (lowercase(c)) |lc| {
-                try normalised.appendSlice(lc);
-            } else {
-                try normalised.appendSlice(slice);
-            }
+            try normalised.appendSlice(slice);
         }
     }
 }
@@ -700,6 +705,52 @@ pub fn remove_accent(c: u21) ?[]const u8 {
     };
 }
 
+/// Converte any grave to acute
+pub fn fix_grave(c: u21) ?[]const u8 {
+    return switch (c) {
+        'ὰ' => comptime &ue('ά'),
+        'Ὰ' => comptime &ue('Ά'),
+        'ἂ' => comptime &ue('ἄ'),
+        'Ἂ' => comptime &ue('Ἄ'),
+        'ἃ' => comptime &ue('ἅ'),
+        'Ἃ' => comptime &ue('Ἅ'),
+        'ὲ' => comptime &ue('έ'),
+        'Ὲ' => comptime &ue('Έ'),
+        'ἒ' => comptime &ue('ἔ'),
+        'Ἒ' => comptime &ue('Ἔ'),
+        'ἓ' => comptime &ue('ἕ'),
+        'Ἓ' => comptime &ue('Ἕ'),
+        'ὴ' => comptime &ue('ή'),
+        'Ὴ' => comptime &ue('Ή'),
+        'ἢ' => comptime &ue('ἤ'),
+        'Ἢ' => comptime &ue('Ἤ'),
+        'ἣ' => comptime &ue('ἥ'),
+        'Ἣ' => comptime &ue('Ἥ'),
+        'ὶ' => comptime &ue('ί'),
+        'Ὶ' => comptime &ue('Ί'),
+        'ἲ' => comptime &ue('ἴ'),
+        'Ἲ' => comptime &ue('Ἴ'),
+        'ἳ' => comptime &ue('ἵ'),
+        'Ἳ' => comptime &ue('Ἵ'),
+        'ὸ' => comptime &ue('ό'),
+        'Ὸ' => comptime &ue('Ό'),
+        'ὂ' => comptime &ue('ὄ'),
+        'Ὂ' => comptime &ue('Ὄ'),
+        'ὃ' => comptime &ue('ὅ'),
+        'Ὃ' => comptime &ue('Ὅ'),
+        'ὺ' => comptime &ue('ύ'),
+        'Ὺ' => comptime &ue('Ύ'),
+        'ὒ' => comptime &ue('ὔ'),
+        'ὓ' => comptime &ue('ὕ'),
+        'Ὓ' => comptime &ue('Ὕ'),
+        'ὼ' => comptime &ue('ώ'),
+        'Ὼ' => comptime &ue('Ώ'),
+        'ὣ' => comptime &ue('ὥ'),
+        'Ὣ' => comptime &ue('Ὥ'),
+        else => null,
+    };
+}
+
 const std = @import("std");
 const log = std.log;
 const is_stopword = @import("gloss_tokens.zig").is_stopword;
@@ -797,6 +848,14 @@ test "normalise simple" {
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("ωρα", unaccented_word.slice());
         try se("ὥρα", normalised_word.slice());
+    }
+    {
+        var unaccented_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var normalised_word = std.BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        const word = "τὸ";
+        try normalise_word(word, &unaccented_word, &normalised_word);
+        try se("το", unaccented_word.slice());
+        try se("τό", normalised_word.slice());
     }
 }
 

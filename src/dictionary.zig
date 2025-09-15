@@ -1019,6 +1019,25 @@ test "accented_vs_unaccented" {
     try expect(results1.?.exact_accented.items[0].uid != results2.?.exact_accented.items[0].uid);
 }
 
+// When results are sorted and two forms are identical, the first result
+// should be the one where the lexical form matches:
+//
+// 1. ἅλας belongs to ἅλας
+// 2. ἅλας belongs to ἅλς
+//
+test "search_result_form_order" {
+    const allocator = std.testing.allocator;
+
+    const dict = try test_dictionary(allocator);
+    defer dict.destroy(allocator);
+    const results = dict.by_form.lookup("ἅλας");
+    try expect(results != null);
+    try expect(results.?.exact_accented.items.len > 1);
+
+    try expectEqualStrings("ἅλας", results.?.exact_accented.items[0].word);
+    try expectEqualStrings("ἅλας", results.?.exact_accented.items[1].word);
+}
+
 /// Create a small sample dictionary object for test cases.
 pub fn test_dictionary(allocator: Allocator) error{OutOfMemory}!*Dictionary {
     const larger_dict = @embedFile("larger_dict");

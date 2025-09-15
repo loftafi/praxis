@@ -225,3 +225,17 @@
   περιεπάτεῖτε|V-IAI-2P|false|157440||
   περιεπάτουν|V-IAI-3P|false|108707||
   περιπεπατήκη|V-LAI-1S|false|157441||
+ἅλας|el|748797|Noun|τό|-ατος|217|ἅλ|en:salt#zh:鹽#es:sal||food|
+  ἀλί|N-DSM|false|13355518||
+  ἅλας|N-NSN|false|12654239||
+  ἅλα|N-ASN|false|9364555||
+  ἅλας|N-ASN|false|9783538||
+  ἅλατι|N-DSN|false|8078831||
+ἅλς|el|10447451|Noun|ὁ||251|ἅλς|en:salt|||
+  ἅλς|N-NSM|false|11516333||
+  ἅλα|N-ASM|false|11538247||
+  ἁλός|N-GSM|false|11653743||
+  ἁλί|N-DSM|false|12065241||
+  ἅλας|N-NPM|false|2037350||
+  ἅλας|N-APM|false|427334||
+  ἁλῶν|N-GPM|false|2505935||

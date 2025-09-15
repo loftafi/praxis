@@ -124,42 +124,44 @@ pub fn lessThan(_: void, self: *Self, other: *Self) bool {
 
 /// Autocompletion works by preferring shorter words over
 /// longer words, and subsorting by popularity of the word.
+/// Provide a `key` if you wish two identical form text strings
+/// to fall back to preferring a parent lexeme text string `key`.
 pub fn autocompleteLessThan(key: ?[]const u8, self: *Self, other: *Self) bool {
+    if (self.word.len < other.word.len) return true;
+    if (self.word.len > other.word.len) return false;
 
-    // If `self` exactly matches the lexeme for a form, its always preferred
+    // If both forms have the same text value, prefer the parent lexeme text
+    // value if it matches.
+    const o = @import("sort.zig").order(self.word, other.word);
     if (key) |k| {
-        if (self.lexeme) |lexeme| {
-            if (std.mem.eql(u8, k, lexeme.word)) {
-                if (other.lexeme == null) return true;
-                if (!std.mem.eql(u8, k, other.lexeme.?.word)) {
-                    return true;
-                }
+        if (o == .eq) {
+            var l: ?[]const u8 = null;
+            var r: ?[]const u8 = null;
+            if (self.lexeme) |i| l = i.word;
+            if (other.lexeme) |i| r = i.word;
+            if (l != null and r == null) return true;
+            if (l == null and r != null) return false;
+            if (l != null and r != null) {
+                const le = std.mem.eql(u8, k, l.?);
+                const re = std.mem.eql(u8, k, r.?);
+                if (le and !re) return true;
+                if (!le and re) return false;
             }
         }
     }
 
-    if (self.references.items.len + other.references.items.len > 0) {
+    if (self.references.items.len + other.references.items.len > 0)
         return self.references.items.len > other.references.items.len;
-    }
 
-    if (self.glosses.items.len + other.glosses.items.len > 0) {
+    if (self.glosses.items.len + other.glosses.items.len > 0)
         return self.glosses.items.len > other.glosses.items.len;
-    }
 
-    if (self.word.len < other.word.len) {
-        return true;
-    }
-    if (self.word.len > other.word.len) {
-        return false;
-    }
+    if (!self.preferred and other.preferred) return false;
+    if (self.preferred and !other.preferred) return true;
+    if (o != .eq) return o == .lt;
 
-    if (!self.preferred and other.preferred) {
-        return false;
-    }
-    if (self.preferred and !other.preferred) {
-        return true;
-    }
-
+    // If forms are basically the same, use the uid to provide
+    // a stable sort order response.
     return self.uid < other.uid;
 }
 
@@ -465,8 +467,8 @@ test "form_read_write_two_items" {
 
 fn make_test_form(
     gpa: Allocator,
-    lexeme: []const u8,
     form: []const u8,
+    lexeme: []const u8,
 ) error{OutOfMemory}!*Self {
     const f1 = try Self.create(gpa);
     f1.word = try gpa.dupe(u8, form);
@@ -478,7 +480,7 @@ fn make_test_form(
 test "form_autocomplete" {
     const gpa = std.testing.allocator;
 
-    const f1 = try make_test_form(gpa, "happy", "happy");
+    const f1 = try make_test_form(gpa, "hal", "hal");
     defer f1.destroy(gpa);
     defer f1.lexeme.?.destroy(gpa);
 
@@ -486,15 +488,52 @@ test "form_autocomplete" {
     defer f2.destroy(gpa);
     defer f2.lexeme.?.destroy(gpa);
 
-    try expect(!autocompleteLessThan(null, f1, f2));
-    try expect(autocompleteLessThan(null, f2, f1));
+    var items = [_]*Self{ f1, f2 };
 
-    try expect(!autocompleteLessThan("ant", f1, f2));
-    try expect(autocompleteLessThan("ant", f2, f1));
+    {
+        // Normal autocomplete order
+        try expect(!autocompleteLessThan(null, f1, f2));
+        try expect(autocompleteLessThan(null, f2, f1));
 
-    // Happy gets priorities first as a lexical form
-    try expect(autocompleteLessThan("happy", f1, f2));
-    try expect(autocompleteLessThan("happy", f2, f1));
+        std.mem.sort(*Self, &items, @as(?[]const u8, null), autocompleteLessThan);
+        try expectEqualStrings("ant", items[0].word);
+        try expectEqualStrings("hal", items[1].word);
+    }
+
+    {
+        // Prefer ant in the lexeme
+        try expect(!autocompleteLessThan("ant", f1, f2));
+        try expect(autocompleteLessThan("ant", f2, f1));
+
+        std.mem.sort(*Self, &items, @as(?[]const u8, "ant"), autocompleteLessThan);
+        try expectEqualStrings("ant", items[0].word);
+        try expectEqualStrings("hal", items[1].word);
+    }
+
+    const g1 = try make_test_form(gpa, "car", "car");
+    defer g1.destroy(gpa);
+    defer g1.lexeme.?.destroy(gpa);
+
+    const g2 = try make_test_form(gpa, "car", "ant");
+    defer g2.destroy(gpa);
+    defer g2.lexeme.?.destroy(gpa);
+
+    var items1 = [_]*Self{ g1, g2 };
+    var items2 = [_]*Self{ g1, g2 };
+
+    {
+        // Hal gets prioritised first as a lexical form
+        //try expect(autocompleteLessThan("hal", f1, f2));
+        //try expect(!autocompleteLessThan("hal", f2, f1));
+
+        std.mem.sort(*Self, &items1, @as(?[]const u8, "car"), autocompleteLessThan);
+        try expectEqualStrings("car", items1[0].lexeme.?.word);
+        try expectEqualStrings("ant", items1[1].lexeme.?.word);
+
+        std.mem.sort(*Self, &items2, @as(?[]const u8, "ant"), autocompleteLessThan);
+        try expectEqualStrings("ant", items2[0].lexeme.?.word);
+        try expectEqualStrings("car", items2[1].lexeme.?.word);
+    }
 }
 
 test "compare_form" {

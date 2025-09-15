@@ -39,8 +39,8 @@ inline fn transliterate_char(codepoint: u21, allow_unicode: bool) []const u8 {
         ACUTE, ACUTE_ALT, CIRCUMFLEX, CIRCUMFLEX_ALT, MACRON => "",
         GRAVE, GRAVE_ALT => "",
         DIAERESIS, IOTA_SUBSCRIPT => "",
-        'Α', 'Ἀ', 'Ἁ', 'Ἄ', 'Ἅ', 'Ά', 'Ὰ' => "A",
-        'α', 'ᾶ', 'ᾷ', 'ἄ', 'ἅ', 'ἀ', 'ἁ', 'ά', 'ὰ', 'ἂ', 'ἃ' => "a",
+        'Α', 'Ἀ', 'Ἁ', 'Ἄ', 'Ἆ', 'Ἇ', 'Ἅ', 'Ά', 'Ὰ' => "A",
+        'α', 'ᾶ', 'ᾷ', 'ἆ', 'ἇ', 'ἄ', 'ἅ', 'ἀ', 'ἁ', 'ά', 'ὰ', 'ἂ', 'ἃ' => "a",
         'β', 'b' => "b",
         'Β', 'B' => "B",
         'γ', 'g' => "g",
@@ -51,11 +51,11 @@ inline fn transliterate_char(codepoint: u21, allow_unicode: bool) []const u8 {
         'ε', 'ἔ', 'ἕ', 'ἐ', 'ἑ', 'ὲ', 'έ', 'ἒ', 'ἓ' => "e",
         'ζ', 'z' => "z",
         'Ζ', 'Z' => "Z",
-        'Η', 'Ἡ', 'Ἠ', 'Ή', 'Ὴ' => if (allow_unicode) "Ē" else "E",
+        'Η', 'Ἡ', 'Ἠ', 'Ή', 'Ὴ', 'Ἦ', 'Ἧ' => if (allow_unicode) "Ē" else "E",
         'ᾗ', 'ᾖ', 'ῃ', 'ᾑ', 'ᾐ', 'ῇ', 'ῄ', 'ῂ', 'ᾔ', 'ᾕ', 'ᾓ', 'ᾒ', 'η', 'ἤ', 'ἥ', 'ἡ', 'ἠ', 'ή', 'ὴ', 'ἢ', 'ἣ', 'ῆ', 'ἦ', 'ἧ' => if (allow_unicode) "ē" else "e",
         'Θ' => "Th",
         'θ' => "th",
-        'Ι', 'Ἰ', 'Ἱ', 'Ὶ', 'Ί' => "I",
+        'Ι', 'Ἰ', 'Ἱ', 'Ὶ', 'Ί', 'Ἶ', 'Ἷ' => "I",
         'ι', 'ἴ', 'ἵ', 'ἰ', 'ἱ', 'ί', 'ὶ', 'ἲ', 'ἳ', 'ῖ', 'ἷ', 'ἶ' => "i",
         'κ', 'k' => "k",
         'Κ', 'K' => "K",
@@ -77,19 +77,16 @@ inline fn transliterate_char(codepoint: u21, allow_unicode: bool) []const u8 {
         'Σ', 'S' => "S",
         'τ', 't' => "t",
         'Τ', 'T' => "T",
-        'υ', 'ὔ', 'ὕ', 'ὐ', 'ὑ', 'ύ', 'ὺ', 'ὒ', 'ὓ', 'ῦ', 'ϋ', 'ὗ', 'ὖ' => "u",
-        'Υ', 'Ὑ', 'Ύ', 'Ὺ' => "U",
+        'υ', 'ὔ', 'ὕ', 'ὐ', 'ὑ', 'ύ', 'ὺ', 'ὒ', 'ὓ', 'ὖ', 'ὗ', 'ῦ', 'ϋ' => "u",
+        'Υ', 'Ὑ', 'Ύ', 'Ὺ', 'Ὗ' => "U",
         'φ' => "ph",
         'Φ' => "Ph",
         'χ' => "ch",
         'Χ' => "Ch",
         'ψ' => "ps",
         'Ψ' => "Ps",
-        'Ω',
-        'Ώ',
-        'Ὼ',
-        => if (allow_unicode) "Ō" else "O",
-        'ω', 'ώ', 'ὼ', 'ὠ', 'ὥ', 'ὤ', 'ὡ', 'ῶ', 'ὦ', 'ῷ', 'ᾦ', 'ᾧ' => if (allow_unicode) "ō" else "o",
+        'Ω', 'Ώ', 'Ὼ', 'Ὦ', 'Ὧ' => if (allow_unicode) "Ō" else "O",
+        'ω', 'ώ', 'ὼ', 'ὠ', 'ὥ', 'ὤ', 'ὡ', 'ῶ', 'ὧ', 'ὦ', 'ῷ', 'ᾦ', 'ᾧ' => if (allow_unicode) "ō" else "o",
         'ϝ' => "w",
         'f' => "f",
         'F' => "F",
@@ -134,6 +131,7 @@ test "transliterate" {
     try eq("pater", try transliterate_word("πατήρ", false, &buffer));
     try eq("en", try transliterate_word("ἔν", true, &buffer));
     try eq("a", try transliterate_word("ἀ", true, &buffer));
+    try eq("a", try transliterate_word("ἇ", true, &buffer));
     try eq("to", try transliterate_word("το", true, &buffer));
     try eq("to", try transliterate_word("τό", true, &buffer));
     try eq("to", try transliterate_word("τὸ", true, &buffer));

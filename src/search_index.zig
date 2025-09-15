@@ -8,7 +8,7 @@ const MAX_SEARCH_RESULTS = 60;
 pub const IndexError = error{ WordTooLong, EmptyWord };
 
 /// A wrapper for a StringHashMap that allows searching for prefixes of the key.
-pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
+pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
     return struct {
         const Self = @This();
 
@@ -131,9 +131,9 @@ pub fn SearchIndex(comptime T: type, cmp: fn (void, T, T) bool) type {
         pub fn sort(self: *Self) !void {
             var i = self.index.valueIterator();
             while (i.next()) |sr| {
-                std.mem.sort(T, sr.*.exact_accented.items, {}, cmp);
-                std.mem.sort(T, sr.*.exact_unaccented.items, {}, cmp);
-                std.mem.sort(T, sr.*.partial_match.items, {}, cmp);
+                std.mem.sort(T, sr.*.exact_accented.items, @as(?[]const u8, sr.*.keyword), cmp);
+                std.mem.sort(T, sr.*.exact_unaccented.items, @as(?[]const u8, sr.*.keyword), cmp);
+                std.mem.sort(T, sr.*.partial_match.items, @as(?[]const u8, sr.*.keyword), cmp);
             }
         }
 
@@ -953,7 +953,7 @@ test "search_index basics" {
     const Thing = struct {
         word: []const u8,
         const Self = @This();
-        pub fn lessThan(_: void, a: *Self, b: *Self) bool {
+        pub fn lessThan(_: ?[]const u8, a: *Self, b: *Self) bool {
             return std.mem.lessThan(u8, a.word, b.word);
         }
     };
@@ -1037,7 +1037,7 @@ test "search_index_duplicates" {
     const Thing = struct {
         word: []const u8,
         const Self = @This();
-        pub fn lessThan(_: void, a: *Self, b: *Self) bool {
+        pub fn lessThan(_: ?[]const u8, a: *Self, b: *Self) bool {
             return std.mem.lessThan(u8, a.word, b.word);
         }
     };
@@ -1070,7 +1070,7 @@ test "search_index arena" {
     const Thing = struct {
         word: []const u8,
         const Self = @This();
-        pub fn lessThan(_: void, a: *Self, b: *Self) bool {
+        pub fn lessThan(_: ?[]const u8, a: *Self, b: *Self) bool {
             return std.mem.lessThan(u8, a.word, b.word);
         }
     };

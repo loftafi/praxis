@@ -124,7 +124,20 @@ pub fn lessThan(_: void, self: *Self, other: *Self) bool {
 
 /// Autocompletion works by preferring shorter words over
 /// longer words, and subsorting by popularity of the word.
-pub fn autocompleteLessThan(_: void, self: *Self, other: *Self) bool {
+pub fn autocompleteLessThan(key: ?[]const u8, self: *Self, other: *Self) bool {
+
+    // If `self` exactly matches the lexeme for a form, its always preferred
+    if (key) |k| {
+        if (self.lexeme) |lexeme| {
+            if (std.mem.eql(u8, k, lexeme.word)) {
+                if (other.lexeme == null) return true;
+                if (!std.mem.eql(u8, k, other.lexeme.?.word)) {
+                    return true;
+                }
+            }
+        }
+    }
+
     if (self.references.items.len + other.references.items.len > 0) {
         return self.references.items.len > other.references.items.len;
     }
@@ -448,6 +461,40 @@ test "form_read_write_two_items" {
     try expectEqual(21, form4.uid);
     try expectEqual(2, form4.references.items.len);
     //try expectEqualSlices(u8, &.{0}, out.items);
+}
+
+fn make_test_form(
+    gpa: Allocator,
+    lexeme: []const u8,
+    form: []const u8,
+) error{OutOfMemory}!*Self {
+    const f1 = try Self.create(gpa);
+    f1.word = try gpa.dupe(u8, form);
+    f1.lexeme = try Lexeme.create(gpa);
+    f1.lexeme.?.word = try gpa.dupe(u8, lexeme);
+    return f1;
+}
+
+test "form_autocomplete" {
+    const gpa = std.testing.allocator;
+
+    const f1 = try make_test_form(gpa, "happy", "happy");
+    defer f1.destroy(gpa);
+    defer f1.lexeme.?.destroy(gpa);
+
+    const f2 = try make_test_form(gpa, "ant", "ant");
+    defer f2.destroy(gpa);
+    defer f2.lexeme.?.destroy(gpa);
+
+    try expect(!autocompleteLessThan(null, f1, f2));
+    try expect(autocompleteLessThan(null, f2, f1));
+
+    try expect(!autocompleteLessThan("ant", f1, f2));
+    try expect(autocompleteLessThan("ant", f2, f1));
+
+    // Happy gets priorities first as a lexical form
+    try expect(autocompleteLessThan("happy", f1, f2));
+    try expect(autocompleteLessThan("happy", f2, f1));
 }
 
 test "compare_form" {

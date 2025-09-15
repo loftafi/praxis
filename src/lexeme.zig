@@ -194,7 +194,7 @@ pub fn primaryForm(self: *const Self) ?*Form {
 
 /// Sort by the `word` field. If word field matches, compare
 /// the `glosses` count.
-pub fn lessThan(_: void, self: *Self, other: *Self) bool {
+pub fn lessThan(_: ?[]const u8, self: *Self, other: *Self) bool {
     const x = @import("sort.zig").order(self.word, other.word);
     if (x == .lt) {
         return true;
@@ -592,10 +592,10 @@ test "compare_lexeme" {
         var lexeme3 = try Self.create(allocator);
         defer lexeme3.destroy(allocator);
         try lexeme3.readText(std.testing.allocator, &data);
-        try expectEqual(true, lessThan({}, lexeme1, lexeme2));
-        try expectEqual(true, lessThan({}, lexeme1, lexeme3));
-        try expectEqual(false, lessThan({}, lexeme3, lexeme2));
-        try expectEqual(false, lessThan({}, lexeme3, lexeme1));
+        try expectEqual(true, lessThan(null, lexeme1, lexeme2));
+        try expectEqual(true, lessThan(null, lexeme1, lexeme3));
+        try expectEqual(false, lessThan(null, lexeme3, lexeme2));
+        try expectEqual(false, lessThan(null, lexeme3, lexeme1));
     }
     {
         var data = Parser.init(
@@ -612,10 +612,10 @@ test "compare_lexeme" {
         var lexeme3 = try Self.create(allocator);
         defer lexeme3.destroy(allocator);
         try lexeme3.readText(allocator, &data);
-        try expectEqual(true, lessThan({}, lexeme1, lexeme2));
-        try expectEqual(true, lessThan({}, lexeme1, lexeme3));
-        try expectEqual(false, lessThan({}, lexeme3, lexeme2));
-        try expectEqual(false, lessThan({}, lexeme3, lexeme1));
+        try expectEqual(true, lessThan(null, lexeme1, lexeme2));
+        try expectEqual(true, lessThan(null, lexeme1, lexeme3));
+        try expectEqual(false, lessThan(null, lexeme3, lexeme2));
+        try expectEqual(false, lessThan(null, lexeme3, lexeme1));
     }
 }
 

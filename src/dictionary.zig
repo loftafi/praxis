@@ -468,7 +468,7 @@ pub const Dictionary = struct {
             if (save_mode == .gnt_words and lexeme.glosses.items.len == 0) continue;
             try unsorted.append(allocator, lexeme);
         }
-        std.mem.sort(*Lexeme, unsorted.items, {}, Lexeme.lessThan);
+        std.mem.sort(*Lexeme, unsorted.items, @as(?[]const u8, null), Lexeme.lessThan);
 
         for (unsorted.items) |lexeme| {
             try lexeme.writeText(data.writer(allocator));

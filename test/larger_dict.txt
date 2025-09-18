@@ -239,3 +239,10 @@
   ἅλας|N-NPM|false|2037350||
   ἅλας|N-APM|false|427334||
   ἁλῶν|N-GPM|false|2505935||
+εἰκών|el|12895964|Noun|ἡ|-όνος|1504|εἰκώ|en:image:likeness:bust#ru:подобие:образ:изображение:сходство#zh:形象:肖像#es:imagen:semejanza||object|
+  εἰκών|N-NSF|false|10145088||
+  εἰκόνα|N-ASF|false|2577498||
+  εἰκόνος|N-GSF|false|616777||
+  εἰκόνα|N-GSF|false|5658779||
+  εἰκόνι|N-DSF|false|3319245||
+  εἰκόνας|N-APF|false|8956657||

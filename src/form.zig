@@ -511,12 +511,12 @@ test "form_autocomplete" {
     }
 
     const g1 = try make_test_form(gpa, "car", "car");
-    defer g1.destroy(gpa);
     defer g1.lexeme.?.destroy(gpa);
+    defer g1.destroy(gpa);
 
     const g2 = try make_test_form(gpa, "car", "ant");
-    defer g2.destroy(gpa);
     defer g2.lexeme.?.destroy(gpa);
+    defer g2.destroy(gpa);
 
     var items1 = [_]*Self{ g1, g2 };
     var items2 = [_]*Self{ g1, g2 };

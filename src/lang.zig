@@ -9,6 +9,7 @@ pub const Lang = enum(u8) {
     spanish = 6,
     korean = 7,
     russian = 8,
+    ukranian = 9,
 
     pub fn from_u8(lang: u8) !Lang {
         return switch (lang) {
@@ -21,6 +22,7 @@ pub const Lang = enum(u8) {
             6 => .spanish,
             7 => .korean,
             8 => .russian,
+            9 => .ukranian,
             else => error.InvalidLanguage,
         };
     }
@@ -35,34 +37,41 @@ pub const Lang = enum(u8) {
             .spanish => "es",
             .korean => "ko",
             .russian => "ru",
+            .ukranian => "uk",
             .unknown => "",
         };
     }
 
     pub fn parse_code(code: []const u8) Lang {
-        if (std.mem.eql(u8, code, "he")) {
+        if (std.ascii.eqlIgnoreCase(code, "he")) {
             return .hebrew;
         }
-        if (std.mem.eql(u8, code, "el")) {
+        if (std.ascii.eqlIgnoreCase(code, "el")) {
             return .greek;
         }
-        if (std.mem.eql(u8, code, "aaa")) {
+        if (std.ascii.eqlIgnoreCase(code, "aaa")) {
             return .aramaic;
         }
-        if (std.mem.eql(u8, code, "en")) {
+        if (std.ascii.eqlIgnoreCase(code, "en")) {
             return .english;
         }
-        if (std.mem.eql(u8, code, "zh")) {
+        if (std.ascii.eqlIgnoreCase(code, "zh")) {
             return .chinese;
         }
-        if (std.mem.eql(u8, code, "es")) {
+        if (std.ascii.eqlIgnoreCase(code, "es")) {
             return .spanish;
         }
-        if (std.mem.eql(u8, code, "ru")) {
+        if (std.ascii.eqlIgnoreCase(code, "ru")) {
             return .russian;
         }
-        if (std.mem.eql(u8, code, "ko")) {
+        if (std.ascii.eqlIgnoreCase(code, "uk")) {
+            return .russian;
+        }
+        if (std.ascii.eqlIgnoreCase(code, "ko")) {
             return .korean;
+        }
+        if (std.ascii.eqlIgnoreCase(code, "zh_tw")) {
+            return .chinese;
         }
         return .unknown;
     }

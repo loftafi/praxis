@@ -43,36 +43,17 @@ pub const Lang = enum(u8) {
     }
 
     pub fn parse_code(code: []const u8) Lang {
-        if (std.ascii.eqlIgnoreCase(code, "he")) {
-            return .hebrew;
-        }
-        if (std.ascii.eqlIgnoreCase(code, "el")) {
-            return .greek;
-        }
-        if (std.ascii.eqlIgnoreCase(code, "aaa")) {
-            return .aramaic;
-        }
-        if (std.ascii.eqlIgnoreCase(code, "en")) {
-            return .english;
-        }
-        if (std.ascii.eqlIgnoreCase(code, "zh")) {
-            return .chinese;
-        }
-        if (std.ascii.eqlIgnoreCase(code, "es")) {
-            return .spanish;
-        }
-        if (std.ascii.eqlIgnoreCase(code, "ru")) {
-            return .russian;
-        }
-        if (std.ascii.eqlIgnoreCase(code, "uk")) {
-            return .russian;
-        }
-        if (std.ascii.eqlIgnoreCase(code, "ko")) {
-            return .korean;
-        }
-        if (std.ascii.eqlIgnoreCase(code, "zh_tw")) {
-            return .chinese;
-        }
+        if (std.ascii.eqlIgnoreCase(code, "he")) return .hebrew;
+        if (std.ascii.eqlIgnoreCase(code, "el")) return .greek;
+        if (std.ascii.eqlIgnoreCase(code, "aaa")) return .aramaic;
+        if (std.ascii.eqlIgnoreCase(code, "en")) return .english;
+        if (std.ascii.eqlIgnoreCase(code, "zh")) return .chinese;
+        if (std.ascii.eqlIgnoreCase(code, "es")) return .spanish;
+        if (std.ascii.eqlIgnoreCase(code, "ru")) return .russian;
+        if (std.ascii.eqlIgnoreCase(code, "uk")) return .russian;
+        if (std.ascii.eqlIgnoreCase(code, "ko")) return .korean;
+        if (std.ascii.eqlIgnoreCase(code, "zh_tw")) return .chinese;
+        if (std.ascii.eqlIgnoreCase(code, "zh_hanst")) return .chinese;
         return .unknown;
     }
 };

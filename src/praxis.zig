@@ -118,7 +118,7 @@ pub const Parser = @import("parser.zig");
 
 /// BoundedArray was removed in 0.15.1, this os provided as a
 /// temporary workaround.
-pub const BoundedArray = @import("bounded_array.zig");
+pub const BoundedArray = @import("bounded_array.zig").BoundedArray;
 
 /// Return a placeholder dictionary for testing.
 pub const test_dictionary = @import("dictionary.zig").test_dictionary;

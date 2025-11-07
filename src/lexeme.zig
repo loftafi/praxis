@@ -336,7 +336,7 @@ pub fn readText(self: *Self, arena: Allocator, t: *Parser) !void {
     if (!t.consume_if('|')) return error.MissingField;
     const tag_set = try form.read_field(t); // Tags
     var i = std.mem.tokenizeAny(u8, tag_set, " ,\n\r\t");
-    var buffer = std.BoundedArray([]const u8, 10){};
+    var buffer = BoundedArray([]const u8, 10){};
     while (i.next()) |tag| {
         if (tag.len == 0) continue;
         if (buffer.len == buffer.capacity()) break;
@@ -416,7 +416,7 @@ pub fn oldReadText(self: *Self, arena: Allocator, t: *Parser) !void {
     if (!t.consume_if('|')) return error.MissingField;
     const tag_set = try form.read_field(t); // Tags
     var i = std.mem.tokenizeAny(u8, tag_set, " ,\n\r\t");
-    var buffer = std.BoundedArray([]const u8, 10){};
+    var buffer = BoundedArray([]const u8, 10){};
     while (i.next()) |tag| {
         if (tag.len == 0) continue;
         if (buffer.len == buffer.capacity()) break;
@@ -724,6 +724,7 @@ test "read_invalid_lexeme_id" {
 const std = @import("std");
 const err = std.log.err;
 const Allocator = std.mem.Allocator;
+const BoundedArray = @import("bounded_array.zig").BoundedArray;
 
 pub const Parser = @import("parser.zig");
 const is_eol = @import("parser.zig").is_eol;

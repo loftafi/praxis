@@ -96,15 +96,15 @@ pub const Dictionary = struct {
         var lexeme_uid = std.AutoHashMap(u24, *Lexeme).init(gpa);
         defer lexeme_uid.deinit();
         var max_lexeme_uid: u24 = 0;
-        var lexeme_needs_uid = std.ArrayList(*Lexeme).init(gpa);
-        defer lexeme_needs_uid.deinit();
+        var lexeme_needs_uid: std.ArrayListUnmanaged(*Lexeme) = .empty;
+        defer lexeme_needs_uid.deinit(gpa);
 
         // Keep a cache of seen forms, and track which forms need a uid.
         var form_uid = std.AutoHashMap(u24, *Form).init(gpa);
         defer form_uid.deinit();
         var max_form_uid: u24 = 0;
-        var form_needs_uid = std.ArrayList(*Form).init(gpa);
-        defer form_needs_uid.deinit();
+        var form_needs_uid: std.ArrayListUnmanaged(*Form) = .empty;
+        defer form_needs_uid.deinit(gpa);
 
         var data = Parser.init(content);
         _ = data.skip_whitespace_and_lines();
@@ -141,7 +141,7 @@ pub const Dictionary = struct {
                 try self.lexemes.append(arena, lexeme);
                 try self.by_lexeme.add(arena, lexeme.word, lexeme);
                 if (lexeme.uid < minimum_uid) {
-                    try lexeme_needs_uid.append(lexeme);
+                    try lexeme_needs_uid.append(gpa, lexeme);
                 } else {
                     try lexeme_uid.put(lexeme.uid, lexeme);
                     if (lexeme.uid > max_lexeme_uid) {
@@ -172,7 +172,7 @@ pub const Dictionary = struct {
                     try current_lexeme.?.forms.append(arena, form);
                 }
                 if (form.uid < minimum_uid) {
-                    try form_needs_uid.append(form);
+                    try form_needs_uid.append(gpa, form);
                 } else {
                     try form_uid.put(form.uid, form);
                     if (form.uid > max_lexeme_uid) {
@@ -255,7 +255,7 @@ pub const Dictionary = struct {
                 item.uid = self.generateUniqueUid(&lexeme_uid, &form_uid);
                 info("assign uid {s}={d}", .{ item.word, item.uid });
             }
-            lexeme_needs_uid.clearAndFree();
+            lexeme_needs_uid.clearAndFree(gpa);
         }
         if (form_needs_uid.items.len > 0) {
             info("{d} forms need uid.", .{form_needs_uid.items.len});
@@ -263,7 +263,7 @@ pub const Dictionary = struct {
                 item.uid = self.generateUniqueUid(&lexeme_uid, &form_uid);
                 info("assign uid {s}={d}", .{ item.word, item.uid });
             }
-            form_needs_uid.clearAndFree();
+            form_needs_uid.clearAndFree(gpa);
         }
 
         debug("Loaded dictionary.", .{});
@@ -505,7 +505,9 @@ fn read_bytes_from_file(filename: []const u8, temp_allocator: Allocator) ![]u8 {
     const file = try std.fs.cwd().openFile(filename, .{ .mode = .read_only });
     defer file.close();
     const stat = try file.stat();
-    return try file.readToEndAllocOptions(temp_allocator, stat.size, stat.size, 1, null);
+    const buffer = try temp_allocator.alloc(u8, stat.size);
+    if (try file.readAll(buffer) != stat.size) return error.FailedReadingData;
+    return buffer;
 }
 
 /// Helper function to write file contents.

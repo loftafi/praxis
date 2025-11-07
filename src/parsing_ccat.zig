@@ -309,8 +309,10 @@ test "basic ccat parsing" {
 }
 
 test "ccat data test" {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
-    defer out.deinit();
+    const gpa = std.testing.allocator;
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(gpa);
 
     const ccat_data = @embedFile("ccat_parsing");
     var items = std.mem.tokenizeAny(u8, ccat_data, "\r\n");
@@ -325,7 +327,7 @@ test "ccat data test" {
             };
             out.clearRetainingCapacity();
             try std.testing.expect(x.part_of_speech != .unknown);
-            try x.string(out.writer());
+            try x.string(out.writer(gpa));
             line += 1;
         }
     }

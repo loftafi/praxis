@@ -1368,8 +1368,9 @@ test "simple parsing tests" {
 }
 
 test "simple byz string tests" {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
-    defer out.deinit();
+    const gpa = std.testing.allocator;
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(gpa);
 
     // Some basic sanity checks.
     {
@@ -1379,7 +1380,7 @@ test "simple byz string tests" {
             .case = .nominative,
             .number = .singular,
             .gender = .masculine,
-        }).string(out.writer());
+        }).string(out.writer(gpa));
         try expectEqualStrings("N-NSM", out.items);
     }
 
@@ -1390,7 +1391,7 @@ test "simple byz string tests" {
             .case = .genitive,
             .number = .plural,
             .gender = .feminine,
-        }).string(out.writer());
+        }).string(out.writer(gpa));
         try expectEqualStrings("A-GPF", out.items);
     }
 
@@ -1404,7 +1405,7 @@ test "simple byz string tests" {
             .person = .first,
             .number = .plural,
         };
-        try p.string(out.writer());
+        try p.string(out.writer(gpa));
         try expectEqualStrings("V-PAI-1P", out.items);
     }
 
@@ -1416,14 +1417,16 @@ test "simple byz string tests" {
             .person = .first,
             .tense_form = .ref_singular,
         };
-        try p.string(out.writer());
+        try p.string(out.writer(gpa));
         try expectEqualStrings("P-1NS", out.items);
     }
 }
 
 test "new_parsing" {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
-    defer out.deinit();
+    const gpa = std.testing.allocator;
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(gpa);
 
     // Test parsing not in byz file
     const data = "I-GSN\nI-DSM\nO-ASN";
@@ -1439,15 +1442,17 @@ test "new_parsing" {
             };
             try expect(x.part_of_speech != .unknown);
             out.clearRetainingCapacity();
-            try x.string(out.writer());
+            try x.string(out.writer(gpa));
             try expectEqualStrings(item, out.items);
         }
     }
 }
 
 test "byz data test" {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
-    defer out.deinit();
+    const gpa = std.testing.allocator;
+
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(gpa);
 
     const byz_data = @embedFile("byz_parsing");
     var items = std.mem.tokenizeAny(u8, byz_data, " \r\n");
@@ -1472,34 +1477,34 @@ test "byz data test" {
             };
             out.clearRetainingCapacity();
             try expect(x.part_of_speech != .unknown);
-            try x.string(out.writer());
+            try x.string(out.writer(gpa));
             try expectEqualStrings(item, out.items);
         }
 
         {
             // Test entry when it has brackets
-            var item2 = std.ArrayList(u8).init(std.testing.allocator);
-            defer item2.deinit();
-            try item2.append(' ');
-            try item2.append('[');
-            try item2.appendSlice(item);
-            try item2.append(']');
+            var item2: std.ArrayList(u8) = .empty;
+            defer item2.deinit(gpa);
+            try item2.append(gpa, ' ');
+            try item2.append(gpa, '[');
+            try item2.appendSlice(gpa, item);
+            try item2.append(gpa, ']');
             const x = parse(item2.items) catch |e| {
                 std.debug.print("Failed: {s} {any}\n", .{ item2.items, e });
                 _ = try parse(item2.items);
                 return;
             };
             out.clearRetainingCapacity();
-            try x.string(out.writer());
+            try x.string(out.writer(gpa));
             try expectEqualStrings(item, out.items);
         }
 
         {
             // Test entry when it has brackets
-            var item2 = std.ArrayList(u8).init(std.testing.allocator);
-            defer item2.deinit();
-            try item2.appendSlice(item);
-            try item2.append('K');
+            var item2: std.ArrayList(u8) = .empty;
+            defer item2.deinit(gpa);
+            try item2.appendSlice(gpa, item);
+            try item2.append(gpa, 'K');
             try expectError(error.InvalidParsing, parse(item2.items));
         }
     }
@@ -1508,22 +1513,17 @@ test "byz data test" {
     items = std.mem.tokenizeAny(u8, other_data, " \r\n");
     while (items.next()) |item| {
         // Ignore unhandled types
-        if (std.ascii.endsWithIgnoreCase(item, "-att")) {
-            continue;
-        }
-        if (std.ascii.endsWithIgnoreCase(item, "-abb")) {
-            continue;
-        }
-        if (std.ascii.endsWithIgnoreCase(item, "-p")) {
-            continue;
-        }
+        if (std.ascii.endsWithIgnoreCase(item, "-att")) continue;
+        if (std.ascii.endsWithIgnoreCase(item, "-abb")) continue;
+        if (std.ascii.endsWithIgnoreCase(item, "-p")) continue;
+
         // Test entry exactly as in the file.
         const x = parse(item) catch |e| {
             std.debug.print("Failed: {s} {any}\n", .{ item, e });
             return;
         };
         out.clearRetainingCapacity();
-        try x.string(out.writer());
+        try x.string(out.writer(gpa));
         try expectEqualStrings(item, out.items);
     }
 }

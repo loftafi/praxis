@@ -283,11 +283,13 @@ test "basic morphgnt_sbl parsing" {
 }
 
 test "morphgnt_sbl data test" {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
-    defer out.deinit();
+    const gpa = std.testing.allocator;
 
-    const ccat_data = @embedFile("sbl_parsing");
-    var items = std.mem.tokenizeAny(u8, ccat_data, "\r\n");
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(gpa);
+
+    const morph_data = @embedFile("sbl_parsing");
+    var items = std.mem.tokenizeAny(u8, morph_data, "\r\n");
     var line: usize = 0;
     while (items.next()) |item| {
         {
@@ -299,7 +301,7 @@ test "morphgnt_sbl data test" {
             };
             out.clearRetainingCapacity();
             try std.testing.expect(x.part_of_speech != .unknown);
-            try x.string(out.writer());
+            try x.string(out.writer(gpa));
             line += 1;
         }
     }

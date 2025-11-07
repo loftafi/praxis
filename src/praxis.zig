@@ -116,5 +116,9 @@ pub const random_u16 = @import("random.zig").random_u16;
 /// ascii or unicode characters from a string. Will be removed in the future.
 pub const Parser = @import("parser.zig");
 
+/// BoundedArray was removed in 0.15.1, this os provided as a
+/// temporary workaround.
+pub const BoundedArray = @import("bounded_array.zig");
+
 /// Return a placeholder dictionary for testing.
 pub const test_dictionary = @import("dictionary.zig").test_dictionary;

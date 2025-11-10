@@ -2,23 +2,22 @@
 
 const Self = @This();
 
-lexeme: *Lexeme,
-tables: std.ArrayList(Panel),
+lexeme: *Lexeme = undefined,
+tables: std.ArrayListUnmanaged(Panel) = .empty,
 
 pub fn create(allocator: std.mem.Allocator) !*Self {
     var p = try allocator.create(Self);
-    p.init(allocator);
+    p.init();
     return p;
 }
 
-pub fn destroy(self: *Self) void {
-    const allocator = self.tables.allocator;
-    self.tables.deinit();
+pub fn destroy(self: *Self, allocator: std.mem.Allocator) void {
+    self.tables.deinit(allocator);
     allocator.destroy(self);
 }
 
-pub fn init(self: *Self, allocator: std.mem.Allocator) void {
-    self.tables = std.ArrayList(Panel).init(allocator);
+pub fn init(self: *Self) void {
+    self.tables = .empty;
 }
 
 pub fn deinit(self: *Panel) void {
@@ -513,6 +512,12 @@ pub fn pp(
         return form;
     }
     return null;
+}
+
+test "init_panels" {
+    const gpa = std.testing.allocator;
+    var p = try Self.create(gpa);
+    p.destroy(gpa);
 }
 
 const std = @import("std");

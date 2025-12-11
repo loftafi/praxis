@@ -205,12 +205,12 @@ pub fn read_u16(self: *Self) !?u16 {
     return @intCast(value);
 }
 
-/// Read a slice of a bytes contining a utf8 string without memory allocations
+/// Read a slice of a bytes from the source data, ending in a newline, tab, pipe, or zero.
 pub fn read_field(t: *Self) []const u8 {
     const start = t.index;
     while (true) {
         const c = t.peek();
-        if (c == '\n' or c == '\t' or c == '|' or c == 0) {
+        if (c == '\n' or c == '\r' or c == '\t' or c == '|' or c == 0) {
             const field = t.data[start..t.index];
             return field;
         }

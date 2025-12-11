@@ -22,18 +22,10 @@ pub const Parsing = packed struct(u32) {
 
     pub const default: Parsing = @bitCast(@as(u32, 0));
 
-    pub fn format(
-        parsing: Parsing,
-        comptime _: []const u8,
-        _: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
+    pub fn format(parsing: Parsing, writer: anytype) error{WriteFailed}!void {
         parsing.string(writer) catch |e| {
-            if (e == error.Incomplete) {
+            if (e == error.Incomplete)
                 try writer.writeAll("[incomplete]");
-            } else {
-                return e;
-            }
         };
     }
 
@@ -1365,6 +1357,36 @@ test "simple parsing tests" {
     try expectError(error.InvalidParsing, parse("M-GSF"));
     try expectError(error.Incomplete, parse("A-GS"));
     try expectError(error.Incomplete, parse("V"));
+}
+
+test "parsing_format" {
+    const gpa = std.testing.allocator;
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(gpa);
+
+    // Some basic sanity checks.
+    {
+        out.clearRetainingCapacity();
+        try (Parsing{
+            .part_of_speech = .noun,
+            .case = .nominative,
+            .number = .singular,
+            .gender = .masculine,
+        }).string(out.writer(gpa));
+        try expectEqualStrings("N-NSM", out.items);
+    }
+
+    {
+        out.clearRetainingCapacity();
+        const ct = try std.fmt.allocPrint(gpa, "{f}", .{Parsing{
+            .part_of_speech = .noun,
+            .case = .nominative,
+            .number = .singular,
+            .gender = .masculine,
+        }});
+        defer gpa.free(ct);
+        try expectEqualStrings("N-NSM", ct);
+    }
 }
 
 test "simple byz string tests" {

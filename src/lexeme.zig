@@ -16,49 +16,52 @@ genitiveSuffix: []const u8 = undefined,
 adjective: []const u8 = undefined,
 note: []const u8 = undefined,
 
-const Self = @This();
+const Lexeme = @This();
 
 /// Create this structure then use `init` to set up the fields.
-pub fn create(allocator: std.mem.Allocator) error{OutOfMemory}!*Self {
-    var s = try allocator.create(Self);
+pub fn create(allocator: std.mem.Allocator) error{OutOfMemory}!*Lexeme {
+    var s = try allocator.create(Lexeme);
     s.init();
     return s;
 }
 
 /// Deinit this structure and destroy it.
-pub fn destroy(self: *Self, allocator: Allocator) void {
+pub fn destroy(self: *Lexeme, allocator: Allocator) void {
     self.deinit(allocator);
     allocator.destroy(self);
 }
 
 /// Initialise all fields to reasonable defaults.
-pub fn init(self: *Self) void {
-    self.* = .{
-        .uid = 0,
-        .word = "",
-        .lang = .unknown,
-        .article = .unknown,
-        .pos = .{ .part_of_speech = .unknown },
-        .forms = .empty,
-        .glosses = .empty,
-        .strongs = .empty,
-        .tags = null,
-        .root = "",
-        .genitiveSuffix = "",
-        .adjective = "",
-    };
+pub fn init(self: *Lexeme) void {
+    self.* = .empty;
 }
+
+pub const empty: Lexeme = .{
+    .uid = 0,
+    .word = "",
+    .lang = .unknown,
+    .article = .unknown,
+    .pos = .{ .part_of_speech = .unknown },
+    .forms = .empty,
+    .glosses = .empty,
+    .strongs = .empty,
+    .tags = null,
+    .root = "",
+    .genitiveSuffix = "",
+    .adjective = "",
+};
 
 /// Release any memory under the control of this struct. The `forms` do not
 /// belong to this struct so are not released.
-pub fn deinit(self: *Self, allocator: Allocator) void {
-    if (self.word.len > 0) {
+pub fn deinit(self: *Lexeme, allocator: Allocator) void {
+    if (self.word.len > 0)
         allocator.free(self.word);
-    }
+
     for (self.glosses.items) |gloss| {
         gloss.destroy(allocator);
     }
     self.glosses.deinit(allocator);
+
     if (self.tags) |tags| {
         for (tags) |*tag| {
             allocator.free(tag.*);
@@ -66,31 +69,29 @@ pub fn deinit(self: *Self, allocator: Allocator) void {
         allocator.free(tags);
         self.tags = null;
     }
-    if (self.root.len > 0) {
+    if (self.root.len > 0)
         allocator.free(self.root);
-    }
-    if (self.adjective.len > 0) {
+
+    if (self.adjective.len > 0)
         allocator.free(self.adjective);
-    }
-    if (self.genitiveSuffix.len > 0) {
+
+    if (self.genitiveSuffix.len > 0)
         allocator.free(self.genitiveSuffix);
-    }
+
     self.strongs.deinit(allocator);
     self.forms.deinit(allocator);
 }
 
 /// Lookup the glosses according to the users preferred language
 /// with no fallback to a default language such as English.
-pub fn glosses_by_lang(self: *const Self, lang: Lang) ?*Gloss {
+pub fn glosses_by_lang(self: *const Lexeme, lang: Lang) ?*Gloss {
     for (self.glosses.items) |gloss| {
-        if (gloss.*.lang == lang) {
-            return gloss;
-        }
+        if (gloss.*.lang == lang) return gloss;
     }
     return null;
 }
 
-pub fn has_tag(self: *const Self, tag: []const u8) bool {
+pub fn has_tag(self: *const Lexeme, tag: []const u8) bool {
     if (self.tags) |tags|
         for (tags) |i|
             if (std.ascii.eqlIgnoreCase(i, tag))
@@ -120,7 +121,7 @@ pub const ADJECTIVE_PRIMARY = [_]Parsing{
 
 /// Returns the first form matching the specified parsing.
 ///
-pub fn formByParsing(self: *const Self, parsing: Parsing) ?*Form {
+pub fn formByParsing(self: *const Lexeme, parsing: Parsing) ?*Form {
     var found: ?*Form = null;
 
     // Loop until we fined the group of forms that have this
@@ -159,10 +160,9 @@ pub fn formByParsing(self: *const Self, parsing: Parsing) ?*Form {
 
 /// Returns the form that would usually appear at the top of
 /// a list of forms in a table.
-pub fn primaryForm(self: *const Self) ?*Form {
-    if (self.forms.items.len == 0) {
+pub fn primaryForm(self: *const Lexeme) ?*Form {
+    if (self.forms.items.len == 0)
         return null;
-    }
 
     switch (self.pos.part_of_speech) {
         .verb => {
@@ -194,7 +194,7 @@ pub fn primaryForm(self: *const Self) ?*Form {
 
 /// Sort by the `word` field. If word field matches, compare
 /// the `glosses` count.
-pub fn lessThan(_: ?[]const u8, self: *Self, other: *Self) bool {
+pub fn lessThan(_: ?[]const u8, self: *Lexeme, other: *Lexeme) bool {
     const x = @import("sort.zig").order(self.word, other.word);
     if (x == .lt) {
         return true;
@@ -208,7 +208,7 @@ pub fn lessThan(_: ?[]const u8, self: *Self, other: *Self) bool {
 /// Read all binary lexeme information along
 /// with any child form records that appear
 /// immediately after it.
-pub fn readBinary(self: *Self, arena: Allocator, t: *BinaryReader) !void {
+pub fn readBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader) !void {
     self.uid = try t.u24();
     const word = try t.string();
     self.word = try arena.dupe(u8, word);
@@ -246,7 +246,7 @@ pub fn readBinary(self: *Self, arena: Allocator, t: *BinaryReader) !void {
 
 /// Write all fields from a lexeme in binary format. No child
 /// form records are output.
-pub fn writeBinary(self: *Self, allocator: Allocator, data: *std.ArrayListUnmanaged(u8)) !void {
+pub fn writeBinary(self: *const Lexeme, allocator: Allocator, data: *std.ArrayListUnmanaged(u8)) !void {
     try append_u24(allocator, data, self.uid);
     try data.appendSlice(allocator, self.word);
     try data.append(allocator, US);
@@ -283,7 +283,7 @@ pub fn writeBinary(self: *Self, allocator: Allocator, data: *std.ArrayListUnmana
 ///
 /// Ἀαρών|el|17|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
 /// Ἀαρών|el|17|ProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
-pub fn readText(self: *Self, arena: Allocator, t: *Parser) !void {
+pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
     _ = t.skip_whitespace_and_lines();
 
     const word_field = try form.read_field(t);
@@ -362,7 +362,7 @@ pub fn readText(self: *Self, arena: Allocator, t: *Parser) !void {
 /// ἀγαπητός|el||893822|27||Adjective||ἀγαπητ|en:beloved:loved#zh:親愛#ru:любимый#es:amado:deseado|ἀγαπητός,-ή,-όν||
 /// Ἀβιληνή|el||293832|9|ἡ|ProperNoun|-ῆς|Ἀβιλην|en:Abilene#zh:亞比利尼||person|
 ///
-pub fn oldReadText(self: *Self, arena: Allocator, t: *Parser) !void {
+pub fn oldReadText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
     _ = t.skip_whitespace_and_lines();
 
     const word_field = try form.read_field(t);
@@ -397,21 +397,17 @@ pub fn oldReadText(self: *Self, arena: Allocator, t: *Parser) !void {
 
     if (!t.consume_if('|')) return error.MissingField;
     const root = try form.read_field(t); // Lexeme root
-    if (root.len > 0) {
+    if (root.len > 0)
         self.root = try arena.dupe(u8, root);
-    }
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+
+    if (!t.consume_if('|')) return error.MissingField;
 
     try readTextGlosses(arena, t, &self.glosses); // Glosses
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+    if (!t.consume_if('|')) return error.MissingField;
+
     const adjectives = try form.read_field(t); // Adjective forms
-    if (adjectives.len > 0) {
+    if (adjectives.len > 0)
         self.adjective = try arena.dupe(u8, adjectives);
-    }
 
     if (!t.consume_if('|')) return error.MissingField;
     const tag_set = try form.read_field(t); // Tags
@@ -432,7 +428,7 @@ pub fn oldReadText(self: *Self, arena: Allocator, t: *Parser) !void {
     _ = t.read_until_eol();
 }
 
-pub fn writeText(self: *Self, writer: anytype) error{OutOfMemory}!void {
+pub fn writeText(self: *const Lexeme, writer: anytype) error{OutOfMemory}!void {
     try writer.writeAll(self.word);
     try writer.writeByte('|');
     try writer.writeAll(self.lang.to_code());
@@ -471,7 +467,7 @@ pub fn writeText(self: *Self, writer: anytype) error{OutOfMemory}!void {
 //   Ἀαρών|N-NSM|false|17||
 test "read_lexeme" {
     var data = Parser.init("Ἀαρών|el|17|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|");
-    var lexeme = try Self.create(std.testing.allocator);
+    var lexeme = try Lexeme.create(std.testing.allocator);
     defer lexeme.destroy(std.testing.allocator);
     try lexeme.readText(std.testing.allocator, &data);
     try expectEqualStrings("Ἀαρών", lexeme.word);
@@ -493,7 +489,7 @@ test "read_lexeme" {
 
 test "read_lexeme_short" {
     var data = Parser.init("α|el|123123|Letter|||||en:alpha||alphabet|");
-    var lexeme = try Self.create(std.testing.allocator);
+    var lexeme = try Lexeme.create(std.testing.allocator);
     defer lexeme.destroy(std.testing.allocator);
     try lexeme.readText(std.testing.allocator, &data);
     try expectEqualStrings("α", lexeme.word);
@@ -504,7 +500,7 @@ test "read_lexeme2" {
     var data = Parser.init(
         \\ἀγγεῖον|el|388|Noun|τό|-ου|30,55|ἀγγεῖ|en:vessel:flask:container:can|a b c|tag|
     );
-    var lexeme = try Self.create(std.testing.allocator);
+    var lexeme = try Lexeme.create(std.testing.allocator);
     defer lexeme.destroy(std.testing.allocator);
     try lexeme.readText(std.testing.allocator, &data);
     try expectEqual(Lang.greek, lexeme.lang);
@@ -519,7 +515,7 @@ test "read_lexeme2" {
 test "lexeme_bytes" {
     const allocator = std.testing.allocator;
     var data = Parser.init("cat|el|17|IndeclinableProperNoun|ὁ||2|cat|en:cat#zh:ara#es:nat||person|");
-    var lexeme = try Self.create(allocator);
+    var lexeme = try Lexeme.create(allocator);
     defer lexeme.destroy(allocator);
     try lexeme.readText(std.testing.allocator, &data);
 
@@ -554,13 +550,13 @@ test "old_format" {
         \\ἀγαπητός|el||893822|27||Adjective||ἀγαπητ|en:beloved:loved#zh:親愛#ru:любимый#es:amado:deseado|ἀγαπητός,-ή,-όν||
         \\Ἀβιληνή|el||293832|9|ἡ|ProperNoun|-ῆς|Ἀβιλην|en:Abilene#zh:亞比利尼||person|
     );
-    var lexeme1 = try Self.create(allocator);
+    var lexeme1 = try Lexeme.create(allocator);
     defer lexeme1.destroy(allocator);
     try lexeme1.oldReadText(allocator, &data);
-    var lexeme2 = try Self.create(allocator);
+    var lexeme2 = try Lexeme.create(allocator);
     defer lexeme2.destroy(allocator);
     try lexeme2.oldReadText(allocator, &data);
-    var lexeme3 = try Self.create(allocator);
+    var lexeme3 = try Lexeme.create(allocator);
     defer lexeme3.destroy(allocator);
     try lexeme3.oldReadText(std.testing.allocator, &data);
     try expectEqualStrings("ἀγαπάω", lexeme1.word);
@@ -583,13 +579,13 @@ test "compare_lexeme" {
             \\Ἀαρών|el|18|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
             \\Ἀαρώνα|el|19|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
         );
-        var lexeme1 = try Self.create(allocator);
+        var lexeme1 = try Lexeme.create(allocator);
         defer lexeme1.destroy(allocator);
         try lexeme1.readText(allocator, &data);
-        var lexeme2 = try Self.create(allocator);
+        var lexeme2 = try Lexeme.create(allocator);
         defer lexeme2.destroy(allocator);
         try lexeme2.readText(allocator, &data);
-        var lexeme3 = try Self.create(allocator);
+        var lexeme3 = try Lexeme.create(allocator);
         defer lexeme3.destroy(allocator);
         try lexeme3.readText(std.testing.allocator, &data);
         try expectEqual(true, lessThan(null, lexeme1, lexeme2));
@@ -603,13 +599,13 @@ test "compare_lexeme" {
             \\Ἀαρών|el|18|IndeclinableProperNoun||ὁ|3|Ἀαρών|en:Aaron#zh:亞倫||person|
             \\Ἀαρών|el|19|IndeclinableProperNoun||ὁ|3|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
         );
-        var lexeme1 = try Self.create(allocator);
+        var lexeme1 = try Lexeme.create(allocator);
         defer lexeme1.destroy(allocator);
         try lexeme1.readText(allocator, &data);
-        var lexeme2 = try Self.create(allocator);
+        var lexeme2 = try Lexeme.create(allocator);
         defer lexeme2.destroy(allocator);
         try lexeme2.readText(allocator, &data);
-        var lexeme3 = try Self.create(allocator);
+        var lexeme3 = try Lexeme.create(allocator);
         defer lexeme3.destroy(allocator);
         try lexeme3.readText(allocator, &data);
         try expectEqual(true, lessThan(null, lexeme1, lexeme2));
@@ -692,7 +688,7 @@ test "return_correct_preferred_form" {
 test "binary_lexeme_load_save" {
     const allocator = std.testing.allocator;
     var data = Parser.init("ἅγιος|el|519|Adjective|||40,39|ἅγι|en:holy:set apart:sacred#zh:聖潔的:至聖所:聖所:聖徒:聖:聖潔#es:santo:apartado:sagrado|ἅγιος,-α,-ον|worship, church|\n");
-    var lexeme = try Self.create(allocator);
+    var lexeme = try Lexeme.create(allocator);
     defer lexeme.destroy(allocator);
     try lexeme.readText(allocator, &data);
     try expectEqual(2, lexeme.strongs.items.len);
@@ -704,7 +700,7 @@ test "binary_lexeme_load_save" {
     try lexeme.writeBinary(allocator, &out);
     try append_u16(allocator, &out, 0); // no forms
 
-    var lexeme2 = try Self.create(allocator);
+    var lexeme2 = try Lexeme.create(allocator);
     defer lexeme2.destroy(allocator);
     var r = BinaryReader.init(out.items);
     try lexeme2.readBinary(allocator, &r);
@@ -715,7 +711,7 @@ test "binary_lexeme_load_save" {
 
 test "read_invalid_lexeme_id" {
     var data = Parser.init("Ἀαρών|el|nana|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|\n");
-    var lexeme = try Self.create(std.testing.allocator);
+    var lexeme = try Lexeme.create(std.testing.allocator);
     defer lexeme.destroy(std.testing.allocator);
     const e = lexeme.readText(std.testing.allocator, &data);
     try expectEqual(e, error.InvalidU24);

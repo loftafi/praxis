@@ -11,37 +11,39 @@ references: std.ArrayListUnmanaged(Reference) = .empty,
 glosses: std.ArrayListUnmanaged(*Gloss) = .empty,
 lexeme: ?*Lexeme = null,
 
-const Self = @This();
+const Form = @This();
 
-pub fn create(allocator: Allocator) error{OutOfMemory}!*Self {
-    var s = try allocator.create(Self);
-    errdefer allocator.destroy(Self);
+pub fn create(allocator: Allocator) error{OutOfMemory}!*Form {
+    var s = try allocator.create(Form);
+    errdefer allocator.destroy(Form);
     s.init();
     return s;
 }
 
-pub fn destroy(self: *Self, allocator: Allocator) void {
+pub fn destroy(self: *Form, allocator: Allocator) void {
     self.deinit(allocator);
     allocator.destroy(self);
 }
 
-pub fn init(self: *Self) void {
-    self.* = .{
-        .uid = 0,
-        .word = "",
-        .parsing = .{},
-        .lexeme = null,
-        .preferred = false,
-        .incorrect = false,
-        .glosses = .empty,
-        .references = .empty,
-    };
+pub const empty = Form{
+    .uid = 0,
+    .word = "",
+    .parsing = .{},
+    .lexeme = null,
+    .preferred = false,
+    .incorrect = false,
+    .glosses = .empty,
+    .references = .empty,
+};
+
+pub fn init(self: *Form) void {
+    self.* = .empty;
 }
 
-pub fn deinit(self: *Self, allocator: Allocator) void {
-    if (self.word.len > 0) {
+pub fn deinit(self: *Form, allocator: Allocator) void {
+    if (self.word.len > 0)
         allocator.free(self.word);
-    }
+
     for (self.glosses.items) |gloss| {
         gloss.destroy(allocator);
     }
@@ -51,16 +53,14 @@ pub fn deinit(self: *Self, allocator: Allocator) void {
 
 /// Output the bytes representing the form. No terminator at
 /// end of record.
-pub fn writeBinary(self: *Self, allocator: Allocator, data: *std.ArrayListUnmanaged(u8)) error{OutOfMemory}!void {
+pub fn writeBinary(self: *const Form, allocator: Allocator, data: *std.ArrayListUnmanaged(u8)) error{OutOfMemory}!void {
     try append_u24(allocator, data, self.uid);
     try append_u32(allocator, data, @bitCast(self.parsing));
+
     var flags: u8 = 0;
-    if (self.preferred) {
-        flags |= 0x1;
-    }
-    if (self.incorrect) {
-        flags |= 0x10;
-    }
+    if (self.preferred) flags |= 0x1;
+    if (self.incorrect) flags |= 0x10;
+
     try append_u8(allocator, data, flags);
     try data.appendSlice(allocator, self.word);
     try data.append(allocator, US);
@@ -85,7 +85,7 @@ pub fn writeBinary(self: *Self, allocator: Allocator, data: *std.ArrayListUnmana
     //try data.append(0xff);
 }
 
-pub fn glosses_by_lang(self: *const Self, lang: Lang) ?*Gloss {
+pub fn glosses_by_lang(self: *const Form, lang: Lang) ?*Gloss {
     for (self.glosses.items) |gloss| {
         if (gloss.*.lang == lang) {
             return gloss;
@@ -103,7 +103,7 @@ pub fn glosses_by_lang(self: *const Self, lang: Lang) ?*Gloss {
 
 /// Sort on the `word` field in ascii alphabetical. Fall back
 /// to sort by `preferred` value and `glosses` count.
-pub fn lessThan(_: void, self: *Self, other: *Self) bool {
+pub fn lessThan(_: void, self: *const Form, other: *const Form) bool {
     const x = @import("sort.zig").order(self.word, other.word);
     if (x == .lt) {
         return true;
@@ -126,7 +126,7 @@ pub fn lessThan(_: void, self: *Self, other: *Self) bool {
 /// longer words, and subsorting by popularity of the word.
 /// Provide a `key` if you wish two identical form text strings
 /// to fall back to preferring a parent lexeme text string `key`.
-pub fn autocompleteLessThan(key: ?[]const u8, self: *Self, other: *Self) bool {
+pub fn autocompleteLessThan(key: ?[]const u8, self: *const Form, other: *const Form) bool {
     if (self.word.len < other.word.len) return true;
     if (self.word.len > other.word.len) return false;
 
@@ -230,7 +230,7 @@ pub fn read_u24(t: *Parser) error{InvalidU24}!u24 {
 ///  - gloss end RS (1)
 ///  - reference count (4)
 ///  - module, book, chapter, verse, word (2,2,2,2,2)
-pub fn readBinary(self: *Self, arena: Allocator, t: *BinaryReader) !void {
+pub fn readBinary(self: *Form, arena: Allocator, t: *BinaryReader) !void {
     self.uid = try t.u24();
     self.parsing = @bitCast(try t.u32());
     const flags = try t.u8();
@@ -260,7 +260,7 @@ pub fn readBinary(self: *Self, arena: Allocator, t: *BinaryReader) !void {
     }
 }
 
-pub fn writeText(self: *Self, writer: anytype) error{ OutOfMemory, Incomplete }!void {
+pub fn writeText(self: *Form, writer: anytype) error{ OutOfMemory, Incomplete }!void {
     try writer.writeAll(self.word);
     try writer.writeByte('|');
     try self.parsing.string(writer);
@@ -283,7 +283,7 @@ pub fn writeText(self: *Self, writer: anytype) error{ OutOfMemory, Incomplete }!
 ///
 /// `Ἀαρών|N-NSM|false|17||`
 /// `δράκοντα|N-ASM|false|37628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3`
-pub fn readText(self: *Self, arena: Allocator, t: *Parser) !void {
+pub fn readText(self: *Form, arena: Allocator, t: *Parser) !void {
     _ = t.skip_whitespace_and_lines();
     //const start = t.index;
     const word_field = try read_field(t);
@@ -352,7 +352,7 @@ const expectEqualSlices = std.testing.expectEqualSlices;
 
 test "read_form" {
     var data = Parser.init("ἄρτος|N-NSM|false|20||\nποῦ|N-NSM|true|21|en:fish|byz#Revelation 20:2 3,kjtr#Revelation 20:2 3\n");
-    var form = try Self.create(std.testing.allocator);
+    var form = try Form.create(std.testing.allocator);
     defer form.destroy(std.testing.allocator);
     try form.readText(std.testing.allocator, &data);
     try expectEqualStrings("ἄρτος", form.word);
@@ -361,7 +361,7 @@ test "read_form" {
     try expectEqual(0, form.glosses.items.len);
     try expect(data.consume_if('\n'));
 
-    var form2 = try Self.create(std.testing.allocator);
+    var form2 = try Form.create(std.testing.allocator);
     defer form2.destroy(std.testing.allocator);
     try form2.readText(std.testing.allocator, &data);
     try expectEqualStrings("ποῦ", form2.word);
@@ -376,7 +376,7 @@ pub const std_options = struct {
 };
 
 test "form_init" {
-    var form = try Self.create(std.testing.allocator);
+    var form = try Form.create(std.testing.allocator);
     defer form.destroy(std.testing.allocator);
     try expectEqual(0, form.word.len);
     try expectEqual(false, form.preferred);
@@ -389,7 +389,7 @@ test "form_read_write_text" {
     const allocator = std.testing.allocator;
     const in = "fish|N-NSM|true|20|en:swim:to arch#zh:你好|sbl#Mark 11:22 33,sr#Luke 1:2 3\n";
     var t = Parser.init(in);
-    var form = try Self.create(allocator);
+    var form = try Form.create(allocator);
     defer form.destroy(allocator);
     try form.readText(allocator, &t);
 
@@ -402,7 +402,7 @@ test "form_read_write_text" {
 
 test "form_read_write_bytes" {
     var t = Parser.init("fish|N-NSM|true|20|en:swim:to arch#zh:你好|sbl#Mark 11:22 33,sr#Luke 1:2 3\n");
-    var form = try Self.create(std.testing.allocator);
+    var form = try Form.create(std.testing.allocator);
     defer form.destroy(std.testing.allocator);
     try form.readText(std.testing.allocator, &t);
 
@@ -422,7 +422,7 @@ test "form_read_write_bytes" {
     );
     try expectEqual(63, out.items.len);
 
-    var form_loaded = try Self.create(std.testing.allocator);
+    var form_loaded = try Form.create(std.testing.allocator);
     defer form_loaded.destroy(std.testing.allocator);
     var p = BinaryReader.init(out.items);
     try form_loaded.readBinary(std.testing.allocator, &p);
@@ -439,9 +439,9 @@ test "form_read_write_two_items" {
         \\fish|N-NSM|true|20|en:swim|
         \\cars|N-NSM|true|21|en:to arch|sr#Luke 1:2 3,byz#Mark 11:22 33
     );
-    var form1 = try Self.create(allocator);
+    var form1 = try Form.create(allocator);
     defer form1.destroy(allocator);
-    var form2 = try Self.create(allocator);
+    var form2 = try Form.create(allocator);
     defer form2.destroy(allocator);
     try form1.readText(allocator, &t);
     try form2.readText(allocator, &t);
@@ -452,9 +452,9 @@ test "form_read_write_two_items" {
     try form2.writeBinary(allocator, &out);
 
     //try expectEqualSlices(u8, &.{0}, out.items);
-    var form3 = try Self.create(allocator);
+    var form3 = try Form.create(allocator);
     defer form3.destroy(allocator);
-    var form4 = try Self.create(allocator);
+    var form4 = try Form.create(allocator);
     defer form4.destroy(allocator);
     var data = BinaryReader.init(out.items);
     try form3.readBinary(allocator, &data);
@@ -469,8 +469,8 @@ fn make_test_form(
     gpa: Allocator,
     form: []const u8,
     lexeme: []const u8,
-) error{OutOfMemory}!*Self {
-    const f1 = try Self.create(gpa);
+) error{OutOfMemory}!*Form {
+    const f1 = try Form.create(gpa);
     f1.word = try gpa.dupe(u8, form);
     f1.lexeme = try Lexeme.create(gpa);
     f1.lexeme.?.word = try gpa.dupe(u8, lexeme);
@@ -488,14 +488,14 @@ test "form_autocomplete" {
     defer f2.destroy(gpa);
     defer f2.lexeme.?.destroy(gpa);
 
-    var items = [_]*Self{ f1, f2 };
+    var items = [_]*Form{ f1, f2 };
 
     {
         // Normal autocomplete order
         try expect(!autocompleteLessThan(null, f1, f2));
         try expect(autocompleteLessThan(null, f2, f1));
 
-        std.mem.sort(*Self, &items, @as(?[]const u8, null), autocompleteLessThan);
+        std.mem.sort(*Form, &items, @as(?[]const u8, null), autocompleteLessThan);
         try expectEqualStrings("ant", items[0].word);
         try expectEqualStrings("hal", items[1].word);
     }
@@ -505,7 +505,7 @@ test "form_autocomplete" {
         try expect(!autocompleteLessThan("ant", f1, f2));
         try expect(autocompleteLessThan("ant", f2, f1));
 
-        std.mem.sort(*Self, &items, @as(?[]const u8, "ant"), autocompleteLessThan);
+        std.mem.sort(*Form, &items, @as(?[]const u8, "ant"), autocompleteLessThan);
         try expectEqualStrings("ant", items[0].word);
         try expectEqualStrings("hal", items[1].word);
     }
@@ -518,19 +518,19 @@ test "form_autocomplete" {
     defer g2.lexeme.?.destroy(gpa);
     defer g2.destroy(gpa);
 
-    var items1 = [_]*Self{ g1, g2 };
-    var items2 = [_]*Self{ g1, g2 };
+    var items1 = [_]*Form{ g1, g2 };
+    var items2 = [_]*Form{ g1, g2 };
 
     {
         // Hal gets prioritised first as a lexical form
         //try expect(autocompleteLessThan("hal", f1, f2));
         //try expect(!autocompleteLessThan("hal", f2, f1));
 
-        std.mem.sort(*Self, &items1, @as(?[]const u8, "car"), autocompleteLessThan);
+        std.mem.sort(*Form, &items1, @as(?[]const u8, "car"), autocompleteLessThan);
         try expectEqualStrings("car", items1[0].lexeme.?.word);
         try expectEqualStrings("ant", items1[1].lexeme.?.word);
 
-        std.mem.sort(*Self, &items2, @as(?[]const u8, "ant"), autocompleteLessThan);
+        std.mem.sort(*Form, &items2, @as(?[]const u8, "ant"), autocompleteLessThan);
         try expectEqualStrings("ant", items2[0].lexeme.?.word);
         try expectEqualStrings("car", items2[1].lexeme.?.word);
     }
@@ -545,13 +545,13 @@ test "compare_form" {
             \\ἄρτο|N-NSM|false|21|en:fish|
             \\ἄρτος|N-NSM|false|22|en:fish|
         );
-        var form1 = try Self.create(allocator);
+        var form1 = try Form.create(allocator);
         defer form1.destroy(allocator);
         try form1.readText(allocator, &data);
-        var form2 = try Self.create(allocator);
+        var form2 = try Form.create(allocator);
         defer form2.destroy(allocator);
         try form2.readText(allocator, &data);
-        var form3 = try Self.create(allocator);
+        var form3 = try Form.create(allocator);
         defer form3.destroy(allocator);
         try form3.readText(allocator, &data);
         try expectEqual(true, lessThan({}, form1, form2));
@@ -565,13 +565,13 @@ test "compare_form" {
             \\ἄρτος|N-NSM|false|21|en:fish#zh:fish|
             \\ἄρτος|N-NSM|false|22|en:fish#zh:fishing#es:fishes|
         );
-        var form1 = try Self.create(allocator);
+        var form1 = try Form.create(allocator);
         defer form1.destroy(allocator);
         try form1.readText(allocator, &data);
-        var form2 = try Self.create(allocator);
+        var form2 = try Form.create(allocator);
         defer form2.destroy(allocator);
         try form2.readText(allocator, &data);
-        var form3 = try Self.create(allocator);
+        var form3 = try Form.create(allocator);
         defer form3.destroy(allocator);
         try form3.readText(allocator, &data);
     }
@@ -581,13 +581,13 @@ test "compare_form" {
             \\ἄρτος|N-NSM|true|21|en:fish#zh:fish|
             \\ἄρτος|N-NSM|false|22|en:fish#zh:fishing#es:fishes|
         );
-        var form1 = try Self.create(allocator);
+        var form1 = try Form.create(allocator);
         defer form1.destroy(allocator);
         try form1.readText(allocator, &data);
-        var form2 = try Self.create(allocator);
+        var form2 = try Form.create(allocator);
         defer form2.destroy(allocator);
         try form2.readText(allocator, &data);
-        var form3 = try Self.create(allocator);
+        var form3 = try Form.create(allocator);
         defer form3.destroy(allocator);
         try form3.readText(allocator, &data);
 
@@ -605,7 +605,7 @@ test "compare_form" {
 
 test "read_invalid_form_parsing" {
     var data = Parser.init("ἄρτος|N-NZ|false|29||\nποῦ|N-NSM|true|21||\n");
-    var form = try Self.create(std.testing.allocator);
+    var form = try Form.create(std.testing.allocator);
     defer form.destroy(std.testing.allocator);
     const e = form.readText(std.testing.allocator, &data);
     try expectEqual(ParsingError.InvalidParsing, e);
@@ -613,7 +613,7 @@ test "read_invalid_form_parsing" {
 
 test "read_incomplete_form_parsing" {
     var data = Parser.init("ἄρτος|N-NA|false|20||\nποῦ|N-NSM|true|21||\n");
-    var form = try Self.create(std.testing.allocator);
+    var form = try Form.create(std.testing.allocator);
     defer form.destroy(std.testing.allocator);
     const e = form.readText(std.testing.allocator, &data);
     try expectEqual(ParsingError.InvalidParsing, e);

@@ -271,9 +271,9 @@ pub const Dictionary = struct {
     }
 
     fn generateUniqueUid(
-        _: *Dictionary,
-        lexeme_uid: *std.AutoHashMap(u24, *Lexeme),
-        form_uid: *std.AutoHashMap(u24, *Form),
+        _: *const Dictionary,
+        lexeme_uid: *const std.AutoHashMap(u24, *Lexeme),
+        form_uid: *const std.AutoHashMap(u24, *Form),
     ) u24 {
         while (true) {
             const next = random_u24();

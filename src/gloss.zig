@@ -128,7 +128,7 @@ pub fn readTextGlosses(
 
 pub fn writeTextGlosses(
     writer: anytype,
-    entries: *std.ArrayListUnmanaged(*Self),
+    entries: *const std.ArrayListUnmanaged(*Self),
 ) error{OutOfMemory}!void {
     for (entries.items, 0..) |gloss, i| {
         if (i > 0) try writer.writeByte('#');

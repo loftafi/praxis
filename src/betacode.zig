@@ -75,7 +75,7 @@ pub const max_utf8_character_length: usize = 4;
 pub fn betacode_to_greek(
     word: []const u8,
     version: Type,
-    buffer: *BoundedArray(u8, MAX_WORD_SIZE),
+    buffer: *BoundedArray(u8, max_word_size),
 ) error{
     UnexpectedError,
     UnexpectedAccent,
@@ -703,7 +703,7 @@ inline fn apply_accent(c: u21, accents: u21) error{UnexpectedAccent}![]const u8 
     return error.UnexpectedAccent;
 }
 
-pub const MAX_WORD_SIZE = @import("search_index.zig").MAX_WORD_SIZE;
+pub const max_word_size = @import("search_index.zig").max_word_size;
 
 const std = @import("std");
 
@@ -714,7 +714,7 @@ const ue = std.unicode.utf8EncodeComptime;
 const BoundedArray = @import("bounded_array.zig").BoundedArray;
 
 test "test_traits" {
-    var buffer = try BoundedArray(u8, MAX_WORD_SIZE).init(0);
+    var buffer = try BoundedArray(u8, max_word_size).init(0);
     try eq("", try betacode_to_greek("", .default, &buffer));
     try eq("αβ", try betacode_to_greek("ab", .default, &buffer));
     try eq("αβ", try betacode_to_greek(" ab ", .default, &buffer));
@@ -722,7 +722,7 @@ test "test_traits" {
 }
 
 test "valid_default_encoding" {
-    var buffer = try BoundedArray(u8, MAX_WORD_SIZE).init(0);
+    var buffer = try BoundedArray(u8, max_word_size).init(0);
     try eq(try betacode_to_greek("", .default, &buffer), "");
     try eq(try betacode_to_greek(" ", .default, &buffer), "");
     try eq(try betacode_to_greek("  ", .default, &buffer), "");
@@ -751,7 +751,7 @@ test "valid_default_encoding" {
 }
 
 test "trailing_accents" {
-    var buffer = try BoundedArray(u8, MAX_WORD_SIZE).init(0);
+    var buffer = try BoundedArray(u8, max_word_size).init(0);
     try eq("τῷ", try betacode_to_greek("tw=|", .default, &buffer));
     try eq("ῷτ", try betacode_to_greek("w=|t", .default, &buffer));
     try eq("τῶ", try betacode_to_greek("tw=", .default, &buffer));
@@ -761,7 +761,7 @@ test "trailing_accents" {
 }
 
 test "leading accents" {
-    var buffer = try BoundedArray(u8, MAX_WORD_SIZE).init(0);
+    var buffer = try BoundedArray(u8, max_word_size).init(0);
     try eq(try betacode_to_greek(")Ihsou^", .default, &buffer), "Ἰησοῦ");
     try eq(try betacode_to_greek(")a", .default, &buffer), "ἀ");
     try eq(try betacode_to_greek("(a", .default, &buffer), "ἁ");
@@ -773,7 +773,7 @@ test "leading accents" {
 }
 
 test "invalid_default_encoding" {
-    var buffer = try BoundedArray(u8, MAX_WORD_SIZE).init(0);
+    var buffer = try BoundedArray(u8, max_word_size).init(0);
     try std.testing.expectError(error.UnexpectedCharacter, betacode_to_greek("a\\b'a", .default, &buffer));
     try std.testing.expectError(error.UnexpectedCharacter, betacode_to_greek("dε", .default, &buffer));
     try std.testing.expectError(error.UnexpectedCharacter, betacode_to_greek("dε ", .default, &buffer));
@@ -782,7 +782,7 @@ test "invalid_default_encoding" {
 }
 
 test "valid_tlg_encoding" {
-    var buffer = try BoundedArray(u8, MAX_WORD_SIZE).init(0);
+    var buffer = try BoundedArray(u8, max_word_size).init(0);
     try eq(try betacode_to_greek("*qeo/s", .tlg, &buffer), "Θεός");
     try eq(try betacode_to_greek("*QEO/S", .tlg, &buffer), "Θεός");
     try eq(try betacode_to_greek("xri", .tlg, &buffer), "χρι");
@@ -800,7 +800,7 @@ test "valid_tlg_encoding" {
 }
 
 test "invalid_tlg_encoding" {
-    var buffer = try BoundedArray(u8, MAX_WORD_SIZE).init(0);
+    var buffer = try BoundedArray(u8, max_word_size).init(0);
     try std.testing.expectError(error.UnexpectedCharacter, betacode_to_greek("a\\b'a", .tlg, &buffer));
     try std.testing.expectError(error.UnexpectedCharacter, betacode_to_greek("dε", .tlg, &buffer));
 }

@@ -1,19 +1,20 @@
 //! Hold a collection of `lexeme` or `form` objects keyed to a
 //! string. Searching for a `lexeme` or `form` using an exact or partial string match.
 
-pub const MAX_WORD_SIZE = 500;
-const MAX_INDEX_KEYWORD_SIZE = 50;
-const MAX_SEARCH_RESULTS = 60;
+pub const max_word_size = 500;
+const max_index_keyword_size = 50;
+const max_search_results = 60;
 
 pub const IndexError = error{ WordTooLong, EmptyWord };
 
-/// A wrapper for a StringHashMap that allows searching for prefixes of the key.
+/// A wrapper for a HashMap that allows searching for prefixes of the key.
 pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
     return struct {
         const Self = @This();
 
         /// Map a search `keyword` string to a `SearchResult` record.
-        index: StringHashMapUnmanaged(*SearchResult),
+        index: StringHashMapUnmanaged(*SearchResult) = .empty,
+        //index: std.HashMapUnmanaged([]const u8, *SearchResult, farmhash.FarmHashContext, std.hash_map.default_max_load_percentage) = .empty,
 
         /// Holds allocated copies of each `keyword` in the `index`.
         slices: ArrayListUnmanaged([]const u8),
@@ -46,7 +47,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             EmptyWord,
             InvalidUtf8,
         }!void {
-            if (word.len >= MAX_WORD_SIZE) {
+            if (word.len >= max_word_size) {
                 std.debug.print("Word {s} too long for index.", .{word});
                 return IndexError.WordTooLong;
             }
@@ -55,8 +56,8 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             }
 
             self.slices.clearRetainingCapacity();
-            var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-            var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+            var unaccented_word = BoundedArray(u8, max_word_size){};
+            var normalised_word = BoundedArray(u8, max_word_size){};
             try keywordify(allocator, word, &unaccented_word, &normalised_word, &self.slices);
 
             var result = try self.getOrCreateSearchResult(
@@ -100,14 +101,14 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
         }
 
         pub fn lookup(self: *Self, word: []const u8) ?*SearchResult {
-            if (word.len >= MAX_WORD_SIZE) {
+            if (word.len >= max_word_size) {
                 // If search word is too long, it definitely
                 // is not in the search result.
                 return null;
             }
 
-            var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-            var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+            var unaccented_word = BoundedArray(u8, max_word_size){};
+            var normalised_word = BoundedArray(u8, max_word_size){};
             normalise_word(word, &unaccented_word, &normalised_word) catch {
                 // If normalisation fails due to invalid utf8 encoding
                 // then we know this query has no results.
@@ -127,7 +128,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
         }
 
         /// Sort search results to most likely matches and throw
-        /// away anything over MAX_SEARCH_RESULTS search results.
+        /// away anything over max_search_results search results.
         pub fn sort(self: *Self) !void {
             var i = self.index.valueIterator();
             while (i.next()) |sr| {
@@ -287,12 +288,12 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                 allocator: Allocator,
                 data: *ArrayListUnmanaged(u8),
             ) error{ OutOfMemory, IndexTooLarge }!void {
-                std.debug.assert(MAX_SEARCH_RESULTS <= 0xff);
+                std.debug.assert(max_search_results <= 0xff);
 
                 try data.appendSlice(allocator, self.keyword);
                 try data.append(allocator, US);
 
-                var count: usize = @min(self.exact_accented.items.len, MAX_SEARCH_RESULTS);
+                var count: usize = @min(self.exact_accented.items.len, max_search_results);
                 if (count > 0xff) {
                     log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_accented.items.len });
                     return error.IndexTooLarge;
@@ -304,7 +305,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                     try append_u24(allocator, data, @intCast(g.uid));
                 }
 
-                count = @min(self.exact_unaccented.items.len, MAX_SEARCH_RESULTS);
+                count = @min(self.exact_unaccented.items.len, max_search_results);
                 if (count > 0xff) {
                     log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_unaccented.items.len });
                     return error.IndexTooLarge;
@@ -316,7 +317,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                     try append_u24(allocator, data, @intCast(g.uid));
                 }
 
-                count = @min(self.partial_match.items.len, MAX_SEARCH_RESULTS);
+                count = @min(self.partial_match.items.len, max_search_results);
                 if (count > 0xff) {
                     log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.partial_match.items.len });
                     return error.IndexTooLarge;
@@ -340,10 +341,10 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
 ////
 pub fn normalise_word(
     word: []const u8,
-    unaccented: *BoundedArray(u8, MAX_WORD_SIZE + 1),
-    normalised: *BoundedArray(u8, MAX_WORD_SIZE + 1),
+    unaccented: *BoundedArray(u8, max_word_size),
+    normalised: *BoundedArray(u8, max_word_size),
 ) !void {
-    if (word.len >= MAX_WORD_SIZE) {
+    if (word.len >= max_word_size) {
         return IndexError.WordTooLong;
     }
     var view = std.unicode.Utf8View.init(word) catch |e| {
@@ -410,11 +411,11 @@ pub fn normalise_word(
 pub fn keywordify(
     allocator: Allocator,
     word: []const u8,
-    unaccented: *BoundedArray(u8, MAX_WORD_SIZE + 1),
-    normalised: *BoundedArray(u8, MAX_WORD_SIZE + 1),
+    unaccented: *BoundedArray(u8, max_word_size),
+    normalised: *BoundedArray(u8, max_word_size),
     substrings: *ArrayListUnmanaged([]const u8),
 ) error{ OutOfMemory, WordTooLong, InvalidUtf8 }!void {
-    if (word.len >= MAX_WORD_SIZE) {
+    if (word.len >= max_word_size) {
         return IndexError.WordTooLong;
     }
     var view = std.unicode.Utf8View.init(word) catch |e| {
@@ -474,7 +475,7 @@ pub fn keywordify(
             // If we have only seen one unicode character, and there are more
             // characters to read, don't keep a one character slice
             continue;
-        } else if (character_count < MAX_INDEX_KEYWORD_SIZE) {
+        } else if (character_count < max_index_keyword_size) {
             const k1 = normalised.slice();
             const k2 = unaccented.slice();
             try substrings.append(allocator, k1);
@@ -755,6 +756,7 @@ const std = @import("std");
 const log = std.log;
 const is_stopword = @import("gloss_tokens.zig").is_stopword;
 
+const farmhash = @import("farmhash64.zig");
 const StringHashMapUnmanaged = std.StringHashMapUnmanaged;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;
@@ -779,24 +781,24 @@ test "unaccent" {
 
 test "normalise simple" {
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "abc";
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("abc", unaccented_word.slice());
         try se("abc", normalised_word.slice());
     }
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "AbC";
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("abc", unaccented_word.slice());
         try se("abc", normalised_word.slice());
     }
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "Kenan";
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("kenan", unaccented_word.slice());
@@ -804,72 +806,72 @@ test "normalise simple" {
     }
 
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "αβγ";
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("αβγ", unaccented_word.slice());
         try se("αβγ", normalised_word.slice());
     }
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "ἀρτος";
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("αρτοσ", unaccented_word.slice());
         try se("ἀρτος", normalised_word.slice());
     }
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "ἄρτος";
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("αρτοσ", unaccented_word.slice());
         try se("ἄρτος", normalised_word.slice());
     }
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "ἌΡΤΟΣ";
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("αρτοσ", unaccented_word.slice());
         try se("ἄρτος", normalised_word.slice());
     }
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "ἄρτόσ";
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("αρτοσ", unaccented_word.slice());
         try se("ἄρτος", normalised_word.slice());
     }
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "ὥρα";
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("ωρα", unaccented_word.slice());
         try se("ὥρα", normalised_word.slice());
     }
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "τὸ";
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("το", unaccented_word.slice());
         try se("τό", normalised_word.slice());
     }
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "οἶκός";
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("οικοσ", unaccented_word.slice());
         try se("οἶκος", normalised_word.slice());
     }
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "οὗτός";
         try normalise_word(word, &unaccented_word, &normalised_word);
         try se("ουτοσ", unaccented_word.slice());
@@ -879,8 +881,8 @@ test "normalise simple" {
 
 test "normalise sentence" {
     {
-        var unaccented_sentence = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_sentence = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_sentence = BoundedArray(u8, max_word_size){};
+        var normalised_sentence = BoundedArray(u8, max_word_size){};
         const word = "ὁ Πέτρος λέγει·";
         try normalise_word(word, &unaccented_sentence, &normalised_sentence);
         try se("ο πετροσ λεγει·", unaccented_sentence.slice());
@@ -891,8 +893,8 @@ test "normalise sentence" {
 test "keywordify simple" {
     const allocator = std.testing.allocator;
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "ἄρτός";
         var slices: ArrayListUnmanaged([]const u8) = .empty;
         defer slices.deinit(allocator);
@@ -908,8 +910,8 @@ test "keywordify simple" {
         try se("αρτοσ", unaccented_word.slice());
     }
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "ΜΩϋσῆς";
         var slices: ArrayListUnmanaged([]const u8) = .empty;
         defer slices.deinit(allocator);
@@ -926,8 +928,8 @@ test "keywordify simple" {
         try se("μωυσησ", unaccented_word.slice());
     }
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         const word = "serpent";
         var slices: ArrayListUnmanaged([]const u8) = .empty;
         defer slices.deinit(allocator);
@@ -1018,8 +1020,8 @@ test "search_index basics" {
 
 test "search_index_duplicates" {
     {
-        var unaccented_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
-        var normalised_word = BoundedArray(u8, MAX_WORD_SIZE + 1){};
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
         var substrings: std.ArrayListUnmanaged([]const u8) = .empty;
         defer substrings.deinit(std.testing.allocator);
         try keywordify(

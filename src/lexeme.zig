@@ -336,92 +336,19 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
     if (!t.consume_if('|')) return error.MissingField;
     const tag_set = try form.read_field(t); // Tags
     var i = std.mem.tokenizeAny(u8, tag_set, " ,\n\r\t");
-    var buffer = BoundedArray([]const u8, 10){};
+    var tags: [10][]const u8 = undefined;
+    var ti: usize = 0;
     while (i.next()) |tag| {
+        if (ti == tags.len) break;
         if (tag.len == 0) continue;
-        if (buffer.len == buffer.capacity()) break;
-        buffer.appendAssumeCapacity(tag);
+        tags[ti] = tag;
+        ti += 1;
     }
-
-    self.tags = try arena.alloc([]const u8, buffer.len);
-    for (buffer.slice(), 0..) |tag, x| {
-        self.tags.?[x] = try arena.dupe(u8, tag);
+    self.tags = try arena.alloc([]const u8, ti);
+    for (0..ti) |x| {
+        self.tags.?[x] = try arena.dupe(u8, tags[x]);
     }
     _ = try form.read_field(t); // ??
-
-    if (!t.consume_if('|')) return error.MissingField;
-    self.note = try form.read_field(t);
-    _ = t.read_until_eol();
-}
-
-/// Read a text string representing the basic information
-/// about a lexeme. Reads one line only. Does not read
-/// form entries on the following lines.
-///
-/// ἀγαπάω|el||992842|25||Verb||ἀγαπά|en:love#zh:愛:關愛:喜愛:愛心關懷:愛心#ru:любить#es:ama:amado|||
-/// ἀγαπητός|el||893822|27||Adjective||ἀγαπητ|en:beloved:loved#zh:親愛#ru:любимый#es:amado:deseado|ἀγαπητός,-ή,-όν||
-/// Ἀβιληνή|el||293832|9|ἡ|ProperNoun|-ῆς|Ἀβιλην|en:Abilene#zh:亞比利尼||person|
-///
-pub fn oldReadText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
-    _ = t.skip_whitespace_and_lines();
-
-    const word_field = try form.read_field(t);
-    if (word_field.len == 0) return error.EmptyField;
-    self.word = try arena.dupe(u8, word_field);
-    if (!t.consume_if('|')) {
-        err("expected |, found {d} while reading line {d} (word={s})", .{ t.peek(), t.line, word_field });
-        return error.MissingField;
-    }
-    self.lang = try t.read_lang();
-
-    if (!t.consume_if('|')) return error.MissingField;
-    _ = try form.read_field(t);
-
-    if (!t.consume_if('|')) return error.MissingField;
-    self.uid = try form.read_u24(t); // Lexeme UID
-
-    if (!t.consume_if('|')) return error.MissingField;
-    _ = try t.readStrongs(arena, &self.strongs);
-
-    if (!t.consume_if('|')) return error.MissingField;
-    self.article = try t.read_article();
-
-    if (!t.consume_if('|')) return error.MissingField;
-    self.pos = t.read_pos();
-
-    if (!t.consume_if('|')) return error.MissingField;
-    const suffix = try form.read_field(t); // Genitive suffix
-    if (suffix.len > 0) {
-        self.genitiveSuffix = try arena.dupe(u8, suffix);
-    }
-
-    if (!t.consume_if('|')) return error.MissingField;
-    const root = try form.read_field(t); // Lexeme root
-    if (root.len > 0)
-        self.root = try arena.dupe(u8, root);
-
-    if (!t.consume_if('|')) return error.MissingField;
-
-    try readTextGlosses(arena, t, &self.glosses); // Glosses
-    if (!t.consume_if('|')) return error.MissingField;
-
-    const adjectives = try form.read_field(t); // Adjective forms
-    if (adjectives.len > 0)
-        self.adjective = try arena.dupe(u8, adjectives);
-
-    if (!t.consume_if('|')) return error.MissingField;
-    const tag_set = try form.read_field(t); // Tags
-    var i = std.mem.tokenizeAny(u8, tag_set, " ,\n\r\t");
-    var buffer = BoundedArray([]const u8, 10){};
-    while (i.next()) |tag| {
-        if (tag.len == 0) continue;
-        if (buffer.len == buffer.capacity()) break;
-        buffer.appendAssumeCapacity(tag);
-    }
-    self.tags = try arena.alloc([]const u8, buffer.len);
-    for (buffer.slice(), 0..) |tag, x| {
-        self.tags.?[x] = try arena.dupe(u8, tag);
-    }
 
     if (!t.consume_if('|')) return error.MissingField;
     self.note = try form.read_field(t);
@@ -540,35 +467,6 @@ test "lexeme_bytes" {
     try expectEqual(0, out.items[14]);
     try expectEqual(@intFromEnum(Lang.english), out.items[15]);
     try expectEqual('c', out.items[16]);
-}
-
-test "old_format" {
-    const allocator = std.testing.allocator;
-
-    var data = Parser.init(
-        \\ἀγαπάω|el||992842|25||Verb||ἀγαπά|en:love#zh:愛:關愛:喜愛:愛心關懷:愛心#ru:любить#es:ama:amado|||
-        \\ἀγαπητός|el||893822|27||Adjective||ἀγαπητ|en:beloved:loved#zh:親愛#ru:любимый#es:amado:deseado|ἀγαπητός,-ή,-όν||
-        \\Ἀβιληνή|el||293832|9|ἡ|ProperNoun|-ῆς|Ἀβιλην|en:Abilene#zh:亞比利尼||person|
-    );
-    var lexeme1 = try Lexeme.create(allocator);
-    defer lexeme1.destroy(allocator);
-    try lexeme1.oldReadText(allocator, &data);
-    var lexeme2 = try Lexeme.create(allocator);
-    defer lexeme2.destroy(allocator);
-    try lexeme2.oldReadText(allocator, &data);
-    var lexeme3 = try Lexeme.create(allocator);
-    defer lexeme3.destroy(allocator);
-    try lexeme3.oldReadText(std.testing.allocator, &data);
-    try expectEqualStrings("ἀγαπάω", lexeme1.word);
-    try expectEqual(Lang.greek, lexeme1.lang);
-    try expectEqual(PartOfSpeech.verb, lexeme1.pos.part_of_speech);
-    try expectEqualStrings("ἀγαπητός", lexeme2.word);
-    try expectEqual(27, lexeme2.strongs.items[0]);
-    try expectEqual(PartOfSpeech.adjective, lexeme2.pos.part_of_speech);
-    try expectEqualStrings("Ἀβιληνή", lexeme3.word);
-    try expectEqual(1, lexeme3.glosses.items[0].glosses().len);
-    try expectEqualStrings("person", lexeme3.tags.?[0]);
-    try expectEqualStrings("Abilene", lexeme3.glosses.items[0].glosses()[0]);
 }
 
 test "compare_lexeme" {
@@ -721,6 +619,7 @@ const std = @import("std");
 const err = std.log.err;
 const Allocator = std.mem.Allocator;
 const BoundedArray = @import("bounded_array.zig").BoundedArray;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 pub const Parser = @import("parser.zig");
 const is_eol = @import("parser.zig").is_eol;

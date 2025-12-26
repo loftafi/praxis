@@ -215,7 +215,7 @@ pub const Dictionary = struct {
                 for (gloss.entries.items) |entry| {
                     var i = GlossTokens{ .data = entry };
                     while (i.next()) |text| {
-                        var buff: [@import("search_index.zig").MAX_WORD_SIZE * 2]u8 = undefined;
+                        var buff: [@import("search_index.zig").max_word_size * 2]u8 = undefined;
                         const lower = std.ascii.lowerString(&buff, text);
                         if (lower.len == entry.len or !is_stopword(lower)) {
                             try self.by_gloss.add(arena, lower, lexeme.forms.items[0]);

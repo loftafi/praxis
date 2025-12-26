@@ -120,5 +120,11 @@ pub const Parser = @import("parser.zig");
 /// temporary workaround.
 pub const BoundedArray = @import("bounded_array.zig").BoundedArray;
 
+/// A slightly faster hash for HashMaps that use strings.
+pub const FarmHashContext = @import("farmhash64.zig").FarmHashContext;
+
+/// Hash a string into a 64 bit u64 value.
+pub const farmhash64 = @import("farmhash64.zig").farmhash64;
+
 /// Return a placeholder dictionary for testing.
 pub const test_dictionary = @import("dictionary.zig").test_dictionary;

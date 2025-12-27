@@ -13,8 +13,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
         const Self = @This();
 
         /// Map a search `keyword` string to a `SearchResult` record.
-        index: StringHashMapUnmanaged(*SearchResult) = .empty,
-        //index: std.HashMapUnmanaged([]const u8, *SearchResult, farmhash.FarmHashContext, std.hash_map.default_max_load_percentage) = .empty,
+        index: std.HashMapUnmanaged([]const u8, *SearchResult, farmhash.FarmHashContext, std.hash_map.default_max_load_percentage) = .empty,
 
         /// Holds allocated copies of each `keyword` in the `index`.
         slices: ArrayListUnmanaged([]const u8),

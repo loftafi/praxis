@@ -26,48 +26,42 @@ pub inline fn eof(self: *Self) bool {
 }
 
 pub inline fn peek(self: *Self) u8 {
-    if (self.data.len == 0) {
-        return 0;
-    }
+    if (self.data.len == 0) return 0;
+
     return self.data[0];
 }
 
 /// Read until a separator, 0, US, RS, FS
 pub fn string(self: *Self) error{unexpected_eof}![]const u8 {
-    if (self.data.len == 0) {
-        return error.unexpected_eof;
-    }
-    var index: usize = 0;
-    while (index < self.data.len) {
-        const p = self.data[index];
+    if (self.data.len == 0) return error.unexpected_eof;
+
+    var end: usize = 0;
+    while (end < self.data.len) {
+        const p = self.data[end];
         if (p == 0 or p == US or p == RS or p == FS) {
-            const value = self.data[0..index];
-            self.move(index + 1);
+            const value = self.data[0..end];
+            self.advance(end + 1);
             return value;
         }
-        index += 1;
+        end += 1;
     }
-    const value = self.data[0..index];
-    self.move(index);
+    const value = self.data[0..end];
+    self.advance(end);
     return value;
 }
 
 /// Read a fixed number of bytes
 pub fn slice(self: *Self, size: usize) error{unexpected_eof}![]const u8 {
-    if (self.data.len == 0) {
-        return error.unexpected_eof;
-    }
-    if (self.data.len < size) {
-        return error.unexpected_eof;
-    }
+    if (self.data.len == 0) return error.unexpected_eof;
+    if (self.data.len < size) return error.unexpected_eof;
+
     const value = self.data[0..size];
-    self.move(size);
+    self.advance(size);
     return value;
 }
 
-inline fn move(self: *Self, bytes: usize) void {
-    self.data.len -= bytes;
-    self.data.ptr += bytes;
+inline fn advance(self: *Self, bytes: usize) void {
+    self.data = self.data[bytes..];
     self.index += bytes;
 }
 
@@ -81,7 +75,7 @@ pub fn @"u32"(self: *Self) error{unexpected_eof}!u32 {
         return error.unexpected_eof;
     }
     const value = std.mem.readInt(u32, self.data[0..4], .little);
-    self.move(4);
+    self.advance(4);
     return value;
 }
 
@@ -94,7 +88,7 @@ pub fn @"u24"(self: *Self) error{unexpected_eof}!u24 {
         return error.unexpected_eof;
     }
     const value = std.mem.readInt(u24, self.data[0..3], .little);
-    self.move(3);
+    self.advance(3);
     return value;
 }
 
@@ -106,7 +100,7 @@ pub fn @"u16"(self: *Self) error{unexpected_eof}!u16 {
         return error.unexpected_eof;
     }
     const value = std.mem.readInt(u16, self.data[0..2], .little);
-    self.move(2);
+    self.advance(2);
     return value;
 }
 
@@ -115,7 +109,7 @@ pub fn @"u8"(self: *Self) error{unexpected_eof}!u8 {
         return error.unexpected_eof;
     }
     const b1: u8 = self.data[0];
-    self.move(1);
+    self.advance(1);
     return b1;
 }
 

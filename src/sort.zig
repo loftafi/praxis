@@ -57,7 +57,7 @@ pub fn order(a: []const u8, b: []const u8) math.Order {
         if (c1 < d1) return .lt;
         return .gt;
     }
-    return false;
+    return .eq;
 }
 
 pub fn normalise_char(c: u21) u21 {
@@ -133,4 +133,5 @@ test "sort testing" {
     try eq(.gt, order("αβγ", "αβ"));
     try eq(.lt, order("αβγ", "δεζ"));
     try eq(.gt, order("δεζ", "αβγ"));
+    try eq(.eq, order("δεζ", "δεζ"));
 }

@@ -387,3 +387,59 @@
   ποιῇ|V-PMI-2S|false|155949||
 ποίη|el|5701555|Unknown||||||||
   ποίη||false|112394||
+μέλας|el|15684547|Adjective|||3189|μέλ|en:black:ink#zh:黑色#es:negro|μέλας,-αινα,-αν|colour|
+  μέλας|A-NSM|false|1595270|en:black:ink|
+  μέλαν|A-ASM|true|4180610|en:black:ink|
+  μέλανος|A-GSM|false|5782097|en:black|
+  μέλανι|A-DSM|false|5438382|en:black|
+  μέλανες|A-NPM|false|6568758|en:black|
+  μέλανας|A-APM|false|1705397|en:black|
+  μέλασι|A-GPM|false|6105319|en:black|
+  μελάνων|A-DPM|false|6832086|en:black|
+  μέλαινα|A-NSF|false|8014446|en:black:ink|
+  μέλαιναν|A-ASF|false|6921504|en:black:ink|
+  μελαίνης|A-GSF|false|15138369|en:black|
+  μελαίνῃ|A-DSF|false|819012|en:black|
+  μέλαιναι|A-NPF|false|7374103|en:black|
+  μελαίνας|A-APF|false|7316696|en:black|
+  μελαινῶν|A-GPF|false|6256861|en:black|
+  μελαίναις|A-DPF|false|5630500|en:black|
+  μέλαν|A-NSN|false|12733832|en:black|
+  μέλαν|A-ASN|false|4480273|en:black|
+  μέλανος|A-GSN|false|5078796|en:black|
+  μέλανι|A-DSN|false|7328017|en:black|
+  μέλανα|A-NPN|false|8503699|en:black|
+  μέλανα|A-APN|false|2404037|en:black|
+  μελάνων|A-GPN|false|4881319|en:black|
+  μέλασιν|A-DPN|false|16091289|en:black|
+μέλασμα|el|12706854|Unknown||||||||
+  μέλασμα||false|14239458||
+λευκός|el|15795851|Adjective|||3022|λευκ|en:white:bright#zh:白色#ru:белый#es:blanco:blancas|λευκός,-ή,-όν|colour|
+  λευκός|A-NSM|false|8629007|en:white:bright|
+  λευκόν|A-ASM|false|13733276|en:white:bright|
+  λευκοῦ|A-GSM|false|3558785|en:white:bright|
+  λευκῷ|A-DSM|false|13341042|en:white:bright|
+  λευκέ|A-VSM|false|9584415|en:white:bright|
+  λευκοί|A-NPM|false|6192448|en:white:bright|
+  λευκούς|A-APM|false|1446722|en:white:bright|
+  λευκῶν|A-GPM|false|3100042|en:white:bright|
+  λευκοῖς|A-DPM|false|14316223|en:white:bright|
+  λεύκοῖς|A-DPM|false|653043|en:white:bright|
+  λευκοί|A-VPM|false|8650385|en:white:bright|
+  λευκή|A-NSF|false|13129994|en:white:bright|
+  λευκήν|A-ASF|false|8827769|en:white:bright|
+  λεύκην|A-ASF|false|1084820|en:white:bright|
+  λεύκης|A-GSF|false|7353960|en:white:bright|
+  λευκῇ|A-DSF|false|15167064|en:white:bright|
+  λευκαί|A-NPF|false|12030091|en:white:bright|
+  λευκάς|A-APF|false|2152216|en:white:bright|
+  λευκῶν|A-GPF|false|6364349|en:white:bright|
+  λευκαῖς|A-DPF|false|4835003|en:white:bright|
+  λευκόν|A-NSN|false|1158406|en:white:bright|
+  λευκόν|A-ASN|false|1971956|en:white:bright|
+  λευκοῦ|A-GSN|false|12717789|en:white:bright|
+  λευκῷ|A-DSN|false|10178577|en:white:bright|
+  λευκά|A-NPN|false|9853790|en:white:bright|
+  λευκά|A-APN|false|6063335|en:white:bright|
+  λευκῶν|A-GPN|false|5484965|en:white:bright|
+  λευκοῖς|A-DPN|false|5880807|en:white:bright|

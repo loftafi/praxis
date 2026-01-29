@@ -5,8 +5,17 @@ on:
     branches: [master, experimental]
 
 jobs:
-  test:
+  test-ubuntu:
     runs-on: ubuntu-latest
+    name: Build and Test Praxis
+    steps:
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+      - run: zig build test
+  test-mac:
+    runs-on: macos-latest
     name: Build and Test Praxis
     steps:
       - uses: actions/checkout@v3

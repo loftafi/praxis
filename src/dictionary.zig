@@ -24,7 +24,6 @@ pub const Dictionary = struct {
     /// arena, or a general purpose allocator.
     pub fn create(arena: Allocator) error{OutOfMemory}!*Dictionary {
         const dictionary: *Dictionary = try arena.create(Dictionary);
-        seed();
         dictionary.* = .{
             .by_lexeme = .empty,
             .by_form = .empty,
@@ -288,16 +287,18 @@ pub const Dictionary = struct {
     /// search index into an on disk data file.
     pub fn saveBinaryFile(
         self: *const Dictionary,
+        io: std.Io,
         filename: []const u8,
         save_mode: SaveMode,
     ) !void {
+        seed(io);
         var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer temp_arena.deinit();
         var data: std.ArrayListUnmanaged(u8) = .empty;
         defer data.deinit(temp_arena.allocator());
         try self.writeBinaryData(temp_arena.allocator(), &data, save_mode);
         debug("binary data size: {any}", .{data.items.len});
-        try write_bytes_to_file(data.items, filename);
+        try write_bytes_to_file(io, data.items, filename);
     }
 
     /// Save all dictionary data, along with a pre-built
@@ -442,16 +443,18 @@ pub const Dictionary = struct {
     pub fn saveTextFile(
         self: *const Dictionary,
         allocator: Allocator,
+        io: std.Io,
         filename: []const u8,
         save_mode: SaveMode,
     ) !void {
+        seed(io);
         var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer temp_arena.deinit();
         var data: std.ArrayListUnmanaged(u8) = .empty;
         defer data.deinit(allocator);
         try self.writeTextData(allocator, &data, save_mode);
         std.debug.print("text data size: {any}\n", .{data.items.len});
-        try write_bytes_to_file(data.items, filename);
+        try write_bytes_to_file(io, data.items, filename);
     }
 
     /// Export the entire dictionary contents into a byte arra
@@ -501,20 +504,30 @@ pub const Dictionary = struct {
 };
 
 /// Helper function to read file contents.
-fn read_bytes_from_file(filename: []const u8, temp_allocator: Allocator) ![]u8 {
-    const file = try std.fs.cwd().openFile(filename, .{ .mode = .read_only });
-    defer file.close();
-    const stat = try file.stat();
-    const buffer = try temp_allocator.alloc(u8, stat.size);
-    if (try file.readAll(buffer) != stat.size) return error.FailedReadingData;
-    return buffer;
+fn read_bytes_from_file(io: std.Io, filename: []const u8, temp_allocator: Allocator) ![]u8 {
+    const data = std.Io.Dir.cwd().readFileAlloc(io, filename, temp_allocator, .unlimited) catch {
+        log.err("Error reading config file.", .{});
+        return error.FileNotFound;
+    };
+    return data;
 }
 
 /// Helper function to write file contents.
-fn write_bytes_to_file(data: []const u8, filename: []const u8) !void {
-    const file = try std.fs.cwd().createFile(filename, .{ .truncate = true });
-    defer file.close();
-    return file.writeAll(data);
+pub fn write_bytes_to_file(
+    io: std.Io,
+    folder: std.Io.Dir,
+    filename: []const u8,
+    data: []const u8,
+) (Allocator.Error || std.Io.Writer.Error || std.Io.File.OpenError || std.Io.Dir.RenameError || std.Io.File.Writer.Error)!void {
+    var buffer: [16]u8 = undefined;
+    const tmp_filename = random_string(&buffer);
+    const file = folder.createFile(io, tmp_filename, .{ .read = false, .truncate = true }) catch |e| {
+        err("Failed to open file for writing: {s}. {any}", .{ filename, e });
+        return e;
+    };
+    defer file.close(io);
+    try file.writeStreamingAll(io, data);
+    try std.Io.Dir.rename(folder, tmp_filename, folder, filename, io);
 }
 
 pub inline fn append_u64(data: *std.ArrayList(u8), value: u64) !void {
@@ -590,6 +603,7 @@ const BinaryReader = @import("binary_reader.zig");
 const append_u16 = @import("binary_writer.zig").append_u16;
 const random_u24 = @import("random.zig").random_u24;
 const seed = @import("random.zig").seed;
+const random_string = @import("random.zig").random_string;
 
 const eql = @import("std").mem.eql;
 const expect = std.testing.expect;

@@ -42,7 +42,10 @@ pub fn glosses(self: *Self) []const []const u8 {
     return self.entries.items;
 }
 
-pub fn string(self: *const Self, out: anytype) !void {
+pub fn string(
+    self: *const Self,
+    out: *std.Io.Writer,
+) (std.Io.Writer.Error)!void {
     var last: u8 = 0;
     for (self.entries.items, 0..) |gloss, i| {
         if (i == 0) {} else {
@@ -60,7 +63,10 @@ pub fn string(self: *const Self, out: anytype) !void {
     }
 }
 
-pub fn writeBinary(self: *const Self, writer: anytype) error{OutOfMemory}!void {
+pub fn writeBinary(
+    self: *const Self,
+    writer: *std.Io.Writer,
+) (std.Io.Writer.Error)!void {
     try writer.writeByte(@intFromEnum(self.lang));
     for (self.entries.items) |g| {
         try writer.writeAll(g);
@@ -127,9 +133,9 @@ pub fn readTextGlosses(
 }
 
 pub fn writeTextGlosses(
-    writer: anytype,
+    writer: *std.Io.Writer,
     entries: *const std.ArrayListUnmanaged(*Self),
-) error{OutOfMemory}!void {
+) std.Io.Writer.Error!void {
     for (entries.items, 0..) |gloss, i| {
         if (i > 0) try writer.writeByte('#');
         try gloss.writeText(writer);
@@ -202,10 +208,10 @@ test "read_gloss" {
     try expectEqualStrings("apple", gloss2.glosses()[0]);
     try expect(data.consume_if('|'));
 
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(allocator);
-    try gloss.writeText(out.writer(allocator));
-    try expectEqualStrings("en:fish:cat", out.items);
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+    try gloss.writeText(&out.writer);
+    try expectEqualStrings("en:fish:cat", out.written());
 }
 
 test "read_bad_gloss1" {
@@ -293,10 +299,10 @@ test "read_text_glosses" {
     try expectEqual(Lang.chinese, list.items[1].lang);
     try expectEqual(Lang.spanish, list.items[2].lang);
 
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(allocator);
-    try writeTextGlosses(out.writer(allocator), &list);
-    try expectEqualStrings("en:Aaron#zh:亞倫#es:Aarón", out.items);
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+    try writeTextGlosses(&out.writer, &list);
+    try expectEqualStrings("en:Aaron#zh:亞倫#es:Aarón", out.written());
 
     for (list.items) |i| {
         i.destroy(allocator);
@@ -305,47 +311,50 @@ test "read_text_glosses" {
 }
 
 test "gloss_read_write_bytes" {
-    var gloss = try Self.create(std.testing.allocator);
-    defer gloss.destroy(std.testing.allocator);
-    gloss.lang = .hebrew;
-    try gloss.add_gloss(std.testing.allocator, "ar");
-    try gloss.add_gloss(std.testing.allocator, "ci");
-
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(std.testing.allocator);
-    try gloss.writeBinary(out.writer(std.testing.allocator));
-
-    try expectEqual(8, out.items.len);
-    try expectEqual(@intFromEnum(Lang.hebrew), out.items[0]);
-    try expectEqual('a', out.items[1]);
-    try expectEqual('r', out.items[2]);
-    try expectEqual(0, out.items[3]);
-    try expectEqual('c', out.items[4]);
-    try expectEqual('i', out.items[5]);
-    try expectEqual(0, out.items[6]);
-    try expectEqual(0, out.items[7]);
-}
-
-test "test_gloss_string" {
     const allocator = std.testing.allocator;
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(allocator);
+
     var gloss = try Self.create(allocator);
     defer gloss.destroy(allocator);
     gloss.lang = .hebrew;
     try gloss.add_gloss(allocator, "ar");
     try gloss.add_gloss(allocator, "ci");
-    try gloss.string(out.writer(allocator));
-    try expectEqualStrings("ar, ci.", out.items);
+
+    var buffer = std.Io.Writer.Allocating.init(allocator);
+    defer buffer.deinit();
+    try gloss.writeBinary(&buffer.writer);
+    const out = buffer.written();
+
+    try expectEqual(8, out.len);
+    try expectEqual(@intFromEnum(Lang.hebrew), out[0]);
+    try expectEqual('a', out[1]);
+    try expectEqual('r', out[2]);
+    try expectEqual(0, out[3]);
+    try expectEqual('c', out[4]);
+    try expectEqual('i', out[5]);
+    try expectEqual(0, out[6]);
+    try expectEqual(0, out[7]);
+}
+
+test "test_gloss_string" {
+    const allocator = std.testing.allocator;
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+    var gloss = try Self.create(allocator);
+    defer gloss.destroy(allocator);
+    gloss.lang = .hebrew;
+    try gloss.add_gloss(allocator, "ar");
+    try gloss.add_gloss(allocator, "ci");
+    try gloss.string(&out.writer);
+    try expectEqualStrings("ar, ci.", out.written());
     out.clearRetainingCapacity();
 
     try gloss.add_gloss(allocator, "art.");
-    try gloss.string(out.writer(allocator));
-    try expectEqualStrings("ar, ci, art.", out.items);
+    try gloss.string(&out.writer);
+    try expectEqualStrings("ar, ci, art.", out.written());
     out.clearRetainingCapacity();
 
     try gloss.add_gloss(allocator, "(small)");
-    try gloss.string(out.writer(allocator));
-    try expectEqualStrings("ar, ci, art., (small)", out.items);
+    try gloss.string(&out.writer);
+    try expectEqualStrings("ar, ci, art., (small)", out.written());
     out.clearRetainingCapacity();
 }

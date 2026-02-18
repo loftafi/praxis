@@ -53,36 +53,38 @@ pub fn deinit(self: *Form, allocator: Allocator) void {
 
 /// Output the bytes representing the form. No terminator at
 /// end of record.
-pub fn writeBinary(self: *const Form, allocator: Allocator, data: *std.ArrayListUnmanaged(u8)) error{OutOfMemory}!void {
-    try append_u24(allocator, data, self.uid);
-    try append_u32(allocator, data, @bitCast(self.parsing));
+pub fn writeBinary(
+    self: *const Form,
+    data: *std.Io.Writer,
+) std.Io.Writer.Error!void {
+    try append_u24(data, self.uid);
+    try append_u32(data, @bitCast(self.parsing));
 
     var flags: u8 = 0;
     if (self.preferred) flags |= 0x1;
     if (self.incorrect) flags |= 0x10;
 
-    try append_u8(allocator, data, flags);
-    try data.appendSlice(allocator, self.word);
-    try data.append(allocator, US);
-    try append_u16(allocator, data, @intCast(self.glosses.items.len));
+    try append_u8(data, flags);
+    try data.writeAll(self.word);
+    try data.writeByte(US);
+    try append_u16(data, @intCast(self.glosses.items.len));
     for (self.glosses.items) |gloss| {
-        try data.append(allocator, @intFromEnum(gloss.lang));
+        try data.writeByte(@intFromEnum(gloss.lang));
         for (gloss.entries.items) |item| {
-            try data.appendSlice(allocator, item);
-            try data.append(allocator, US);
+            try data.writeAll(item);
+            try data.writeByte(US);
         }
-        try data.append(allocator, RS);
+        try data.writeByte(RS);
     }
     // References into linked modules
-    try append_u32(allocator, data, @intCast(self.references.items.len));
+    try append_u32(data, @intCast(self.references.items.len));
     for (self.references.items) |reference| {
-        try append_u16(allocator, data, @intFromEnum(reference.module));
-        try append_u16(allocator, data, @intFromEnum(reference.book));
-        try append_u16(allocator, data, reference.chapter);
-        try append_u16(allocator, data, reference.verse);
-        try append_u16(allocator, data, reference.word);
+        try append_u16(data, @intFromEnum(reference.module));
+        try append_u16(data, @intFromEnum(reference.book));
+        try append_u16(data, reference.chapter);
+        try append_u16(data, reference.verse);
+        try append_u16(data, reference.word);
     }
-    //try data.append(0xff);
 }
 
 pub fn glosses_by_lang(self: *const Form, lang: Lang) ?*Gloss {
@@ -260,7 +262,10 @@ pub fn readBinary(self: *Form, arena: Allocator, t: *BinaryReader) !void {
     }
 }
 
-pub fn writeText(self: *Form, writer: anytype) error{ OutOfMemory, Incomplete }!void {
+pub fn writeText(
+    self: *Form,
+    writer: *std.Io.Writer,
+) (std.Io.Writer.Error || error{Incomplete})!void {
     try writer.writeAll(self.word);
     try writer.writeByte('|');
     try self.parsing.string(writer);
@@ -393,11 +398,11 @@ test "form_read_write_text" {
     defer form.destroy(allocator);
     try form.readText(allocator, &t);
 
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(allocator);
-    try form.writeText(out.writer(allocator));
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+    try form.writeText(&out.writer);
     const text = "fish|N-NSM|true|20|en:swim:to arch#zh:你好|";
-    try expectEqualStrings(text, out.items);
+    try expectEqualStrings(text, out.written());
 }
 
 test "form_read_write_bytes" {
@@ -406,9 +411,10 @@ test "form_read_write_bytes" {
     defer form.destroy(std.testing.allocator);
     try form.readText(std.testing.allocator, &t);
 
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(std.testing.allocator);
-    try form.writeBinary(std.testing.allocator, &out);
+    var writer = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer writer.deinit();
+    try form.writeBinary(&writer.writer);
+    const out = writer.written();
 
     try expectEqual(2, form.glosses.items.len);
     try expectEqual(2, form.references.items.len);
@@ -418,13 +424,13 @@ test "form_read_write_bytes" {
         &.{
             20, 0, 0, 3, 16, 132, 0, 1, 'f', 'i', 's', 'h', 31, 2, 0, 4, 's',
         },
-        out.items[0..17],
+        out[0..17],
     );
-    try expectEqual(63, out.items.len);
+    try expectEqual(63, out.len);
 
     var form_loaded = try Form.create(std.testing.allocator);
     defer form_loaded.destroy(std.testing.allocator);
-    var p = BinaryReader.init(out.items);
+    var p = BinaryReader.init(out);
     try form_loaded.readBinary(std.testing.allocator, &p);
 
     try expectEqual(20, form_loaded.uid);
@@ -446,17 +452,17 @@ test "form_read_write_two_items" {
     try form1.readText(allocator, &t);
     try form2.readText(allocator, &t);
 
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(allocator);
-    try form1.writeBinary(allocator, &out);
-    try form2.writeBinary(allocator, &out);
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+    try form1.writeBinary(&out.writer);
+    try form2.writeBinary(&out.writer);
 
     //try expectEqualSlices(u8, &.{0}, out.items);
     var form3 = try Form.create(allocator);
     defer form3.destroy(allocator);
     var form4 = try Form.create(allocator);
     defer form4.destroy(allocator);
-    var data = BinaryReader.init(out.items);
+    var data = BinaryReader.init(out.written());
     try form3.readBinary(allocator, &data);
     try form4.readBinary(allocator, &data);
     try expectEqual(20, form3.uid);

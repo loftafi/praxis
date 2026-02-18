@@ -246,34 +246,37 @@ pub fn readBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader) !void {
 
 /// Write all fields from a lexeme in binary format. No child
 /// form records are output.
-pub fn writeBinary(self: *const Lexeme, allocator: Allocator, data: *std.ArrayListUnmanaged(u8)) !void {
-    try append_u24(allocator, data, self.uid);
-    try data.appendSlice(allocator, self.word);
-    try data.append(allocator, US);
-    try data.append(allocator, @intFromEnum(self.lang));
-    try append_u32(allocator, data, @bitCast(self.pos));
-    try data.append(allocator, @intFromEnum(self.article)); // M, F, M/F...
-    try append_u16(allocator, data, @intCast(self.glosses.items.len));
+pub fn writeBinary(
+    self: *const Lexeme,
+    data: *std.Io.Writer,
+) std.Io.Writer.Error!void {
+    try append_u24(data, self.uid);
+    try data.writeAll(self.word);
+    try data.writeByte(US);
+    try data.writeByte(@intFromEnum(self.lang));
+    try append_u32(data, @bitCast(self.pos));
+    try data.writeByte(@intFromEnum(self.article)); // M, F, M/F...
+    try append_u16(data, @intCast(self.glosses.items.len));
     for (self.glosses.items) |gloss| {
-        try data.append(allocator, @intFromEnum(gloss.lang));
+        try data.writeByte(@intFromEnum(gloss.lang));
         for (gloss.glosses()) |item| {
-            try data.appendSlice(allocator, item);
-            try data.append(allocator, US);
+            try data.writeAll(item);
+            try data.writeByte(US);
         }
-        try data.append(allocator, RS);
+        try data.writeByte(RS);
     }
     if (self.tags) |tags| {
-        try append_u8(allocator, data, @intCast(tags.len));
+        try append_u8(data, @intCast(tags.len));
         for (tags) |tag| {
-            try data.appendSlice(allocator, tag);
-            try data.append(allocator, US);
+            try data.writeAll(tag);
+            try data.writeByte(US);
         }
     } else {
-        try append_u8(allocator, data, 0);
+        try append_u8(data, 0);
     }
-    try append_u8(allocator, data, @as(u8, @intCast(self.strongs.items.len)));
+    try append_u8(data, @as(u8, @intCast(self.strongs.items.len)));
     for (self.strongs.items) |number| {
-        try append_u16(allocator, data, number);
+        try append_u16(data, number);
     }
 }
 
@@ -355,7 +358,10 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
     _ = t.read_until_eol();
 }
 
-pub fn writeText(self: *const Lexeme, writer: anytype) error{OutOfMemory}!void {
+pub fn writeText(
+    self: *const Lexeme,
+    writer: *std.Io.Writer,
+) (std.Io.Writer.Error)!void {
     try writer.writeAll(self.word);
     try writer.writeByte('|');
     try writer.writeAll(self.lang.to_code());
@@ -446,27 +452,28 @@ test "lexeme_bytes" {
     defer lexeme.destroy(allocator);
     try lexeme.readText(std.testing.allocator, &data);
 
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(allocator);
-    try lexeme.writeBinary(allocator, &out);
+    var buffer: std.Io.Writer.Allocating = .init(allocator);
+    defer buffer.deinit();
+    try lexeme.writeBinary(&buffer.writer);
+    const out = buffer.written();
 
     //try expectEqual(41, out.items.len);
-    try expectEqual(17, out.items[0]);
-    try expectEqual(0, out.items[1]);
-    try expectEqual(0, out.items[2]);
+    try expectEqual(17, out[0]);
+    try expectEqual(0, out[1]);
+    try expectEqual(0, out[2]);
 
-    try expectEqual('c', out.items[3]);
-    try expectEqual('a', out.items[4]);
-    try expectEqual('t', out.items[5]);
-    try expectEqual(US, out.items[6]);
+    try expectEqual('c', out[3]);
+    try expectEqual('a', out[4]);
+    try expectEqual('t', out[5]);
+    try expectEqual(US, out[6]);
 
-    try expectEqual(@intFromEnum(Lang.greek), out.items[7]);
-    try expectEqual(@intFromEnum(PartOfSpeech.proper_noun), out.items[8]);
-    try expectEqual(@intFromEnum(Gender.masculine), out.items[12]);
-    try expectEqual(3, out.items[13]);
-    try expectEqual(0, out.items[14]);
-    try expectEqual(@intFromEnum(Lang.english), out.items[15]);
-    try expectEqual('c', out.items[16]);
+    try expectEqual(@intFromEnum(Lang.greek), out[7]);
+    try expectEqual(@intFromEnum(PartOfSpeech.proper_noun), out[8]);
+    try expectEqual(@intFromEnum(Gender.masculine), out[12]);
+    try expectEqual(3, out[13]);
+    try expectEqual(0, out[14]);
+    try expectEqual(@intFromEnum(Lang.english), out[15]);
+    try expectEqual('c', out[16]);
 }
 
 test "compare_lexeme" {
@@ -593,14 +600,15 @@ test "binary_lexeme_load_save" {
     try expectEqual(40, lexeme.strongs.items[0]);
     try expectEqual(39, lexeme.strongs.items[1]);
     try expectEqual(2, lexeme.tags.?.len);
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(allocator);
-    try lexeme.writeBinary(allocator, &out);
-    try append_u16(allocator, &out, 0); // no forms
+
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    defer out.deinit();
+    try lexeme.writeBinary(&out.writer);
+    try append_u16(&out.writer, 0); // no forms
 
     var lexeme2 = try Lexeme.create(allocator);
     defer lexeme2.destroy(allocator);
-    var r = BinaryReader.init(out.items);
+    var r = BinaryReader.init(out.written());
     try lexeme2.readBinary(allocator, &r);
     try expectEqual(2, lexeme.strongs.items.len);
     try expectEqual(40, lexeme.strongs.items[0]);

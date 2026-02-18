@@ -25,6 +25,14 @@ pub inline fn random_u24() u24 {
     return @intCast(random(std.math.maxInt(u24)));
 }
 
+/// Return a random u16 value. Call `seed()` first if you do not want a
+/// predictable number sequence.
+///
+/// This is _not_ cryptographically secure.
+pub inline fn random_u16() u16 {
+    return @intCast(random(std.math.maxInt(u16)));
+}
+
 /// Return a random u64 value. Call `seed()` first if you do not want a
 /// predictable number sequence.
 ///

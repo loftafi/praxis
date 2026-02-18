@@ -22,14 +22,20 @@ pub const Parsing = packed struct(u32) {
 
     pub const default: Parsing = @bitCast(@as(u32, 0));
 
-    pub fn format(parsing: Parsing, writer: anytype) error{WriteFailed}!void {
+    pub fn format(
+        parsing: Parsing,
+        writer: *std.Io.Writer,
+    ) (std.Io.Writer.Error)!void {
         parsing.string(writer) catch |e| {
             if (e == error.Incomplete)
                 try writer.writeAll("[incomplete]");
         };
     }
 
-    pub fn string(p: Parsing, b: anytype) !void {
+    pub fn string(
+        p: Parsing,
+        b: *std.Io.Writer,
+    ) (std.Io.Writer.Error || error{Incomplete})!void {
         switch (p.part_of_speech) {
             .unknown => {
                 return;
@@ -375,7 +381,10 @@ pub const Case = enum(u3) {
     vocative = 5,
 };
 
-inline fn append_person(p: Parsing, b: anytype) !void {
+inline fn append_person(
+    p: Parsing,
+    b: *std.Io.Writer,
+) (std.Io.Writer.Error || error{Incomplete})!void {
     switch (p.person) {
         .first => try b.writeByte('1'),
         .second => try b.writeByte('2'),
@@ -384,7 +393,7 @@ inline fn append_person(p: Parsing, b: anytype) !void {
     }
 }
 
-inline fn append_personal_pronoun(p: Parsing, b: anytype) !void {
+inline fn append_personal_pronoun(p: Parsing, b: *std.Io.Writer) std.Io.Writer.Error!void {
     switch (p.person) {
         .first => try b.writeAll("-1"),
         .second => try b.writeAll("-2"),
@@ -409,7 +418,7 @@ inline fn append_personal_pronoun(p: Parsing, b: anytype) !void {
     return;
 }
 
-inline fn append_ref(p: Parsing, b: anytype) !void {
+inline fn append_ref(p: Parsing, b: *std.Io.Writer) !void {
     switch (p.person) {
         .first => try b.writeAll("-1"),
         .second => try b.writeAll("-2"),
@@ -445,7 +454,7 @@ inline fn append_ref(p: Parsing, b: anytype) !void {
     }
 }
 
-inline fn append_cng(p: Parsing, b: anytype) !void {
+inline fn append_cng(p: Parsing, b: *std.Io.Writer) !void {
     switch (p.case) {
         .nominative => try b.writeAll("-N"),
         .accusative => try b.writeAll("-A"),
@@ -471,7 +480,10 @@ inline fn append_cng(p: Parsing, b: anytype) !void {
     }
 }
 
-inline fn append_fcng(p: Parsing, b: anytype) !void {
+inline fn append_fcng(
+    p: Parsing,
+    b: *std.Io.Writer,
+) (std.Io.Writer.Error || error{Incomplete})!void {
     if (p.person != .unknown) {
         try b.writeByte('-');
     }
@@ -500,7 +512,7 @@ inline fn append_fcng(p: Parsing, b: anytype) !void {
     }
 }
 
-inline fn append_vp(p: Parsing, b: anytype) !void {
+inline fn append_vp(p: Parsing, b: *std.Io.Writer) !void {
     switch (p.tense_form) {
         .present => try b.writeAll("-P"),
         .imperfect => try b.writeAll("-I"),
@@ -554,7 +566,7 @@ inline fn append_vp(p: Parsing, b: anytype) !void {
     }
 }
 
-inline fn append_flag(p: Parsing, b: anytype) !void {
+inline fn append_flag(p: Parsing, b: *std.Io.Writer) !void {
     if (p.correlative) {
         try b.writeAll("-K");
     }
@@ -1361,8 +1373,8 @@ test "simple parsing tests" {
 
 test "parsing_format" {
     const gpa = std.testing.allocator;
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(gpa);
+    var out = std.Io.Writer.Allocating.init(gpa);
+    defer out.deinit();
 
     // Some basic sanity checks.
     {
@@ -1372,8 +1384,8 @@ test "parsing_format" {
             .case = .nominative,
             .number = .singular,
             .gender = .masculine,
-        }).string(out.writer(gpa));
-        try expectEqualStrings("N-NSM", out.items);
+        }).string(&out.writer);
+        try expectEqualStrings("N-NSM", out.written());
     }
 
     {
@@ -1391,8 +1403,8 @@ test "parsing_format" {
 
 test "simple byz string tests" {
     const gpa = std.testing.allocator;
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(gpa);
+    var out = std.Io.Writer.Allocating.init(gpa);
+    defer out.deinit();
 
     // Some basic sanity checks.
     {
@@ -1402,8 +1414,8 @@ test "simple byz string tests" {
             .case = .nominative,
             .number = .singular,
             .gender = .masculine,
-        }).string(out.writer(gpa));
-        try expectEqualStrings("N-NSM", out.items);
+        }).string(&out.writer);
+        try expectEqualStrings("N-NSM", out.written());
     }
 
     {
@@ -1413,8 +1425,8 @@ test "simple byz string tests" {
             .case = .genitive,
             .number = .plural,
             .gender = .feminine,
-        }).string(out.writer(gpa));
-        try expectEqualStrings("A-GPF", out.items);
+        }).string(&out.writer);
+        try expectEqualStrings("A-GPF", out.written());
     }
 
     {
@@ -1427,8 +1439,8 @@ test "simple byz string tests" {
             .person = .first,
             .number = .plural,
         };
-        try p.string(out.writer(gpa));
-        try expectEqualStrings("V-PAI-1P", out.items);
+        try p.string(&out.writer);
+        try expectEqualStrings("V-PAI-1P", out.written());
     }
 
     {
@@ -1439,16 +1451,16 @@ test "simple byz string tests" {
             .person = .first,
             .tense_form = .ref_singular,
         };
-        try p.string(out.writer(gpa));
-        try expectEqualStrings("P-1NS", out.items);
+        try p.string(&out.writer);
+        try expectEqualStrings("P-1NS", out.written());
     }
 }
 
 test "new_parsing" {
     const gpa = std.testing.allocator;
 
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(gpa);
+    var out = std.Io.Writer.Allocating.init(gpa);
+    defer out.deinit();
 
     // Test parsing not in byz file
     const data = "I-GSN\nI-DSM\nO-ASN";
@@ -1464,8 +1476,8 @@ test "new_parsing" {
             };
             try expect(x.part_of_speech != .unknown);
             out.clearRetainingCapacity();
-            try x.string(out.writer(gpa));
-            try expectEqualStrings(item, out.items);
+            try x.string(&out.writer);
+            try expectEqualStrings(item, out.written());
         }
     }
 }
@@ -1473,8 +1485,8 @@ test "new_parsing" {
 test "byz data test" {
     const gpa = std.testing.allocator;
 
-    var out: std.ArrayList(u8) = .empty;
-    defer out.deinit(gpa);
+    var out = std.Io.Writer.Allocating.init(gpa);
+    defer out.deinit();
 
     const byz_data = @embedFile("byz_parsing");
     var items = std.mem.tokenizeAny(u8, byz_data, " \r\n");
@@ -1499,35 +1511,35 @@ test "byz data test" {
             };
             out.clearRetainingCapacity();
             try expect(x.part_of_speech != .unknown);
-            try x.string(out.writer(gpa));
-            try expectEqualStrings(item, out.items);
+            try x.string(&out.writer);
+            try expectEqualStrings(item, out.written());
         }
 
         {
             // Test entry when it has brackets
-            var item2: std.ArrayList(u8) = .empty;
-            defer item2.deinit(gpa);
-            try item2.append(gpa, ' ');
-            try item2.append(gpa, '[');
-            try item2.appendSlice(gpa, item);
-            try item2.append(gpa, ']');
-            const x = parse(item2.items) catch |e| {
-                std.debug.print("Failed: {s} {any}\n", .{ item2.items, e });
-                _ = try parse(item2.items);
+            var item2 = std.Io.Writer.Allocating.init(gpa);
+            defer item2.deinit();
+            try item2.writer.writeByte(' ');
+            try item2.writer.writeByte('[');
+            try item2.writer.writeAll(item);
+            try item2.writer.writeByte(']');
+            const x = parse(item2.written()) catch |e| {
+                std.debug.print("Failed: {s} {any}\n", .{ item2.written(), e });
+                _ = try parse(item2.written());
                 return;
             };
             out.clearRetainingCapacity();
-            try x.string(out.writer(gpa));
-            try expectEqualStrings(item, out.items);
+            try x.string(&out.writer);
+            try expectEqualStrings(item, out.written());
         }
 
         {
             // Test entry when it has brackets
-            var item2: std.ArrayList(u8) = .empty;
-            defer item2.deinit(gpa);
-            try item2.appendSlice(gpa, item);
-            try item2.append(gpa, 'K');
-            try expectError(error.InvalidParsing, parse(item2.items));
+            var item2 = std.Io.Writer.Allocating.init(gpa);
+            defer item2.deinit();
+            try item2.writer.writeAll(item);
+            try item2.writer.writeByte('K');
+            try expectError(error.InvalidParsing, parse(item2.written()));
         }
     }
 
@@ -1545,8 +1557,8 @@ test "byz data test" {
             return;
         };
         out.clearRetainingCapacity();
-        try x.string(out.writer(gpa));
-        try expectEqualStrings(item, out.items);
+        try x.string(&out.writer);
+        try expectEqualStrings(item, out.written());
     }
 }
 

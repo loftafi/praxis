@@ -63,9 +63,10 @@ pub const Dictionary = struct {
         self: *Dictionary,
         arena: Allocator,
         gpa: Allocator,
+        io: std.Io,
         filename: []const u8,
     ) !void {
-        const data = read_bytes_from_file(filename, gpa) catch |e| {
+        const data = read_bytes_from_file(io, filename, gpa) catch |e| {
             err("Could not read '{s}'. Error: {any}", .{ filename, e });
             return;
         };
@@ -306,45 +307,33 @@ pub const Dictionary = struct {
     pub fn writeBinaryData(
         self: *const Dictionary,
         allocator: Allocator,
-        data: *std.ArrayListUnmanaged(u8),
+        data: *std.Io.Writer,
         save_mode: SaveMode,
-    ) error{ OutOfMemory, IndexTooLarge }!void {
-        try data.append(allocator, 99);
-        try data.append(allocator, 1);
+    ) (std.Io.Writer.Error || std.mem.Allocator.Error || error{IndexTooLarge})!void {
+        try data.writeByte(99);
+        try data.writeByte(1);
 
-        // Placeholder for word count. We don't yet know how many
-        // words have data for inclusion.
-        var include_words: u32 = 0;
-        try data.append(allocator, 0);
-        try data.append(allocator, 0);
-        try data.append(allocator, 0);
-        try data.append(allocator, 0);
-        //try append_u32(data, @intCast(self.lexemes.items.len));
+        try append_u32(data, @as(u32, @intCast(self.lexemes.items.len)));
 
         for (self.lexemes.items) |*lexeme| {
             if (save_mode == .gnt_words and lexeme.*.glosses.items.len == 0) continue;
-            include_words += 1;
-            try lexeme.*.writeBinary(allocator, data);
-            try append_u16(allocator, data, @intCast(lexeme.*.forms.items.len));
+            try lexeme.*.writeBinary(data);
+            try append_u16(data, @intCast(lexeme.*.forms.items.len));
             for (lexeme.*.forms.items) |*form| {
-                try form.*.writeBinary(allocator, data);
+                try form.*.writeBinary(data);
             }
         }
-        try data.append(allocator, FS);
-        data.items[2] = (@intCast(include_words & 0xff));
-        data.items[3] = (@intCast((include_words >> 8) & 0xff));
-        data.items[4] = (@intCast((include_words >> 16) & 0xff));
-        data.items[5] = (@intCast((include_words >> 24) & 0xff));
+        try data.writeByte(FS);
 
         // Now output the search indexes
         try self.by_form.writeBinaryBytes(allocator, data);
-        try data.append(allocator, FS);
+        try data.writeByte(FS);
 
         try self.by_gloss.writeBinaryBytes(allocator, data);
-        try data.append(allocator, FS);
+        try data.writeByte(FS);
 
         try self.by_transliteration.writeBinaryBytes(allocator, data);
-        try data.append(allocator, FS);
+        try data.writeByte(FS);
     }
 
     /// Load dictionary data that has been stored in
@@ -450,9 +439,9 @@ pub const Dictionary = struct {
         seed(io);
         var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer temp_arena.deinit();
-        var data: std.ArrayListUnmanaged(u8) = .empty;
-        defer data.deinit(allocator);
-        try self.writeTextData(allocator, &data, save_mode);
+        var data = std.Io.Writer.Allocating.init(allocator);
+        defer data.deinit();
+        try self.writeTextData(allocator, &data.writer, save_mode);
         std.debug.print("text data size: {any}\n", .{data.items.len});
         try write_bytes_to_file(io, data.items, filename);
     }
@@ -462,7 +451,7 @@ pub const Dictionary = struct {
     pub fn writeTextData(
         self: *const Dictionary,
         allocator: Allocator,
-        data: *ArrayListUnmanaged(u8),
+        data: *std.Io.Writer,
         save_mode: SaveMode,
     ) !void {
         var unsorted: ArrayListUnmanaged(*Lexeme) = .empty;
@@ -474,31 +463,31 @@ pub const Dictionary = struct {
         std.mem.sort(*Lexeme, unsorted.items, @as(?[]const u8, null), Lexeme.lessThan);
 
         for (unsorted.items) |lexeme| {
-            try lexeme.writeText(data.writer(allocator));
+            try lexeme.writeText(data);
 
             for (lexeme.forms.items) |form| {
-                try data.append(allocator, LF);
-                try data.appendSlice(allocator, "  ");
-                try form.writeText(data.writer(allocator));
+                try data.writeByte(LF);
+                try data.writeAll("  ");
+                try form.writeText(data);
                 // References into linked modules
                 for (form.references.items, 0..) |*reference, i| {
                     if (i > 0) {
-                        try data.append(allocator, ',');
+                        try data.writeByte(',');
                     }
-                    try data.appendSlice(allocator, reference.*.module.info().code);
-                    try data.append(allocator, '#');
-                    try data.appendSlice(allocator, reference.*.book.info().english);
-                    try data.append(allocator, ' ');
-                    try data.writer(allocator).print("{}", .{reference.*.chapter});
-                    try data.append(allocator, ':');
-                    try data.writer(allocator).print("{}", .{reference.*.verse});
+                    try data.writeAll(reference.*.module.info().code);
+                    try data.writeByte('#');
+                    try data.writeAll(reference.*.book.info().english);
+                    try data.writeByte(' ');
+                    try data.print("{}", .{reference.*.chapter});
+                    try data.writeByte(':');
+                    try data.print("{}", .{reference.*.verse});
                     if (reference.word > 0) {
-                        try data.append(allocator, ' ');
-                        try data.writer(allocator).print("{}", .{reference.*.word});
+                        try data.writeByte(' ');
+                        try data.print("{}", .{reference.*.word});
                     }
                 }
             }
-            try data.append(allocator, LF);
+            try data.writeByte(LF);
         }
     }
 };
@@ -518,7 +507,8 @@ pub fn write_bytes_to_file(
     folder: std.Io.Dir,
     filename: []const u8,
     data: []const u8,
-) (Allocator.Error || std.Io.Writer.Error || std.Io.File.OpenError || std.Io.Dir.RenameError || std.Io.File.Writer.Error)!void {
+) (Allocator.Error || std.Io.Writer.Error || std.Io.File.OpenError ||
+    std.Io.Dir.RenameError || std.Io.File.Writer.Error)!void {
     var buffer: [16]u8 = undefined;
     const tmp_filename = random_string(&buffer);
     const file = folder.createFile(io, tmp_filename, .{ .read = false, .truncate = true }) catch |e| {
@@ -528,41 +518,6 @@ pub fn write_bytes_to_file(
     defer file.close(io);
     try file.writeStreamingAll(io, data);
     try std.Io.Dir.rename(folder, tmp_filename, folder, filename, io);
-}
-
-pub inline fn append_u64(data: *std.ArrayList(u8), value: u64) !void {
-    try data.append(@intCast(value & 0xff));
-    try data.append(@intCast((value >> 8) & 0xff));
-    try data.append(@intCast((value >> 16) & 0xff));
-    try data.append(@intCast((value >> 24) & 0xff));
-    try data.append(@intCast((value >> 32) & 0xff));
-    try data.append(@intCast((value >> 40) & 0xff));
-    try data.append(@intCast((value >> 48) & 0xff));
-    try data.append(@intCast((value >> 56) & 0xff));
-}
-
-pub inline fn append_u32(data: *std.ArrayList(u8), value: u32) !void {
-    try data.append(@intCast(value & 0xff));
-    try data.append(@intCast((value >> 8) & 0xff));
-    try data.append(@intCast((value >> 16) & 0xff));
-    try data.append(@intCast((value >> 24) & 0xff));
-}
-
-pub inline fn append_u24(data: *std.ArrayList(u8), value: u24) !void {
-    try data.append(@intCast(value & 0xff));
-    try data.append(@intCast((value >> 8) & 0xff));
-    try data.append(@intCast((value >> 16) & 0xff));
-}
-
-//pub inline fn append_u16(data: *std.ArrayList(u8), value: u32) !void {
-//    std.debug.assert(value <= 0xffff);
-//    try data.append(@intCast(value & 0xff));
-//    try data.append(@intCast((value >> 8) & 0xff));
-//}
-
-pub inline fn append_u8(data: *std.ArrayList(u8), value: u32) !void {
-    std.debug.assert(value <= 0xff);
-    try data.append(@intCast(value));
 }
 
 pub const SaveMode = enum {
@@ -601,6 +556,7 @@ const builtin = @import("builtin");
 const transliterate_word = @import("transliterate.zig").transliterate_word;
 const BinaryReader = @import("binary_reader.zig");
 const append_u16 = @import("binary_writer.zig").append_u16;
+const append_u32 = @import("binary_writer.zig").append_u32;
 const random_u24 = @import("random.zig").random_u24;
 const seed = @import("random.zig").seed;
 const random_string = @import("random.zig").random_string;
@@ -682,26 +638,26 @@ test "basic_dictionary" {
 
     // Test basic text saving works correctly
     {
-        var out: std.ArrayListUnmanaged(u8) = .empty;
-        defer out.deinit(allocator);
-        try dictionary.writeTextData(allocator, &out, .all_words);
-        try expectEqualDeep(data, out.items);
+        var out = std.Io.Writer.Allocating.init(allocator);
+        defer out.deinit();
+        try dictionary.writeTextData(allocator, &out.writer, .all_words);
+        try expectEqualDeep(data, out.written());
     }
 
     // Test basic binary saving works correctly
     {
-        var out: std.ArrayListUnmanaged(u8) = .empty;
-        defer out.deinit(allocator);
-        try dictionary.writeBinaryData(allocator, &out, .all_words);
+        var out: std.Io.Writer.Allocating = .init(allocator);
+        defer out.deinit();
+        try dictionary.writeBinaryData(allocator, &out.writer, .all_words);
 
         const header: []const u8 = &.{ 99, 1, 2, 0, 0, 0 };
-        try expect(out.items.len > 50);
-        try expectEqualSlices(u8, header, out.items[0..header.len]);
+        try expect(out.written().len > 50);
+        try expectEqualSlices(u8, header, out.written()[0..header.len]);
 
         const dictionary2 = try Dictionary.create(allocator);
         defer dictionary2.destroy(allocator);
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
-        try dictionary2.loadBinaryData(allocator, allocator, out.items);
+        try dictionary2.loadBinaryData(allocator, allocator, out.written());
 
         try expectEqual(2, dictionary.lexemes.items.len);
         try expectEqual(5, dictionary.forms.items.len);
@@ -781,19 +737,19 @@ test "gloss_fallback" {
     try gloss_fallback_checker(dictionary);
 
     // Check for memory leaks in binary loader
-    var bin1: std.ArrayListUnmanaged(u8) = .empty;
-    defer bin1.deinit(allocator);
-    var bin2: std.ArrayListUnmanaged(u8) = .empty;
-    defer bin2.deinit(allocator);
+    var bin1: std.Io.Writer.Allocating = .init(allocator);
+    defer bin1.deinit();
+    var bin2: std.Io.Writer.Allocating = .init(allocator);
+    defer bin2.deinit();
     {
-        try dictionary.writeBinaryData(allocator, &bin1, .all_words);
+        try dictionary.writeBinaryData(allocator, &bin1.writer, .all_words);
         const dictionary2 = try Dictionary.create(allocator);
         defer dictionary2.destroy(allocator);
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
-        try dictionary2.loadBinaryData(allocator, allocator, bin1.items);
-        try dictionary2.writeBinaryData(allocator, &bin2, .all_words);
+        try dictionary2.loadBinaryData(allocator, allocator, bin1.written());
+        try dictionary2.writeBinaryData(allocator, &bin2.writer, .all_words);
     }
-    try expectEqualSlices(u8, bin1.items, bin2.items);
+    try expectEqualSlices(u8, bin1.written(), bin2.written());
 
     try gloss_fallback_checker(dictionary);
 }
@@ -818,19 +774,19 @@ test "arena_check" {
     try gloss_fallback_checker(dictionary);
 
     // Check for memory leaks in binary loader
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(allocator);
-    var out2: std.ArrayListUnmanaged(u8) = .empty;
-    defer out2.deinit(allocator);
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    defer out.deinit();
+    var out2: std.Io.Writer.Allocating = .init(allocator);
+    defer out2.deinit();
     {
-        try dictionary.writeBinaryData(allocator, &out, .all_words);
+        try dictionary.writeBinaryData(allocator, &out.writer, .all_words);
         const dictionary2 = try Dictionary.create(allocator);
         defer dictionary2.destroy(allocator);
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
-        try dictionary2.loadBinaryData(allocator, allocator, out.items);
-        try dictionary2.writeBinaryData(allocator, &out2, .all_words);
+        try dictionary2.loadBinaryData(allocator, allocator, out.written());
+        try dictionary2.writeBinaryData(allocator, &out2.writer, .all_words);
     }
-    try expectEqualSlices(u8, out.items, out2.items);
+    try expectEqualSlices(u8, out.written(), out2.written());
 
     try gloss_fallback_checker(dictionary);
 }
@@ -883,13 +839,13 @@ test "dictionary_destroy" {
     try dictionary.loadTextData(allocator, allocator, data);
 
     // Check for memory leaks in binary loader
-    var out: std.ArrayListUnmanaged(u8) = .empty;
-    defer out.deinit(allocator);
-    try dictionary.writeBinaryData(allocator, &out, .all_words);
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+    try dictionary.writeBinaryData(allocator, &out.writer, .all_words);
     const dictionary2 = try Dictionary.create(allocator);
     defer dictionary2.destroy(allocator);
     //try expectEqualSlices(u8, &[_]u8{}, out.items);
-    try dictionary2.loadBinaryData(allocator, allocator, out.items);
+    try dictionary2.loadBinaryData(allocator, allocator, out.written());
 }
 
 test "dictionary_destroy1" {
@@ -936,9 +892,11 @@ test "partial dictionary search" {
 
 test "dictionary_file" {
     const allocator = std.testing.allocator;
+    const io = std.testing.io;
+
     const dictionary = try Dictionary.create(allocator);
     defer dictionary.destroy(allocator);
-    try dictionary.loadFile(allocator, allocator, "./test/small_dict.txt");
+    try dictionary.loadFile(allocator, allocator, io, "./test/small_dict.txt");
     var results = dictionary.by_form.lookup("δρα");
     try expect(results == null);
     results = dictionary.by_form.lookup("αρτο");
@@ -971,9 +929,11 @@ test "dictionary_file" {
 
 test "search" {
     const allocator = std.testing.allocator;
+    const io = std.testing.io;
+
     const dict = try Dictionary.create(allocator);
     defer dict.destroy(allocator);
-    try dict.loadFile(allocator, allocator, "./test/small_dict.txt");
+    try dict.loadFile(allocator, allocator, io, "./test/small_dict.txt");
     var results = dict.by_form.lookup("Δαυιδ");
     try expect(results != null);
     try expectEqual(0, results.?.exact_accented.items.len);

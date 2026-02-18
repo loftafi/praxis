@@ -144,8 +144,8 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
         pub fn writeBinaryBytes(
             self: *const Self,
             allocator: Allocator,
-            data: *ArrayListUnmanaged(u8),
-        ) error{ OutOfMemory, IndexTooLarge }!void {
+            data: *std.Io.Writer,
+        ) (std.Io.Writer.Error || error{ OutOfMemory, IndexTooLarge })!void {
             var unsorted: std.ArrayListUnmanaged([]const u8) = .empty;
             defer unsorted.deinit(allocator);
             try unsorted.ensureTotalCapacityPrecise(allocator, self.index.size);
@@ -158,9 +158,9 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             std.mem.sort([]const u8, unsorted.items, {}, stringLessThan);
 
             // Output the sorted list
-            try append_u32(allocator, data, self.index.count());
+            try append_u32(data, self.index.count());
             for (unsorted.items) |key| {
-                try self.index.get(key).?.writeBinaryBytes(allocator, data);
+                try self.index.get(key).?.writeBinaryBytes(data);
             }
         }
 
@@ -284,24 +284,23 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             /// array. Use `sort()` before saving index data.
             pub fn writeBinaryBytes(
                 self: *SearchResult,
-                allocator: Allocator,
-                data: *ArrayListUnmanaged(u8),
-            ) error{ OutOfMemory, IndexTooLarge }!void {
+                data: *std.Io.Writer,
+            ) (std.Io.Writer.Error || error{ OutOfMemory, IndexTooLarge })!void {
                 std.debug.assert(max_search_results <= 0xff);
 
-                try data.appendSlice(allocator, self.keyword);
-                try data.append(allocator, US);
+                try data.writeAll(self.keyword);
+                try data.writeByte(US);
 
                 var count: usize = @min(self.exact_accented.items.len, max_search_results);
                 if (count > 0xff) {
                     log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_accented.items.len });
                     return error.IndexTooLarge;
                 }
-                try data.append(allocator, @intCast(count));
+                try data.writeByte(@intCast(count));
                 for (self.exact_accented.items, 0..) |g, i| {
                     if (i == count) break;
                     if (g.uid > 0xffffff) return error.UidTooLarge;
-                    try append_u24(allocator, data, @intCast(g.uid));
+                    try append_u24(data, @intCast(g.uid));
                 }
 
                 count = @min(self.exact_unaccented.items.len, max_search_results);
@@ -309,11 +308,11 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                     log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_unaccented.items.len });
                     return error.IndexTooLarge;
                 }
-                try data.append(allocator, @intCast(count));
+                try data.writeByte(@intCast(count));
                 for (self.exact_unaccented.items, 0..) |g, i| {
                     if (i == count) break;
                     if (g.uid > 0xffffff) return error.UidTooLarge;
-                    try append_u24(allocator, data, @intCast(g.uid));
+                    try append_u24(data, @intCast(g.uid));
                 }
 
                 count = @min(self.partial_match.items.len, max_search_results);
@@ -321,11 +320,11 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                     log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.partial_match.items.len });
                     return error.IndexTooLarge;
                 }
-                try data.append(allocator, @intCast(count));
+                try data.writeByte(@intCast(count));
                 for (self.partial_match.items, 0..) |g, i| {
                     if (i == count) break;
                     if (g.uid > 0xffffff) return error.UidTooLarge;
-                    try append_u24(allocator, data, @intCast(g.uid));
+                    try append_u24(data, @intCast(g.uid));
                 }
             }
         };

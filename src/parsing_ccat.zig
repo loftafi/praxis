@@ -7,7 +7,7 @@
 //! https://ccat.sas.upenn.edu/gopher/text/religion/biblical/lxxmorph/
 
 /// Read a parsing code string in the CCAT format.
-pub fn parse(tag: []const u8) Error!Parsing {
+pub fn parse(tag: []const u8) Parsing.Error!Parsing {
     var data = tag;
     while (data.len > 0 and (data[0] == ' ' or data[0] == '-')) {
         data = data[1..];
@@ -340,9 +340,7 @@ const debug = std.log.debug;
 const ee = std.testing.expectEqual;
 
 const Parsing = @import("parsing.zig").Parsing;
-const Error = Parsing.Error;
 const Number = Parsing.Number;
 const Person = Parsing.Person;
 const Case = Parsing.Case;
 const Gender = Parsing.Gender;
-pub const ParsingError = @import("parsing_morphgnt.zig").ParsingError;

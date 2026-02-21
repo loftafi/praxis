@@ -18,7 +18,7 @@
 //!    V- 3AAI-P--
 
 /// Read a two part parsing field in the SBL MorphGNT tag format.
-pub fn parse(tag: []const u8) Error!Parsing {
+pub fn parse(tag: []const u8) Parsing.Error!Parsing {
     var data = tag;
     while (data.len > 0 and (data[0] == ' ' or data[0] == '-')) {
         data = data[1..];
@@ -313,7 +313,6 @@ const debug = std.log.debug;
 const ee = std.testing.expectEqual;
 
 const Parsing = @import("parsing.zig").Parsing;
-const Error = Parsing.Error;
 const Number = @import("parsing.zig").Number;
 const Person = @import("parsing.zig").Person;
 const Case = @import("parsing.zig").Case;

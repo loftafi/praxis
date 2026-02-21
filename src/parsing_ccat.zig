@@ -340,8 +340,8 @@ const debug = std.log.debug;
 const ee = std.testing.expectEqual;
 
 const Parsing = @import("parsing.zig").Parsing;
-const Number = @import("parsing.zig").Number;
-const Person = @import("parsing.zig").Person;
-const Case = @import("parsing.zig").Case;
-const Gender = @import("parsing.zig").Gender;
+const Number = Parsing.Number;
+const Person = Parsing.Person;
+const Case = Parsing.Case;
+const Gender = Parsing.Gender;
 pub const ParsingError = @import("parsing_morphgnt.zig").ParsingError;

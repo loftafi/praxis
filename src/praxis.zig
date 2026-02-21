@@ -41,38 +41,26 @@ pub const stringLessThan = @import("sort.zig").lessThan;
 pub const betacode_to_greek = @import("betacode.zig").betacode_to_greek;
 pub const BetacodeType = @import("betacode.zig").Type;
 
-pub const parsing = @import("parsing.zig");
+const parsing = @import("parsing.zig");
 
 /// Contains word tagging/parsing information.
 pub const Parsing = parsing.Parsing;
-
-pub const PartOfSpeech = parsing.PartOfSpeech;
-pub const Gender = parsing.Gender;
-pub const Number = parsing.Number;
-pub const Mood = parsing.Mood;
-pub const Case = parsing.Case;
-pub const Voice = parsing.Voice;
-pub const Person = parsing.Person;
-pub const TenseForm = parsing.TenseForm;
 
 /// Use the parsing information in a `Parsing` to generate an English
 /// language part of speech string.
 pub const pos_to_english = @import("part_of_speech.zig").english;
 
-/// Load a `Parsing` struct with parsing in the `N-NSM` format.
-pub const parse = parsing.parse;
+/// Load a `Parsing` struct with parsing in the Byz format.
+pub const byz = @import("parsing_byz.zig");
 
 /// Load a `Parsing` struct with parsing in the CCAT format.
-pub const parsing_ccat = @import("parsing_ccat.zig");
-pub const parse_ccat = parsing_ccat.parse;
+pub const ccat = @import("parsing_ccat.zig");
 
 /// Load a `Parsing` struct with parsing in the CNTR format.
-pub const parsing_cntr = @import("parsing_cntr.zig");
-pub const parse_cntr = parsing_cntr.parse;
+pub const cntr = @import("parsing_cntr.zig");
 
 /// Load a `Parsing` struct with parsing in the CCAT format.
-pub const parsing_morphgnt = @import("parsing_morphgnt.zig");
-pub const parse_morphgnt = parsing_morphgnt.parse;
+pub const morphgnt = @import("parsing_morphgnt.zig");
 
 /// The `Module` enum represnts names of common modules.
 pub const Module = @import("module.zig").Module;

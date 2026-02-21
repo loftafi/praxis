@@ -251,7 +251,7 @@ const ArrayList = std.ArrayList;
 const Lang = @import("lang.zig").Lang;
 const parsing = @import("parsing.zig");
 const Parsing = parsing.Parsing;
-const Gender = parsing.Gender;
+const Gender = Parsing.Gender;
 const parse_pos = @import("part_of_speech.zig").parse_pos;
 const expectEqual = std.testing.expectEqual;
 

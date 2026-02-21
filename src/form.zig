@@ -173,12 +173,12 @@ pub fn autocompleteLessThan(key: ?[]const u8, self: *const Form, other: *const F
     return self.uid < other.uid;
 }
 
-pub fn read_parsing(t: *Parser) !Parsing {
+pub fn read_byz_parsing(t: *Parser) !Parsing {
     const field = t.read_field();
     if (field.len == 0) {
         return Parsing{ .part_of_speech = .unknown };
     }
-    return parse(field);
+    return byz.parse(field);
 }
 
 /// Read all fields for a form. No final terminmating RS is consumed.
@@ -261,7 +261,7 @@ pub fn readText(self: *Form, arena: Allocator, t: *Parser) !void {
     if (!t.consume_if('|')) {
         return error.MissingField;
     }
-    self.parsing = try read_parsing(t); // parsing
+    self.parsing = try read_byz_parsing(t); // parsing
     if (!t.consume_if('|')) {
         return error.MissingField;
     }
@@ -286,10 +286,9 @@ const Parser = @import("parser.zig");
 const Lexeme = @import("lexeme.zig");
 const Gloss = @import("gloss.zig");
 const Lang = @import("lang.zig").Lang;
-const Gender = @import("parsing.zig").Gender;
 const ParsingError = @import("parsing.zig").Error;
-const parse = @import("parsing.zig").parse;
 const Parsing = @import("parsing.zig").Parsing;
+const Gender = Parsing.Gender;
 const Reference = @import("reference.zig");
 const BinaryReader = @import("binary_reader.zig");
 const Book = @import("book.zig").Book;
@@ -300,6 +299,7 @@ const is_whitespace_or_eol = @import("parser.zig").is_whitespace_or_eol;
 const readTextGlosses = @import("gloss.zig").readTextGlosses;
 const writeTextGlosses = @import("gloss.zig").writeTextGlosses;
 const readBinaryGlosses = @import("gloss.zig").readBinaryGlosses;
+const byz = @import("parsing_byz.zig");
 
 const BinaryWriter = @import("binary_writer.zig");
 const append_u8 = BinaryWriter.append_u8;

@@ -181,22 +181,6 @@ pub fn read_parsing(t: *Parser) !Parsing {
     return parse(field);
 }
 
-pub fn read_u32(t: *Parser) error{InvalidU24}!u32 {
-    const field = t.read_field();
-    const value = std.fmt.parseInt(u32, field, 10) catch {
-        return error.InvalidU32;
-    };
-    return value;
-}
-
-pub fn read_u24(t: *Parser) error{InvalidU24}!u24 {
-    const field = t.read_field();
-    const value = std.fmt.parseInt(u24, field, 10) catch {
-        return error.InvalidU24;
-    };
-    return value;
-}
-
 /// Read all fields for a form. No final terminmating RS is consumed.
 /// Output fields:
 ///
@@ -285,7 +269,7 @@ pub fn readText(self: *Form, arena: Allocator, t: *Parser) !void {
     if (!t.consume_if('|')) {
         return error.MissingField;
     }
-    self.uid = try read_u24(t); // uid
+    self.uid = try t.read_u24(); // uid
     if (!t.consume_if('|')) {
         return error.MissingField;
     }

@@ -304,7 +304,7 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
     self.lang = try t.read_lang();
 
     if (!t.consume_if('|')) return error.MissingField;
-    self.uid = try form.read_u24(t); // Lexeme UID
+    self.uid = try t.read_u24(); // Lexeme UID
 
     if (!t.consume_if('|')) return error.MissingField;
     self.pos = t.read_pos();

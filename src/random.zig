@@ -41,6 +41,8 @@ pub inline fn random_u64() u64 {
     return @as(u64, random(std.math.maxInt(u64)));
 }
 
+/// Fill a `buffer` with random uppercase letters, lowercase letters, and
+/// numbers.
 pub fn random_string(buffer: []u8) []const u8 {
     for (0..buffer.len) |i| {
         buffer[i] = @as(u8, @intCast(switch (random(26 + 26 + 10)) {

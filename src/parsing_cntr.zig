@@ -1,9 +1,9 @@
 //! Read parsing information as described by the greek
 //! cntr. See: https://greekcntr.org/resources/NTGRG.pdf
 
-// Read a two part parsing field as defined by the CNTR format documentation.
-//
-//     const parsing = parse("V       IAA3..S");
+/// Read a two part parsing field as defined by the CNTR format documentation.
+///
+///     const parsing = parse("V       IAA3..S");
 pub fn parse(value: []const u8) ParsingError!Parsing {
     var parsing: Parsing = .default;
     var tag: []const u8 = value;

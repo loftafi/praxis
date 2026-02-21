@@ -132,7 +132,7 @@ pub inline fn eof(self: *Self) bool {
     return self.index >= self.limit or self.index >= self.data.len;
 }
 
-pub fn read_lang(t: *Self) !Lang {
+pub fn read_lang(t: *Self) error{InvalidLanguage}!Lang {
     const lang = Lang.parse_code(t.read_field());
     if (lang == .unknown) {
         return error.InvalidLanguage;
@@ -145,15 +145,23 @@ pub inline fn read_pos(t: *Self) Parsing {
     return pos;
 }
 
-pub inline fn read_article(t: *Self) !Gender {
+pub inline fn read_article(t: *Self) error{InvalidGender}!Gender {
     return Gender.parse(t.read_field());
 }
 
-pub inline fn readStrongs(t: *Self, allocator: Allocator, numbers: *std.ArrayListUnmanaged(u16)) error{ OutOfMemory, InvalidU16 }!void {
+pub inline fn readStrongs(
+    t: *Self,
+    allocator: Allocator,
+    numbers: *std.ArrayListUnmanaged(u16),
+) error{ OutOfMemory, InvalidU16 }!void {
     try t.read_u16s(allocator, numbers);
 }
 
-pub inline fn read_u16s(self: *Self, allocator: Allocator, numbers: *std.ArrayListUnmanaged(u16)) error{ OutOfMemory, InvalidU16 }!void {
+pub inline fn read_u16s(
+    self: *Self,
+    allocator: Allocator,
+    numbers: *std.ArrayListUnmanaged(u16),
+) error{ OutOfMemory, InvalidU16 }!void {
     while (true) {
         if (self.eof()) {
             return;
@@ -179,7 +187,7 @@ pub inline fn read_u16s(self: *Self, allocator: Allocator, numbers: *std.ArrayLi
     }
 }
 
-pub fn read_u16(self: *Self) !?u16 {
+pub fn read_u16(self: *Self) error{InvalidU16}!?u16 {
     if (self.eof()) {
         return null;
     }
@@ -203,6 +211,14 @@ pub fn read_u16(self: *Self) !?u16 {
         p = self.peek();
     }
     return @intCast(value);
+}
+
+pub fn read_u24(t: *Self) error{InvalidU24}!u24 {
+    const field = t.read_field();
+    const value = std.fmt.parseInt(u24, field, 10) catch {
+        return error.InvalidU24;
+    };
+    return value;
 }
 
 pub fn read_bool(t: *Self) error{InvalidBooleanField}!bool {

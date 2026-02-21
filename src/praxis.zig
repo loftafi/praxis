@@ -91,31 +91,7 @@ pub const parse_reference = Reference.parse;
 /// the Greek word.
 pub const transliterate = @import("transliterate.zig").transliterate_word;
 
-/// A `Lexeme` and `Form` is assigned randim uid when it is first seen.
-/// This is exported to allow other modules to also use the uid generator.
-/// `seed()` can be called multiple times, but only acts on the first call.
-pub const seed = @import("random.zig").seed;
-
-/// This is exported to allow other modules to also use the uid generator.
-/// Generate a predictable random number sequence. Use `seed()` if you don't
-/// want the same sequence of numbers each time.
-pub const random = @import("random.zig").random;
-
-/// Generate a u24 uid for a `Lexeme` or `Form`. You do not need to use this,
-/// but it is exported to allow other modules to reuse the uid generator.
-/// Generate a predictable random number sequence. Use `seed()` if you don't
-/// want the same sequence of numbers each time.
-pub const random_u24 = @import("random.zig").random_u24;
-
-/// Generate a predictable random number sequence. Use `seed()` if you don't
-/// want the same sequence of numbers each time. Not used by this library
-/// but exported for convenience.
-pub const random_u64 = @import("random.zig").random_u64;
-
-/// Generate a predictable random number sequence. Use `seed()` if you don't
-/// want the same sequence of numbers each time. Not used by this library
-/// but exported for convenience.
-pub const random_u16 = @import("random.zig").random_u16;
+pub const random = @import("random.zig");
 
 /// Deprecated. Was used to share a standard way to read a sequence of
 /// ascii or unicode characters from a string. Will be removed in the future.

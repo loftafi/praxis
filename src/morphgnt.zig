@@ -3,6 +3,7 @@
 //!
 //! https://ccat.sas.upenn.edu/gopher/text/religion/biblical/lxxmorph/
 //!
+//! ```
 //!    RP ----DP--
 //!    RA ----DSF-
 //!    V- -PMN----
@@ -16,6 +17,7 @@
 //!    V- -PAPNSM-
 //!    V- -APPDSF-
 //!    V- 3AAI-P--
+//! ```
 
 /// Read a two part parsing field in the SBL MorphGNT tag format.
 pub fn parse(tag: []const u8) Parsing.Error!Parsing {

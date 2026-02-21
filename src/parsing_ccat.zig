@@ -6,7 +6,8 @@
 //!
 //! https://ccat.sas.upenn.edu/gopher/text/religion/biblical/lxxmorph/
 
-pub fn parse(tag: []const u8) !Parsing {
+/// Read a parsing code string in the CCAT format.
+pub fn parse(tag: []const u8) ParsingError!Parsing {
     var data = tag;
     while (data.len > 0 and (data[0] == ' ' or data[0] == '-')) {
         data = data[1..];
@@ -153,7 +154,7 @@ fn verbParsing(tag: []const u8, parsing_: Parsing) !Parsing {
         'Y', 'L' => .pluperfect,
         else => {
             err("invalid tense form: {c} (Parsing={any})", .{ tag[0], parsing });
-            return error.InvalidTenseForm;
+            return error.UnknownTenseForm;
         },
     };
 
@@ -167,7 +168,7 @@ fn verbParsing(tag: []const u8, parsing_: Parsing) !Parsing {
         'D' => .middle_deponent,
         'O' => .passive_deponent,
         'N' => .middle_or_passive_deponent,
-        else => return error.InvalidVoice,
+        else => return error.UnknownVoice,
     };
 
     if (tag.len == 2) return parsing;
@@ -179,7 +180,7 @@ fn verbParsing(tag: []const u8, parsing_: Parsing) !Parsing {
         'M', 'D' => .imperative,
         'N' => .infinitive,
         'P' => .participle,
-        else => return error.InvalidMood,
+        else => return error.UnknownMood,
     };
 
     if (parsing.mood == .participle and tag.len > 5)
@@ -343,3 +344,4 @@ const Number = @import("parsing.zig").Number;
 const Person = @import("parsing.zig").Person;
 const Case = @import("parsing.zig").Case;
 const Gender = @import("parsing.zig").Gender;
+pub const ParsingError = @import("parsing_morphgnt.zig").ParsingError;

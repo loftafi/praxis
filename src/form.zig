@@ -13,18 +13,7 @@ lexeme: ?*Lexeme = null,
 
 const Form = @This();
 
-pub fn create(allocator: Allocator) error{OutOfMemory}!*Form {
-    var s = try allocator.create(Form);
-    errdefer allocator.destroy(Form);
-    s.init();
-    return s;
-}
-
-pub fn destroy(self: *Form, allocator: Allocator) void {
-    self.deinit(allocator);
-    allocator.destroy(self);
-}
-
+/// Describes an empty `Form` record.
 pub const empty = Form{
     .uid = 0,
     .word = "",
@@ -36,10 +25,25 @@ pub const empty = Form{
     .references = .empty,
 };
 
+/// Create a `Form` object as an empty record.
+pub fn create(allocator: Allocator) error{OutOfMemory}!*Form {
+    var s = try allocator.create(Form);
+    errdefer allocator.destroy(Form);
+    s.init();
+    return s;
+}
+
+/// Deinitialise and destroy this `Form`.
+pub fn destroy(self: *Form, allocator: Allocator) void {
+    self.deinit(allocator);
+    allocator.destroy(self);
+}
+
 pub fn init(self: *Form) void {
     self.* = .empty;
 }
 
+/// Deinitialise any memory associated with this `Form`.
 pub fn deinit(self: *Form, allocator: Allocator) void {
     if (self.word.len > 0)
         allocator.free(self.word);
@@ -87,6 +91,8 @@ pub fn writeBinary(
     }
 }
 
+/// Return the gloss set for a particular language. Returns null if
+/// no gloss set exists for the requested `lang`.
 pub fn glosses_by_lang(self: *const Form, lang: Lang) ?*Gloss {
     for (self.glosses.items) |gloss| {
         if (gloss.*.lang == lang) {
@@ -167,37 +173,8 @@ pub fn autocompleteLessThan(key: ?[]const u8, self: *const Form, other: *const F
     return self.uid < other.uid;
 }
 
-pub fn read_string(t: *Parser, out: *std.ArrayList(u8)) !void {
-    const value = try read_field(t);
-    try out.appendSlice(value);
-}
-
-/// Read a slice of a bytes contining a utf8 string without memory allocations
-pub fn read_field(t: *Parser) ![]const u8 {
-    const start = t.index;
-    while (true) {
-        const c = t.peek();
-        if (c == '\n' or c == '\t' or c == '|' or c == 0) {
-            const field = t.data[start..t.index];
-            return field;
-        }
-        _ = t.next();
-    }
-}
-
-pub fn read_bool(t: *Parser) error{InvalidBooleanField}!bool {
-    const field = try read_field(t);
-    if (std.ascii.eqlIgnoreCase(field, "true") or std.ascii.eqlIgnoreCase(field, "yes")) {
-        return true;
-    }
-    if (std.ascii.eqlIgnoreCase(field, "false") or std.ascii.eqlIgnoreCase(field, "no")) {
-        return false;
-    }
-    return error.InvalidBooleanField;
-}
-
 pub fn read_parsing(t: *Parser) !Parsing {
-    const field = try read_field(t);
+    const field = t.read_field();
     if (field.len == 0) {
         return Parsing{ .part_of_speech = .unknown };
     }
@@ -205,7 +182,7 @@ pub fn read_parsing(t: *Parser) !Parsing {
 }
 
 pub fn read_u32(t: *Parser) error{InvalidU24}!u32 {
-    const field = try read_field(t);
+    const field = t.read_field();
     const value = std.fmt.parseInt(u32, field, 10) catch {
         return error.InvalidU32;
     };
@@ -213,7 +190,7 @@ pub fn read_u32(t: *Parser) error{InvalidU24}!u32 {
 }
 
 pub fn read_u24(t: *Parser) error{InvalidU24}!u24 {
-    const field = try read_field(t);
+    const field = t.read_field();
     const value = std.fmt.parseInt(u24, field, 10) catch {
         return error.InvalidU24;
     };
@@ -291,7 +268,7 @@ pub fn writeText(
 pub fn readText(self: *Form, arena: Allocator, t: *Parser) !void {
     _ = t.skip_whitespace_and_lines();
     //const start = t.index;
-    const word_field = try read_field(t);
+    const word_field = t.read_field();
     if (word_field.len == 0) {
         self.word = "";
     } else {
@@ -304,7 +281,7 @@ pub fn readText(self: *Form, arena: Allocator, t: *Parser) !void {
     if (!t.consume_if('|')) {
         return error.MissingField;
     }
-    self.preferred = try read_bool(t);
+    self.preferred = try t.read_bool();
     if (!t.consume_if('|')) {
         return error.MissingField;
     }

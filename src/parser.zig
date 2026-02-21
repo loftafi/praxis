@@ -205,6 +205,17 @@ pub fn read_u16(self: *Self) !?u16 {
     return @intCast(value);
 }
 
+pub fn read_bool(t: *Self) error{InvalidBooleanField}!bool {
+    const field = t.read_field();
+    if (std.ascii.eqlIgnoreCase(field, "true") or std.ascii.eqlIgnoreCase(field, "yes")) {
+        return true;
+    }
+    if (std.ascii.eqlIgnoreCase(field, "false") or std.ascii.eqlIgnoreCase(field, "no")) {
+        return false;
+    }
+    return error.InvalidBooleanField;
+}
+
 /// Read a slice of a bytes from the source data, ending in a newline, tab, pipe, or zero.
 pub fn read_field(t: *Self) []const u8 {
     const start = t.index;

@@ -17,8 +17,21 @@
 //!   V- -APPDSF-
 //!   V- 3AAI-P--
 
-/// Read the two part parsing field in the SBL MorphGNT tag data
-pub fn parse(tag: []const u8) !Parsing {
+pub const ParsingError = error{
+    Incomplete,
+    UnknownPartOfSpeech,
+    UnknownCase,
+    UnknownNumber,
+    UnknownGender,
+    UnknownPerson,
+    UnknownTenseForm,
+    UnknownVoice,
+    UnknownMood,
+    UnrecognisedValue,
+};
+
+/// Read a two part parsing field in the SBL MorphGNT tag format.
+pub fn parse(tag: []const u8) ParsingError!Parsing {
     var data = tag;
     while (data.len > 0 and (data[0] == ' ' or data[0] == '-')) {
         data = data[1..];

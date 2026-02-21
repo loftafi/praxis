@@ -1,4 +1,7 @@
-/// A `Lexeme` is a collection of `Form` objects that represent the same
+/// A `Lexeme` describes a dictionary entry.
+///
+/// A `Lexeme` contain a collection of `Form` objects that describe the
+/// range of ways this lexeme appears
 /// underlying fundamental meaning.
 ///
 /// For example, "jump" is a lexeme, and forms of this word include "jump," "jumps,", "jumping," etc...
@@ -36,6 +39,7 @@ pub fn init(self: *Lexeme) void {
     self.* = .empty;
 }
 
+/// A placeholder lexeme which contains no data.
 pub const empty: Lexeme = .{
     .uid = 0,
     .word = "",
@@ -91,6 +95,7 @@ pub fn glosses_by_lang(self: *const Lexeme, lang: Lang) ?*Gloss {
     return null;
 }
 
+/// Returns true if this `Lexeme` if the `tags` list contains this `tag`.
 pub fn has_tag(self: *const Lexeme, tag: []const u8) bool {
     if (self.tags) |tags|
         for (tags) |i|
@@ -119,8 +124,7 @@ pub const ADJECTIVE_PRIMARY = [_]Parsing{
     parse("A-NSN") catch unreachable,
 };
 
-/// Returns the first form matching the specified parsing.
-///
+/// Get the _first_ form matching the specified parsing.
 pub fn formByParsing(self: *const Lexeme, parsing: Parsing) ?*Form {
     var found: ?*Form = null;
 
@@ -192,8 +196,8 @@ pub fn primaryForm(self: *const Lexeme) ?*Form {
     return self.forms.items[0];
 }
 
-/// Sort by the `word` field. If word field matches, compare
-/// the `glosses` count.
+/// Compare two `Lexeme` entries by the `word` field. If both `word` values
+/// match, compare the `glosses` count.
 pub fn lessThan(_: ?[]const u8, self: *Lexeme, other: *Lexeme) bool {
     const x = @import("sort.zig").order(self.word, other.word);
     if (x == .lt) {
@@ -205,9 +209,8 @@ pub fn lessThan(_: ?[]const u8, self: *Lexeme, other: *Lexeme) bool {
     return self.glosses.items.len < other.glosses.items.len;
 }
 
-/// Read all binary lexeme information along
-/// with any child form records that appear
-/// immediately after it.
+/// Read binary `Lexeme` information along with any child `Form` binary
+/// records attached to the lexeme.
 pub fn readBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader) !void {
     self.uid = try t.u24();
     const word = try t.string();
@@ -244,8 +247,8 @@ pub fn readBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader) !void {
     }
 }
 
-/// Write all fields from a lexeme in binary format. No child
-/// form records are output.
+/// Write lexeme data in binary format to a `writer`. Child `Form` records
+/// are not exported. See `Form.writeBinary`.
 pub fn writeBinary(
     self: *const Lexeme,
     data: *std.Io.Writer,
@@ -280,16 +283,16 @@ pub fn writeBinary(
     }
 }
 
-/// Read a text string representing the basic information
-/// about a lexeme. Reads one line only. Does not read
-/// form entries on the following lines.
+/// Read text `Lexeme` information representing  basic information about a
+/// lexeme. Reads one line only. Does not read form entries on the
+/// following lines.
 ///
 /// Ἀαρών|el|17|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
 /// Ἀαρών|el|17|ProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
 pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
     _ = t.skip_whitespace_and_lines();
 
-    const word_field = try form.read_field(t);
+    const word_field = t.read_field();
     if (word_field.len == 0) return error.EmptyField;
     self.word = try arena.dupe(u8, word_field);
     if (!t.consume_if('|')) {
@@ -310,7 +313,7 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
     self.article = try t.read_article();
 
     if (!t.consume_if('|')) return error.MissingField;
-    const suffix = try form.read_field(t); // Genitive suffix
+    const suffix = t.read_field(); // Genitive suffix
     if (suffix.len > 0) {
         self.genitiveSuffix = try arena.dupe(u8, suffix);
     }
@@ -319,7 +322,7 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
     _ = try t.readStrongs(arena, &self.strongs);
 
     if (!t.consume_if('|')) return error.MissingField;
-    const root = try form.read_field(t); // Lexeme root
+    const root = t.read_field(); // Lexeme root
     if (root.len > 0) {
         self.root = try arena.dupe(u8, root);
     }
@@ -331,13 +334,13 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
     if (!t.consume_if('|')) {
         return error.MissingField;
     }
-    const adjectives = try form.read_field(t); // Adjective forms
+    const adjectives = t.read_field(); // Adjective forms
     if (adjectives.len > 0) {
         self.adjective = try arena.dupe(u8, adjectives);
     }
 
     if (!t.consume_if('|')) return error.MissingField;
-    const tag_set = try form.read_field(t); // Tags
+    const tag_set = t.read_field(); // Tags
     var i = std.mem.tokenizeAny(u8, tag_set, " ,\n\r\t");
     var tags: [10][]const u8 = undefined;
     var ti: usize = 0;
@@ -351,13 +354,14 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
     for (0..ti) |x| {
         self.tags.?[x] = try arena.dupe(u8, tags[x]);
     }
-    _ = try form.read_field(t); // ??
+    _ = t.read_field(); // ??
 
     if (!t.consume_if('|')) return error.MissingField;
-    self.note = try form.read_field(t);
+    self.note = t.read_field();
     _ = t.read_until_eol();
 }
 
+/// Write lexeme data in text format to a `writer`.
 pub fn writeText(
     self: *const Lexeme,
     writer: *std.Io.Writer,

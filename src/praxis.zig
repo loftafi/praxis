@@ -1,3 +1,8 @@
+///! Praxis is a zig library supporting the collection of Biblical Greek
+///! and Biblical Hebrew vocabulary. The `Dictionary` reads and writes
+///! dictinary data, and supports `lookup`, `search` and `autocomplete`
+///! functions.
+///!
 pub const Dictionary = @import("dictionary.zig").Dictionary;
 pub const SearchIndex = @import("search_index.zig").SearchIndex;
 pub const normalise_word = @import("search_index.zig").normalise_word;

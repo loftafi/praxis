@@ -1,11 +1,10 @@
 //! Read parsing information as described by the greek
 //! cntr. See: https://greekcntr.org/resources/NTGRG.pdf
 
-// Provide the two parsing fields as one string with
-// spaces or tabs separating the two fields.
-
+// Read a two part parsing field as defined by the CNTR format documentation.
+//
 //     const parsing = parse("V       IAA3..S");
-pub fn parse(value: []const u8) !Parsing {
+pub fn parse(value: []const u8) ParsingError!Parsing {
     var parsing: Parsing = .default;
     var tag: []const u8 = value;
 
@@ -170,7 +169,9 @@ test "basic cntr parsing" {
     }
 }
 
-const Parsing = @import("parsing.zig").Parsing;
 const std = @import("std");
 const err = std.log.err;
 const ee = std.testing.expectEqual;
+
+const Parsing = @import("parsing.zig").Parsing;
+pub const ParsingError = @import("parsing_morphgnt.zig").ParsingError;

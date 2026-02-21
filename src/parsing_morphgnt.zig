@@ -3,35 +3,22 @@
 //!
 //! https://ccat.sas.upenn.edu/gopher/text/religion/biblical/lxxmorph/
 //!
-//!   RP ----DP--
-//!   RA ----DSF-
-//!   V- -PMN----
-//!   D- --------
-//!   RA ----DPM-
-//!   A- ----DPM-
-//!   N- ----DSF-
-//!   V- 1AAI-S--
-//!   V- 1AAI-S--
-//!   V- -AAN----
-//!   V- -PAPNSM-
-//!   V- -APPDSF-
-//!   V- 3AAI-P--
-
-pub const ParsingError = error{
-    Incomplete,
-    UnknownPartOfSpeech,
-    UnknownCase,
-    UnknownNumber,
-    UnknownGender,
-    UnknownPerson,
-    UnknownTenseForm,
-    UnknownVoice,
-    UnknownMood,
-    UnrecognisedValue,
-};
+//!    RP ----DP--
+//!    RA ----DSF-
+//!    V- -PMN----
+//!    D- --------
+//!    RA ----DPM-
+//!    A- ----DPM-
+//!    N- ----DSF-
+//!    V- 1AAI-S--
+//!    V- 1AAI-S--
+//!    V- -AAN----
+//!    V- -PAPNSM-
+//!    V- -APPDSF-
+//!    V- 3AAI-P--
 
 /// Read a two part parsing field in the SBL MorphGNT tag format.
-pub fn parse(tag: []const u8) ParsingError!Parsing {
+pub fn parse(tag: []const u8) Error!Parsing {
     var data = tag;
     while (data.len > 0 and (data[0] == ' ' or data[0] == '-')) {
         data = data[1..];
@@ -326,6 +313,7 @@ const debug = std.log.debug;
 const ee = std.testing.expectEqual;
 
 const Parsing = @import("parsing.zig").Parsing;
+const Error = Parsing.Error;
 const Number = @import("parsing.zig").Number;
 const Person = @import("parsing.zig").Person;
 const Case = @import("parsing.zig").Case;

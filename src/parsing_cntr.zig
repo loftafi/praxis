@@ -4,7 +4,7 @@
 /// Read a two part parsing field as defined by the CNTR format documentation.
 ///
 ///     const parsing = parse("V       IAA3..S");
-pub fn parse(value: []const u8) ParsingError!Parsing {
+pub fn parse(value: []const u8) Error!Parsing {
     var parsing: Parsing = .default;
     var tag: []const u8 = value;
 
@@ -174,4 +174,4 @@ const err = std.log.err;
 const ee = std.testing.expectEqual;
 
 const Parsing = @import("parsing.zig").Parsing;
-pub const ParsingError = @import("parsing_morphgnt.zig").ParsingError;
+const Error = Parsing.Error;

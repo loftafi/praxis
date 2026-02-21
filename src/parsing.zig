@@ -380,6 +380,20 @@ pub const Parsing = packed struct(u32) {
             }
         }
     };
+
+    pub const Error = error{
+        Incomplete,
+        UnknownPartOfSpeech,
+        UnknownCase,
+        UnknownNumber,
+        UnknownGender,
+        UnknownPerson,
+        UnknownTenseForm,
+        UnknownVoice,
+        UnknownMood,
+        UnrecognisedValue,
+        InvalidParsing,
+    };
 };
 
 inline fn append_person(
@@ -581,8 +595,6 @@ inline fn append_flag(p: Parsing, b: *std.Io.Writer) !void {
         try b.writeAll("-I");
     }
 }
-
-pub const Error = error{ InvalidParsing, Incomplete, InvalidGender };
 
 const expect = std.testing.expect;
 const expectEqual = std.testing.expectEqual;

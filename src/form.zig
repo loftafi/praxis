@@ -299,7 +299,7 @@ const is_whitespace_or_eol = @import("parser.zig").is_whitespace_or_eol;
 const readTextGlosses = @import("gloss.zig").readTextGlosses;
 const writeTextGlosses = @import("gloss.zig").writeTextGlosses;
 const readBinaryGlosses = @import("gloss.zig").readBinaryGlosses;
-const byz = @import("parsing_byz.zig");
+const byz = @import("byz.zig");
 
 const BinaryWriter = @import("binary_writer.zig");
 const append_u8 = BinaryWriter.append_u8;

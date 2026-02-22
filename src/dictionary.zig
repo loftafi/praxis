@@ -288,18 +288,20 @@ pub const Dictionary = struct {
     /// search index into an on disk data file.
     pub fn saveBinaryFile(
         self: *const Dictionary,
+        gpa: Allocator,
         io: std.Io,
+        dir: std.Io.Dir,
         filename: []const u8,
         save_mode: SaveMode,
     ) !void {
         seed(io);
-        var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        var temp_arena = std.heap.ArenaAllocator.init(gpa);
         defer temp_arena.deinit();
         var data: std.Io.Writer.Allocating = .init(temp_arena.allocator());
         defer data.deinit();
-        try self.writeBinaryData(temp_arena.allocator(), &data, save_mode);
+        try self.writeBinaryData(temp_arena.allocator(), &data.writer, save_mode);
         debug("binary data size: {any}", .{data.written().len});
-        try write_bytes_to_file(io, data.written(), filename);
+        try write_bytes_to_file(io, dir, filename, data.written());
     }
 
     /// Save all dictionary data, along with a pre-built
@@ -868,6 +870,36 @@ test "dictionary_destroy2" {
         \\λύω|el|636607|Verb|||3089|λύ||||
     ;
     try dictionary.loadTextData(allocator, allocator, data);
+}
+
+test "persist_dictionary" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const dictionary = try Dictionary.create(gpa);
+    defer dictionary.destroy(gpa);
+    const data =
+        \\λύω|el|636607|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
+        \\  λύω|V-PAI-1S|false|855809|en:I untie:I release:I loose|
+        \\  λύεις|V-PAI-2S|false|855900|en:You untie:You release|
+        \\δράκων|el|279509|Noun|ὁ|-οντος|1404|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
+        \\  δράκων|N-NSM|false|3760207||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
+        \\  δράκοντα|N-ASM|false|3700628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
+    ;
+    try dictionary.loadTextData(gpa, gpa, data);
+    try expectEqual(4, dictionary.forms.items.len);
+    try expectEqual(2, dictionary.lexemes.items.len);
+    try dictionary.saveBinaryFile(gpa, io, tmp.dir, "temp_binary_file", .all_words);
+
+    var dictionary2 = try Dictionary.create(gpa);
+    defer dictionary2.destroy(gpa);
+    const data2 = try tmp.dir.readFileAlloc(io, "temp_binary_file", gpa, .unlimited);
+    defer gpa.free(data2);
+    try dictionary2.loadBinaryData(gpa, gpa, data2);
+    try expectEqual(4, dictionary2.forms.items.len);
+    try expectEqual(2, dictionary2.lexemes.items.len);
 }
 
 test "partial dictionary search" {

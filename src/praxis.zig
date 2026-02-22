@@ -46,10 +46,6 @@ const parsing = @import("parsing.zig");
 /// Contains word tagging/parsing information.
 pub const Parsing = parsing.Parsing;
 
-/// Use the parsing information in a `Parsing` to generate an English
-/// language part of speech string.
-pub const pos_to_english = @import("part_of_speech.zig").english;
-
 /// Load a `Parsing` struct with parsing in the Byz format.
 pub const byz = @import("byz.zig");
 

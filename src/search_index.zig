@@ -331,12 +331,12 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
     };
 }
 
-//// Normalise is used to standardize a keyword into the format
-//// it would appear if it exists inside the search index.
-////
-////  - The unaccented version removes all accents and breathings.
-////  - The normalised removes only excess accents and standarises the final letter.
-////
+/// Normalise is used to standardize a keyword into the format
+/// it would appear if it exists inside the search index.
+///
+///  - The unaccented version removes all accents and breathings.
+///  - The normalised removes only excess accents and standarises the final letter.
+///
 pub fn normalise_word(
     word: []const u8,
     unaccented: *BoundedArray(u8, max_word_size),

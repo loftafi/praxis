@@ -7,7 +7,8 @@ languages.
 ## How to use
 
 Care has been taken to carefully name and document each struct and
-important public method. See `praxis.zig` for the public interface.
+important public method. See `praxis.zig` for the public interface, or
+view the zig [API documentation](https://loftafi.github.io/praxis/docs/).
 If anything is unclear please raise a Github issue.
 
 ## License

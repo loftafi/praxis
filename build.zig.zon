@@ -1,8 +1,8 @@
 .{
     .name = .praxis,
-    .version = "0.6.2",
+    .version = "0.6.3",
     .fingerprint = 0x9db9462b35f6f714,
-    .minimum_zig_version = "0.15.2",
+    .minimum_zig_version = "0.16.0",
     .dependencies = .{},
 
     .paths = .{

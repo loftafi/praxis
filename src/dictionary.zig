@@ -295,11 +295,11 @@ pub const Dictionary = struct {
         seed(io);
         var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer temp_arena.deinit();
-        var data: std.ArrayListUnmanaged(u8) = .empty;
+        var data: std.Io.Writer.Allocating = .init(temp_arena);
         defer data.deinit(temp_arena.allocator());
         try self.writeBinaryData(temp_arena.allocator(), &data, save_mode);
-        debug("binary data size: {any}", .{data.items.len});
-        try write_bytes_to_file(io, data.items, filename);
+        debug("binary data size: {any}", .{data.written().len});
+        try write_bytes_to_file(io, data.written(), filename);
     }
 
     /// Save all dictionary data, along with a pre-built

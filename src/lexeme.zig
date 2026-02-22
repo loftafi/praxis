@@ -372,7 +372,7 @@ pub fn writeText(
     try writer.writeByte('|');
     try writer.print("{d}", .{self.uid});
     try writer.writeByte('|');
-    try writer.writeAll(english_camel_case(self.pos));
+    try writer.writeAll(self.pos.english_part_of_speech_label());
     try writer.writeByte('|');
     try writer.writeAll(self.article.articles()); // M, F, M/F...
     try writer.writeByte('|');
@@ -639,7 +639,6 @@ const is_whitespace = @import("parser.zig").is_whitespace;
 const form = @import("form.zig");
 const Form = @import("form.zig");
 const is_whitespace_or_eol = @import("parser.zig").is_whitespace_or_eol;
-const english_camel_case = @import("part_of_speech.zig").english_camel_case;
 pub const PartOfSpeech = @import("part_of_speech.zig").PartOfSpeech;
 const parse_pos = @import("part_of_speech.zig").parse_pos;
 pub const Parsing = @import("parsing.zig").Parsing;

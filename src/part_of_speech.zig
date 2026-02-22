@@ -153,15 +153,15 @@ const eq = @import("std").testing.expectEqual;
 const seq = @import("std").testing.expectEqualStrings;
 
 test "pos_to_string" {
-    try seq("Numeral", english(Parsing{ .part_of_speech = .numeral }));
-    try seq("Noun", english(Parsing{ .part_of_speech = .noun }));
+    try seq("Numeral", (Parsing{ .part_of_speech = .numeral }).english_part_of_speech());
+    try seq("Noun", (Parsing{ .part_of_speech = .noun }).english_part_of_speech_label());
     try eq(Parsing{ .part_of_speech = .proper_noun }, parse_pos("Proper Noun"));
     try eq(Parsing{ .part_of_speech = .proper_noun }, parse_pos("proper_noun"));
     try eq(Parsing{ .part_of_speech = .letter }, parse_pos("letter"));
     try eq(Parsing{ .part_of_speech = .unknown }, parse_pos("fishing"));
 
     inline for (comptime std.enums.values(PartOfSpeech)) |f| {
-        const value = english(.{ .part_of_speech = f });
+        const value = (Parsing{ .part_of_speech = f }).english_part_of_speech();
         const reverse = parse_pos(value);
         //std.debug.print("check {any} {any} {any}\n", .{ f, value, reverse.part_of_speech });
         try eq(f, reverse.part_of_speech);

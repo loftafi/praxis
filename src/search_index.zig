@@ -458,7 +458,10 @@ pub fn keywordify(
                 normalised.appendSlice(lc) catch return error.WordTooLong;
             } else {
                 saw_accent = true;
-                normalised.appendSlice(character_slice) catch return error.WordTooLong;
+                if (fix_grave(c)) |fixed|
+                    normalised.appendSlice(fixed) catch return error.WordTooLong
+                else
+                    normalised.appendSlice(character_slice) catch return error.WordTooLong;
             }
         } else {
             if ((c == 'σ' or c == 'Σ' or c == 'ς') and (i.i == word.len)) {
@@ -956,15 +959,23 @@ test "keywordify simple" {
 
 test "keywordify phrase" {
     const allocator = std.testing.allocator;
+    const phrase = "ὁ μικρὸς οἶκος";
+    const keyworded = "ὁ μικρός οἶκος";
     {
         var unaccented_word = BoundedArray(u8, max_word_size){};
         var normalised_word = BoundedArray(u8, max_word_size){};
-        const phrase = "ὁ μικρὸς οἶκος";
         var slices: ArrayListUnmanaged([]const u8) = .empty;
         defer slices.deinit(allocator);
         try keywordify(allocator, phrase, &unaccented_word, &normalised_word, &slices);
         try std.testing.expectEqual(24, slices.items.len);
-        try se("ὁ μικρὸς οἶκος", normalised_word.slice());
+        try se(keyworded, normalised_word.slice());
+        try se("ο μικροσ οικοσ", unaccented_word.slice());
+    }
+    {
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
+        try normalise_word(phrase, &unaccented_word, &normalised_word);
+        try se(keyworded, normalised_word.slice());
         try se("ο μικροσ οικοσ", unaccented_word.slice());
     }
 }

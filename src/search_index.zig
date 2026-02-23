@@ -99,6 +99,9 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             return result.value_ptr.*;
         }
 
+        // Returns all records that exactly match (accents included). If no
+        // records exactly match. Returns all records that match with accents
+        // removed.
         pub fn lookup(self: *Self, word: []const u8) (error{NormalisationFailed})!?*SearchResult {
             if (word.len >= max_word_size) {
                 // If search word is too long, it definitely

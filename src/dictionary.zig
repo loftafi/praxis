@@ -597,28 +597,28 @@ test "basic_dictionary" {
     try expectEqual(27, dictionary.by_form.index.count());
 
     {
-        const results = dictionary.by_form.lookup("λύω");
+        const results = try dictionary.by_form.lookup("λύω");
         try expect(results != null);
         try expectEqual(1, results.?.exact_accented.items.len);
         try expectEqual(0, results.?.exact_unaccented.items.len);
         try expectEqual(0, results.?.partial_match.items.len);
     }
     {
-        const results = dictionary.by_form.lookup("λύει");
+        const results = try dictionary.by_form.lookup("λύει");
         try expect(results != null);
         try expectEqual(1, results.?.exact_accented.items.len);
         try expectEqual(0, results.?.exact_unaccented.items.len);
         try expectEqual(1, results.?.partial_match.items.len);
     }
     {
-        const results = dictionary.by_form.lookup("λύεις");
+        const results = try dictionary.by_form.lookup("λύεις");
         try expect(results != null);
         try expectEqual(1, results.?.exact_accented.items.len);
         try expectEqual(0, results.?.exact_unaccented.items.len);
         try expectEqual(0, results.?.partial_match.items.len);
     }
     {
-        const results = dictionary.by_gloss.lookup("serpent");
+        const results = try dictionary.by_gloss.lookup("serpent");
         try expect(results != null);
         try expectEqual(1, results.?.exact_accented.items.len);
         try expectEqualStrings("δράκων", results.?.exact_accented.items[0].word);
@@ -626,7 +626,7 @@ test "basic_dictionary" {
         try expectEqual(0, results.?.partial_match.items.len);
     }
     {
-        const results = dictionary.by_gloss.lookup("sneaky");
+        const results = try dictionary.by_gloss.lookup("sneaky");
         try expect(results != null);
         try expectEqual(1, results.?.exact_accented.items.len);
         try expectEqualStrings("δράκοντα", results.?.exact_accented.items[0].word);
@@ -634,7 +634,7 @@ test "basic_dictionary" {
         try expectEqual(0, results.?.partial_match.items.len);
     }
     {
-        const results = dictionary.by_gloss.lookup("the");
+        const results = try dictionary.by_gloss.lookup("the");
         try expect(results == null);
     }
 
@@ -667,13 +667,13 @@ test "basic_dictionary" {
         try expectEqual(13, dictionary.by_lexeme.index.count());
         try expectEqual(27, dictionary.by_form.index.count());
 
-        const results2 = dictionary2.by_form.lookup("λύω");
+        const results2 = try dictionary2.by_form.lookup("λύω");
         try expect(results2 != null);
         try expectEqual(1, results2.?.exact_accented.items.len);
         try expectEqual(0, results2.?.exact_unaccented.items.len);
         try expectEqual(0, results2.?.partial_match.items.len);
         {
-            const results = dictionary2.by_gloss.lookup("sneaky");
+            const results = try dictionary2.by_gloss.lookup("sneaky");
             try expect(results != null);
             try expectEqual(1, results.?.exact_accented.items.len);
             try expectEqualStrings("δράκοντα", results.?.exact_accented.items[0].word);
@@ -697,7 +697,7 @@ test "unaccented dictionary search" {
         \\  δράκοντα|N-ASM|false|376280||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;
     try dictionary.loadTextData(allocator, allocator, data);
-    const results = dictionary.by_form.lookup("δρακων");
+    const results = try dictionary.by_form.lookup("δρακων");
     try expect(results != null);
     try expectEqual(0, results.?.exact_accented.items.len);
     try expectEqual(1, results.?.exact_unaccented.items.len);
@@ -795,7 +795,7 @@ test "arena_check" {
 
 fn gloss_fallback_checker(dictionary: *Dictionary) !void {
     {
-        const results = dictionary.by_form.lookup("λυεις");
+        const results = try dictionary.by_form.lookup("λυεις");
         try expect(results != null);
         try expectEqual(1, results.?.exact_unaccented.items.len);
         const form = results.?.exact_unaccented.items[0];
@@ -804,7 +804,7 @@ fn gloss_fallback_checker(dictionary: *Dictionary) !void {
         try expectEqualStrings("You release", form.glosses_by_lang(Lang.english).?.glosses()[1]);
     }
     {
-        const results = dictionary.by_form.lookup("λύει");
+        const results = try dictionary.by_form.lookup("λύει");
         try expect(results != null);
         try expectEqual(1, results.?.exact_accented.items.len);
         const form = results.?.exact_accented.items[0];
@@ -814,7 +814,7 @@ fn gloss_fallback_checker(dictionary: *Dictionary) !void {
         try expectEqualStrings("loose", form.glosses_by_lang(Lang.english).?.glosses()[2]);
     }
     {
-        const results = dictionary.by_form.lookup("δρακων");
+        const results = try dictionary.by_form.lookup("δρακων");
         try expect(results != null);
         try expectEqual(1, results.?.exact_unaccented.items.len);
         const form = results.?.exact_unaccented.items[0];
@@ -915,7 +915,7 @@ test "partial dictionary search" {
         \\  δράκοντα|N-ASM|false|3700628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;
     try dictionary.loadTextData(allocator, allocator, data);
-    const results = dictionary.by_form.lookup("δρα");
+    const results = try dictionary.by_form.lookup("δρα");
     try expect(results != null);
     try expectEqual(0, results.?.exact_accented.items.len);
     try expectEqual(0, results.?.exact_unaccented.items.len);
@@ -929,14 +929,14 @@ test "dictionary_file" {
     const dictionary = try Dictionary.create(allocator);
     defer dictionary.destroy(allocator);
     try dictionary.loadFile(allocator, allocator, io, "./test/small_dict.txt");
-    var results = dictionary.by_form.lookup("δρα");
+    var results = try dictionary.by_form.lookup("δρα");
     try expect(results == null);
-    results = dictionary.by_form.lookup("αρτο");
+    results = try dictionary.by_form.lookup("αρτο");
     try expect(results != null);
     try expectEqual(0, results.?.exact_accented.items.len);
     try expectEqual(0, results.?.exact_unaccented.items.len);
     try expectEqual(6, results.?.partial_match.items.len);
-    results = dictionary.by_form.lookup("η");
+    results = try dictionary.by_form.lookup("η");
     try expect(results != null);
     try expectEqual(0, results.?.exact_accented.items.len);
     try expectEqual(5, results.?.exact_unaccented.items.len);
@@ -952,7 +952,7 @@ test "dictionary_file" {
     try expectEqual(561577, results.?.exact_unaccented.items[0].uid);
     try expectEqual(761580, results.?.exact_unaccented.items[1].uid);
     try expectEqual(6561583, results.?.exact_unaccented.items[2].uid);
-    results = dictionary.by_form.lookup("εγω");
+    results = try dictionary.by_form.lookup("εγω");
     try expect(results != null);
     try expectEqual(0, results.?.exact_accented.items.len);
     try expectEqual(2, results.?.exact_unaccented.items.len);
@@ -966,17 +966,17 @@ test "search" {
     const dict = try Dictionary.create(allocator);
     defer dict.destroy(allocator);
     try dict.loadFile(allocator, allocator, io, "./test/small_dict.txt");
-    var results = dict.by_form.lookup("Δαυιδ");
+    var results = try dict.by_form.lookup("Δαυιδ");
     try expect(results != null);
     try expectEqual(0, results.?.exact_accented.items.len);
     try expectEqual(2, results.?.exact_unaccented.items.len);
     try expectEqual(0, results.?.partial_match.items.len);
-    results = dict.by_form.lookup("δαυιδ");
+    results = try dict.by_form.lookup("δαυιδ");
     try expect(results != null);
     try expectEqual(0, results.?.exact_accented.items.len);
     try expectEqual(2, results.?.exact_unaccented.items.len);
     try expectEqual(0, results.?.partial_match.items.len);
-    results = dict.by_gloss.lookup("David");
+    results = try dict.by_gloss.lookup("David");
     //for (results.?.exact_accented.items) |a| {
     //    std.debug.print("found {d} {s}\n", .{ a.uid, a.word });
     //}
@@ -984,22 +984,22 @@ test "search" {
     try expectEqual(2, results.?.exact_accented.items.len);
     try expectEqual(0, results.?.exact_unaccented.items.len);
     try expectEqual(0, results.?.partial_match.items.len);
-    results = dict.by_gloss.lookup("david");
+    results = try dict.by_gloss.lookup("david");
     try expect(results != null);
     try expectEqual(2, results.?.exact_accented.items.len);
     try expectEqual(0, results.?.exact_unaccented.items.len);
     try expectEqual(0, results.?.partial_match.items.len);
-    results = dict.by_gloss.lookup("WATER");
+    results = try dict.by_gloss.lookup("WATER");
     try expect(results != null);
     try expectEqual(1, results.?.exact_accented.items.len);
     try expectEqual(0, results.?.exact_unaccented.items.len);
     try expectEqual(0, results.?.partial_match.items.len);
-    results = dict.by_form.lookup("ὙΔΡΊΑ");
+    results = try dict.by_form.lookup("ὙΔΡΊΑ");
     try expect(results != null);
     try expectEqual(1, results.?.exact_accented.items.len);
     try expectEqual(0, results.?.exact_unaccented.items.len);
     try expectEqual(1, results.?.partial_match.items.len);
-    results = dict.by_form.lookup("ὥρα");
+    results = try dict.by_form.lookup("ὥρα");
     try expect(results != null);
     try expectEqual(1, results.?.exact_accented.items.len);
     try expectEqual(0, results.?.exact_unaccented.items.len);
@@ -1011,15 +1011,15 @@ test "accented_vs_unaccented" {
 
     const dict = try test_dictionary(allocator);
     defer dict.destroy(allocator);
-    const results = dict.by_form.lookup("Δαυιδ");
+    const results = try dict.by_form.lookup("Δαυιδ");
     try expect(results != null);
 
-    const results1 = dict.by_form.lookup("α");
+    const results1 = try dict.by_form.lookup("α");
     try expect(results1 != null);
     try expectEqual(1, results1.?.exact_accented.items.len);
     try expectEqualStrings("α", results1.?.exact_accented.items[0].word);
 
-    const results2 = dict.by_form.lookup("ἅ");
+    const results2 = try dict.by_form.lookup("ἅ");
     try expect(results2 != null);
     try expectEqual(1, results2.?.exact_accented.items.len);
     try expectEqualStrings("ἅ", results2.?.exact_accented.items[0].word);
@@ -1038,7 +1038,7 @@ test "search_result_form_order" {
 
     const dict = try test_dictionary(allocator);
     defer dict.destroy(allocator);
-    const results = dict.by_form.lookup("ἅλας");
+    const results = try dict.by_form.lookup("ἅλας");
     try expect(results != null);
     try expect(results.?.exact_accented.items.len > 1);
 

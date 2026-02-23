@@ -551,27 +551,27 @@ test "return_correct_preferred_form" {
         try expectEqual(2, dictionary.lexemes.items.len);
         try expectEqual(10, dictionary.forms.items.len);
 
-        var results = dictionary.by_form.lookup("λύω");
+        var results = try dictionary.by_form.lookup("λύω");
         try expect(results != null);
         try expectEqual(2, results.?.exact_accented.items.len);
         try expectEqual(170002, results.?.exact_accented.items[0].uid);
 
-        results = dictionary.by_form.lookup("λύεις");
+        results = try dictionary.by_form.lookup("λύεις");
         try expect(results != null);
         try expectEqual(2, results.?.exact_accented.items.len);
         try expectEqual(170005, results.?.exact_accented.items[0].uid);
 
-        results = dictionary.by_form.lookup("λύει");
+        results = try dictionary.by_form.lookup("λύει");
         try expect(results != null);
         try expectEqual(2, results.?.exact_accented.items.len);
         try expectEqual(170006, results.?.exact_accented.items[0].uid);
 
-        results = dictionary.by_form.lookup("λύετε");
+        results = try dictionary.by_form.lookup("λύετε");
         try expect(results != null);
         try expectEqual(2, results.?.exact_accented.items.len);
         try expectEqual(170009, results.?.exact_accented.items[0].uid);
 
-        const words = dictionary.by_lexeme.lookup("λύω");
+        const words = try dictionary.by_lexeme.lookup("λύω");
         try expect(words != null);
         try expectEqual(1, words.?.exact_accented.items.len);
         var f = words.?.exact_accented.items[0].primaryForm();

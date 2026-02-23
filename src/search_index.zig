@@ -99,7 +99,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             return result.value_ptr.*;
         }
 
-        pub fn lookup(self: *Self, word: []const u8) ?*SearchResult {
+        pub fn lookup(self: *Self, word: []const u8) (error{NormalisationFailed})!?*SearchResult {
             if (word.len >= max_word_size) {
                 // If search word is too long, it definitely
                 // is not in the search result.
@@ -108,14 +108,15 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
 
             var unaccented_word = BoundedArray(u8, max_word_size){};
             var normalised_word = BoundedArray(u8, max_word_size){};
-            normalise_word(word, &unaccented_word, &normalised_word) catch {
+            normalise_word(word, &unaccented_word, &normalised_word) catch |e| {
                 // If normalisation fails due to invalid utf8 encoding
                 // then we know this query has no results.
                 //
                 // Theoretically strange unicode issues could cause an
                 // out of memory error, but again this is an invalid
                 // search query.
-                return null;
+                std.log.err("normalisation failed: {any}", .{e});
+                return error.NormalisationFailed;
             };
 
             const result = self.index.get(normalised_word.slice());
@@ -341,10 +342,9 @@ pub fn normalise_word(
     word: []const u8,
     unaccented: *BoundedArray(u8, max_word_size),
     normalised: *BoundedArray(u8, max_word_size),
-) !void {
-    if (word.len >= max_word_size) {
-        return IndexError.WordTooLong;
-    }
+) (error{ InvalidUtf8, Overflow } || Allocator.Error || IndexError)!void {
+    if (word.len >= max_word_size) return IndexError.WordTooLong;
+
     var view = std.unicode.Utf8View.init(word) catch |e| {
         if (e == error.InvalidUtf8) {
             std.debug.print("normalise_word on invalid unicode. {s} -- {any}\n", .{ word, word });
@@ -357,7 +357,9 @@ pub fn normalise_word(
     var i = view.iterator();
 
     while (i.nextCodepointSlice()) |slice| {
-        const c = try std.unicode.utf8Decode(slice);
+        const c = std.unicode.utf8Decode(slice) catch {
+            return error.InvalidUtf8;
+        };
         if (c == ' ' or c == '\t') saw_accent = false;
 
         // Build unaccented version
@@ -949,6 +951,21 @@ test "keywordify simple" {
     }
 }
 
+test "keywordify phrase" {
+    const allocator = std.testing.allocator;
+    {
+        var unaccented_word = BoundedArray(u8, max_word_size){};
+        var normalised_word = BoundedArray(u8, max_word_size){};
+        const phrase = "ὁ μικρὸς οἶκος";
+        var slices: ArrayListUnmanaged([]const u8) = .empty;
+        defer slices.deinit(allocator);
+        try keywordify(allocator, phrase, &unaccented_word, &normalised_word, &slices);
+        try std.testing.expectEqual(24, slices.items.len);
+        try se("ὁ μικρὸς οἶκος", normalised_word.slice());
+        try se("ο μικροσ οικοσ", unaccented_word.slice());
+    }
+}
+
 test "search_index basics" {
     const allocator = std.testing.allocator;
 
@@ -971,16 +988,16 @@ test "search_index basics" {
     var f4 = Thing{ .word = "ἄρτον" };
     try index.add(allocator, f4.word, &f4);
 
-    try eq(null, index.lookup(""));
-    try eq(null, index.lookup("εις"));
+    try eq(null, try index.lookup(""));
+    try eq(null, try index.lookup("εις"));
 
     {
-        const sr = index.lookup("ἄ");
+        const sr = try index.lookup("ἄ");
         try std.testing.expect(sr == null);
     }
 
     {
-        const sr = index.lookup("ἄρ");
+        const sr = try index.lookup("ἄρ");
         try std.testing.expect(sr != null);
         try se("ἄρ", sr.?.keyword);
         try eq(0, sr.?.exact_accented.items.len);
@@ -989,7 +1006,7 @@ test "search_index basics" {
     }
 
     {
-        const sr = index.lookup("ἄρτ");
+        const sr = try index.lookup("ἄρτ");
         try std.testing.expect(sr != null);
         try se("ἄρτ", sr.?.keyword);
         try eq(0, sr.?.exact_accented.items.len);
@@ -998,7 +1015,7 @@ test "search_index basics" {
     }
 
     {
-        const sr = index.lookup("ἄρτος");
+        const sr = try index.lookup("ἄρτος");
         try std.testing.expect(sr != null);
         try se("ἄρτος", sr.?.keyword);
         try eq(1, sr.?.exact_accented.items.len);
@@ -1007,7 +1024,7 @@ test "search_index basics" {
     }
 
     {
-        const sr = index.lookup("αρτ");
+        const sr = try index.lookup("αρτ");
         try std.testing.expect(sr != null);
         try se("αρτ", sr.?.keyword);
         try eq(0, sr.?.exact_accented.items.len);
@@ -1051,11 +1068,11 @@ test "search_index_duplicates" {
 
     try std.testing.expectEqual(13, index.index.count());
 
-    try eq(null, index.lookup("π"));
-    try eq(null, index.lookup("εις"));
+    try eq(null, try index.lookup("π"));
+    try eq(null, try index.lookup("εις"));
 
     {
-        const sr = index.lookup("περιπατεῖτε");
+        const sr = try index.lookup("περιπατεῖτε");
         try std.testing.expect(sr != null);
         try se("περιπατεῖτε", sr.?.keyword);
         try eq(1, sr.?.exact_accented.items.len);
@@ -1094,11 +1111,11 @@ test "search_index arena" {
     //}
     try std.testing.expectEqual(26, index.index.count());
 
-    try eq(null, index.lookup(""));
-    try eq(null, index.lookup("εις"));
+    try eq(null, try index.lookup(""));
+    try eq(null, try index.lookup("εις"));
 
     {
-        const sr = index.lookup("ἄρ");
+        const sr = try index.lookup("ἄρ");
         try std.testing.expect(sr != null);
         try se("ἄρ", sr.?.keyword);
         try eq(0, sr.?.exact_accented.items.len);

@@ -25,6 +25,7 @@ pub fn build(b: *std.Build) void {
     // Tell tests where the data repo folder lives
     const options = b.addOptions();
     options.addOptionPath("repo", b.path("data/repo/"));
+    options.addOptionPath("small_dict", b.path("test/small_dict.txt"));
 
     const test_mod = b.addModule("test", .{
         .root_source_file = b.path("src/praxis.zig"),

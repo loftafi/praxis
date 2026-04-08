@@ -499,7 +499,7 @@ pub fn writeTextData(
 /// Helper function to read file contents.
 fn read_bytes_from_file(io: std.Io, filename: []const u8, temp_allocator: Allocator) ![]u8 {
     const data = std.Io.Dir.cwd().readFileAlloc(io, filename, temp_allocator, .unlimited) catch {
-        log.err("Error reading config file.", .{});
+        log.err("Error reading file '{s}'.", .{filename});
         return error.FileNotFound;
     };
     return data;
@@ -930,7 +930,8 @@ test "dictionary_file" {
 
     const dictionary = try Dictionary.create(allocator);
     defer dictionary.destroy(allocator);
-    try dictionary.loadFile(allocator, allocator, io, "./test/small_dict.txt");
+    const small_dict = @import("options").small_dict;
+    try dictionary.loadFile(allocator, allocator, io, small_dict);
     var results = try dictionary.by_form.lookup("δρα");
     try expect(results == null);
     results = try dictionary.by_form.lookup("αρτο");
@@ -967,7 +968,8 @@ test "search" {
 
     const dict = try Dictionary.create(allocator);
     defer dict.destroy(allocator);
-    try dict.loadFile(allocator, allocator, io, "./test/small_dict.txt");
+    const small_dict = @import("options").small_dict;
+    try dict.loadFile(allocator, allocator, io, small_dict);
     var results = try dict.by_form.lookup("Δαυιδ");
     try expect(results != null);
     try expectEqual(0, results.?.exact_accented.items.len);

@@ -1,22 +1,22 @@
 //! Group a set of word forms into a set of tables of grammatical forms.
 
-const Self = @This();
+const Panels = @This();
 
 lexeme: *Lexeme = undefined,
 tables: std.ArrayListUnmanaged(Panel) = .empty,
 
-pub fn create(allocator: std.mem.Allocator) !*Self {
-    var p = try allocator.create(Self);
+pub fn create(allocator: std.mem.Allocator) !*Panels {
+    var p = try allocator.create(Panels);
     p.init();
     return p;
 }
 
-pub fn destroy(self: *Self, allocator: std.mem.Allocator) void {
+pub fn destroy(self: *Panels, allocator: std.mem.Allocator) void {
     self.tables.deinit(allocator);
     allocator.destroy(self);
 }
 
-pub fn init(self: *Self) void {
+pub fn init(self: *Panels) void {
     self.tables = .empty;
 }
 
@@ -24,7 +24,7 @@ pub fn deinit(self: *Panel) void {
     self.tables.deinit();
 }
 
-pub fn setLexeme(self: *Self, lexeme: *Lexeme) void {
+pub fn setLexeme(self: *Panels, lexeme: *Lexeme) void {
     self.lexeme = lexeme;
     self.tables.clearRetainingCapacity();
 }
@@ -45,7 +45,7 @@ pub const Panel = struct {
     }
 };
 
-pub fn panels(self: *Self) ![]Panel {
+pub fn panels(self: *Panels) ![]Panel {
     std.log.debug("panels for {s}", .{self.lexeme.word});
     const forms = self.lexeme.forms.items;
     self.tables.clearRetainingCapacity();
@@ -516,14 +516,15 @@ pub fn pp(
 
 test "init_panels" {
     const gpa = std.testing.allocator;
-    var p = try Self.create(gpa);
+    var p = try Panels.create(gpa);
     p.destroy(gpa);
 }
 
 const std = @import("std");
 const ArrayList = std.ArrayList;
-const Lexeme = @import("lexeme.zig");
-const Form = @import("form.zig");
+
+const Lexeme = @import("Lexeme.zig");
+const Form = @import("Form.zig");
 const Parsing = @import("parsing.zig").Parsing;
 const PartOfSpeech = @import("parsing.zig").PartOfSpeech;
 const Gender = Parsing.Gender;

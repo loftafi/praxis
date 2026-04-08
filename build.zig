@@ -22,8 +22,12 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(lib);
 
+    // Tell tests where the data repo folder lives
+    const options = b.addOptions();
+    options.addOptionPath("repo", b.path("data/repo/"));
+
     const test_mod = b.addModule("test", .{
-        .root_source_file = b.path("src/test.zig"),
+        .root_source_file = b.path("src/praxis.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -31,23 +35,25 @@ pub fn build(b: *std.Build) void {
         .root_module = test_mod,
         .filters = test_filters,
     });
+    lib_unit_tests.root_module.addOptions("options", options);
+
     lib_unit_tests.root_module.addAnonymousImport("byz_parsing", .{
-        .root_source_file = b.path("./test/byz-parsing.txt"),
+        .root_source_file = b.path("test/byz-parsing.txt"),
     });
     lib_unit_tests.root_module.addAnonymousImport("other_parsing", .{
-        .root_source_file = b.path("./test/other-parsing.txt"),
+        .root_source_file = b.path("test/other-parsing.txt"),
     });
     lib_unit_tests.root_module.addAnonymousImport("ccat_parsing", .{
-        .root_source_file = b.path("./test/ccat-test.txt"),
+        .root_source_file = b.path("test/ccat-test.txt"),
     });
     lib_unit_tests.root_module.addAnonymousImport("sbl_parsing", .{
-        .root_source_file = b.path("./test/sbl-parsing.txt"),
+        .root_source_file = b.path("test/sbl-parsing.txt"),
     });
     lib_unit_tests.root_module.addAnonymousImport("small_dict", .{
-        .root_source_file = b.path("./test/small_dict.txt"),
+        .root_source_file = b.path("test/small_dict.txt"),
     });
     lib_unit_tests.root_module.addAnonymousImport("larger_dict", .{
-        .root_source_file = b.path("./test/larger_dict.txt"),
+        .root_source_file = b.path("test/larger_dict.txt"),
     });
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);

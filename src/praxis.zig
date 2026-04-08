@@ -3,16 +3,16 @@
 ///! dictinary data, and supports `lookup`, `search` and `autocomplete`
 ///! functions.
 ///!
-pub const Dictionary = @import("dictionary.zig").Dictionary;
+pub const Dictionary = @import("Dictionary.zig").Dictionary;
 pub const SearchIndex = @import("search_index.zig").SearchIndex;
 pub const normaliser = @import("normaliser.zig");
 pub const max_word_size = @import("search_index.zig").max_word_size;
 
 /// Contains information about a lexeme and its associated forms
-pub const Lexeme = @import("lexeme.zig");
+pub const Lexeme = @import("Lexeme.zig");
 
 /// Contains information about an individual form of a lexeme.
-pub const Form = @import("form.zig");
+pub const Form = @import("Form.zig");
 
 /// A lexeme belongs to a language, and a gloss is provided in a language.
 pub const Lang = @import("lang.zig").Lang;
@@ -23,7 +23,7 @@ pub const Gloss = @import("gloss.zig");
 /// Collate forms of a lexeme into tables that can be displayed to the user.
 /// `init()` or `create()` a `Panel` then use `setLexeme()` to fill the
 /// `panel.tables` array.
-pub const Panels = @import("panels.zig");
+pub const Panels = @import("Panels.zig");
 
 /// Sort lexemes `std.mem.sort(Lexeme, lexemes, {}, stringLessThan);`
 pub const lexemeLessThan = Lexeme.lessThan;
@@ -90,4 +90,8 @@ pub const FarmHashContext = @import("farmhash64.zig").FarmHashContext;
 pub const farmhash64 = @import("farmhash64.zig").farmhash64;
 
 /// Return a placeholder dictionary for testing.
-pub const test_dictionary = @import("dictionary.zig").test_dictionary;
+pub const test_dictionary = @import("Dictionary.zig").test_dictionary;
+
+test {
+    @import("std").testing.refAllDecls(@This());
+}

@@ -1,6 +1,8 @@
-//! Contain a set of `Lexeme` and lexeme `Form` objects. Search
-//! for forms and glosses that start with a desired string.
 const minimum_uid: u24 = 100000;
+
+/// Contain a set of `Lexeme` and lexeme `Form` objects. Search
+/// for forms and glosses that start with a desired string.
+///
 /// It is recommended to use an arena allocator to store the dictionary
 /// information.
 ///
@@ -9,490 +11,490 @@ const minimum_uid: u24 = 100000;
 ///      dictionary = Dictionary.create(arena);
 ///      defer dictionary.deinit(arena);
 ///
-pub const Dictionary = struct {
-    by_lexeme: SearchIndex(*Lexeme, Lexeme.lessThan),
-    by_form: SearchIndex(*Form, Form.autocompleteLessThan),
-    by_gloss: SearchIndex(*Form, Form.autocompleteLessThan),
-    by_transliteration: SearchIndex(*Form, Form.autocompleteLessThan),
-    lexemes: ArrayListUnmanaged(*Lexeme),
-    forms: ArrayListUnmanaged(*Form),
+pub const Dictionary = @This();
 
-    // When loading via text file, track which forms have been seen
-    seen_lexemes: std.StringHashMapUnmanaged(bool) = .empty,
+by_lexeme: SearchIndex(*Lexeme, Lexeme.lessThan),
+by_form: SearchIndex(*Form, Form.autocompleteLessThan),
+by_gloss: SearchIndex(*Form, Form.autocompleteLessThan),
+by_transliteration: SearchIndex(*Form, Form.autocompleteLessThan),
+lexemes: ArrayListUnmanaged(*Lexeme),
+forms: ArrayListUnmanaged(*Form),
 
-    /// Create a dictionary object with an allocator that may be an
-    /// arena, or a general purpose allocator.
-    pub fn create(arena: Allocator) error{OutOfMemory}!*Dictionary {
-        const dictionary: *Dictionary = try arena.create(Dictionary);
-        dictionary.* = .{
-            .by_lexeme = .empty,
-            .by_form = .empty,
-            .by_gloss = .empty,
-            .by_transliteration = .empty,
-            .lexemes = try ArrayListUnmanaged(*Lexeme).initCapacity(arena, 180000),
-            .forms = try ArrayListUnmanaged(*Form).initCapacity(arena, 180000),
-            .seen_lexemes = .empty,
-        };
-        return dictionary;
+// When loading via text file, track which forms have been seen
+seen_lexemes: std.StringHashMapUnmanaged(bool) = .empty,
+
+/// Create a dictionary object with an allocator that may be an
+/// arena, or a general purpose allocator.
+pub fn create(arena: Allocator) error{OutOfMemory}!*Dictionary {
+    const dictionary: *Dictionary = try arena.create(Dictionary);
+    dictionary.* = .{
+        .by_lexeme = .empty,
+        .by_form = .empty,
+        .by_gloss = .empty,
+        .by_transliteration = .empty,
+        .lexemes = try ArrayListUnmanaged(*Lexeme).initCapacity(arena, 180000),
+        .forms = try ArrayListUnmanaged(*Form).initCapacity(arena, 180000),
+        .seen_lexemes = .empty,
+    };
+    return dictionary;
+}
+
+/// Destroy a dictionary with the same allocator that it was created with.
+/// This is usually an arena, but it does not have to be.
+pub fn destroy(self: *Dictionary, arena: Allocator) void {
+    self.by_lexeme.deinit(arena);
+    for (self.lexemes.items) |*item| {
+        item.*.destroy(arena);
     }
+    self.lexemes.deinit(arena);
 
-    /// Destroy a dictionary with the same allocator that it was created with.
-    /// This is usually an arena, but it does not have to be.
-    pub fn destroy(self: *Dictionary, arena: Allocator) void {
-        self.by_lexeme.deinit(arena);
-        for (self.lexemes.items) |*item| {
-            item.*.destroy(arena);
-        }
-        self.lexemes.deinit(arena);
-
-        self.by_form.deinit(arena);
-        for (self.forms.items) |*item| {
-            item.*.destroy(arena);
-        }
-        self.forms.deinit(arena);
-
-        self.by_gloss.deinit(arena);
-        self.by_transliteration.deinit(arena);
-        self.seen_lexemes.deinit(arena);
-        arena.destroy(self);
+    self.by_form.deinit(arena);
+    for (self.forms.items) |*item| {
+        item.*.destroy(arena);
     }
+    self.forms.deinit(arena);
 
-    /// Load dictionary data from a file. Detect if the data is text or
-    /// binary format. See `loadTextData()` and `loadBinaryData()` for details.
-    pub fn loadFile(
-        self: *Dictionary,
-        arena: Allocator,
-        gpa: Allocator,
-        io: std.Io,
-        filename: []const u8,
-    ) !void {
-        const data = read_bytes_from_file(io, filename, gpa) catch |e| {
-            err("Could not read '{s}'. Error: {any}", .{ filename, e });
-            return;
-        };
-        defer gpa.free(data);
+    self.by_gloss.deinit(arena);
+    self.by_transliteration.deinit(arena);
+    self.seen_lexemes.deinit(arena);
+    arena.destroy(self);
+}
 
-        if (data.len > 10 and data[0] == 99 and data[1] == 1) {
-            try self.loadBinaryData(arena, gpa, data);
-        } else {
-            try self.loadTextData(arena, gpa, data);
-        }
+/// Load dictionary data from a file. Detect if the data is text or
+/// binary format. See `loadTextData()` and `loadBinaryData()` for details.
+pub fn loadFile(
+    self: *Dictionary,
+    arena: Allocator,
+    gpa: Allocator,
+    io: std.Io,
+    filename: []const u8,
+) !void {
+    const data = read_bytes_from_file(io, filename, gpa) catch |e| {
+        err("Could not read '{s}'. Error: {any}", .{ filename, e });
+        return;
+    };
+    defer gpa.free(data);
+
+    if (data.len > 10 and data[0] == 99 and data[1] == 1) {
+        try self.loadBinaryData(arena, gpa, data);
+    } else {
+        try self.loadTextData(arena, gpa, data);
     }
+}
 
-    /// Load dictionary data that has been stored in a
-    /// user readable text format. The `arena` allocator stores
-    /// data for the lifetime of the dictionary and the `gpa`
-    /// stores trandient data used while loading the dictionary.
-    pub fn loadTextData(
-        self: *Dictionary,
-        arena: Allocator,
-        gpa: Allocator,
-        content: []const u8,
-    ) !void {
-        // Don't load duplicate lexeme entries
-        var skip_lexeme: bool = false;
+/// Load dictionary data that has been stored in a
+/// user readable text format. The `arena` allocator stores
+/// data for the lifetime of the dictionary and the `gpa`
+/// stores trandient data used while loading the dictionary.
+pub fn loadTextData(
+    self: *Dictionary,
+    arena: Allocator,
+    gpa: Allocator,
+    content: []const u8,
+) !void {
+    // Don't load duplicate lexeme entries
+    var skip_lexeme: bool = false;
 
-        // Keep a cache of seen lexemes, and track which lexemes need a uid.
-        var lexeme_uid = std.AutoHashMap(u24, *Lexeme).init(gpa);
-        defer lexeme_uid.deinit();
-        var max_lexeme_uid: u24 = 0;
-        var lexeme_needs_uid: std.ArrayListUnmanaged(*Lexeme) = .empty;
-        defer lexeme_needs_uid.deinit(gpa);
+    // Keep a cache of seen lexemes, and track which lexemes need a uid.
+    var lexeme_uid = std.AutoHashMap(u24, *Lexeme).init(gpa);
+    defer lexeme_uid.deinit();
+    var max_lexeme_uid: u24 = 0;
+    var lexeme_needs_uid: std.ArrayListUnmanaged(*Lexeme) = .empty;
+    defer lexeme_needs_uid.deinit(gpa);
 
-        // Keep a cache of seen forms, and track which forms need a uid.
-        var form_uid = std.AutoHashMap(u24, *Form).init(gpa);
-        defer form_uid.deinit();
-        var max_form_uid: u24 = 0;
-        var form_needs_uid: std.ArrayListUnmanaged(*Form) = .empty;
-        defer form_needs_uid.deinit(gpa);
+    // Keep a cache of seen forms, and track which forms need a uid.
+    var form_uid = std.AutoHashMap(u24, *Form).init(gpa);
+    defer form_uid.deinit();
+    var max_form_uid: u24 = 0;
+    var form_needs_uid: std.ArrayListUnmanaged(*Form) = .empty;
+    defer form_needs_uid.deinit(gpa);
 
-        var data = Parser.init(content);
-        _ = data.skip_whitespace_and_lines();
+    var data = Parser.init(content);
+    _ = data.skip_whitespace_and_lines();
 
-        var line: usize = 0;
-        var current_lexeme: ?*Lexeme = null;
-        while (!data.eof()) {
-            const c = data.peek();
-            if (c == CR or c == LF) {
-                _ = data.next();
-                continue;
-            }
-            line += 1;
-            if (!(c == SPACE or c == TAB)) {
-                var lexeme = try Lexeme.create(arena);
-                errdefer lexeme.destroy(arena);
-                lexeme.readText(arena, &data) catch |e| {
-                    err("Failed reading line: {d}. Error: {any}", .{ line, e });
-                    return e;
-                };
-                if (lexeme.word.len == 0) {
-                    err("missing lexeme word field on line: {d}", .{line});
-                    break;
-                }
-                if (self.seen_lexemes.contains(lexeme.word)) {
-                    debug("Skip duplicate root {s} on line {d}", .{ lexeme.word, line });
-                    skip_lexeme = true;
-                    lexeme.destroy(arena);
-                    continue;
-                }
-                skip_lexeme = false;
-                try self.seen_lexemes.put(gpa, lexeme.word, true);
-                current_lexeme = lexeme;
-                try self.lexemes.append(arena, lexeme);
-                try self.by_lexeme.add(arena, lexeme.word, lexeme);
-                if (lexeme.uid < minimum_uid) {
-                    try lexeme_needs_uid.append(gpa, lexeme);
-                } else {
-                    try lexeme_uid.put(lexeme.uid, lexeme);
-                    if (lexeme.uid > max_lexeme_uid) {
-                        max_lexeme_uid = lexeme.uid;
-                    }
-                }
-            } else {
-                var form = try Form.create(arena);
-                errdefer form.destroy(arena);
-                form.readText(arena, &data) catch |e| {
-                    err("Failed reading line: {any}. Error: {any}", .{ line, e });
-                    return e;
-                };
-                if (form.word.len == 0) {
-                    err("Missing form word field on line: {any}\n", .{line});
-                    form.destroy(arena);
-                    break;
-                }
-                if (skip_lexeme) {
-                    form.destroy(arena);
-                    continue;
-                }
-
-                try self.forms.append(arena, form);
-                try self.by_form.add(arena, form.word, form);
-                if (current_lexeme != null) {
-                    form.lexeme = current_lexeme.?;
-                    try current_lexeme.?.forms.append(arena, form);
-                }
-                if (form.uid < minimum_uid) {
-                    try form_needs_uid.append(gpa, form);
-                } else {
-                    try form_uid.put(form.uid, form);
-                    if (form.uid > max_lexeme_uid) {
-                        max_form_uid = form.uid;
-                    }
-                }
-            }
-            //debug("reading line: {d} lexemes={d} forms={d}\n", .{ data.line, self.lexemes.items.len, self.forms.items.len });
+    var line: usize = 0;
+    var current_lexeme: ?*Lexeme = null;
+    while (!data.eof()) {
+        const c = data.peek();
+        if (c == CR or c == LF) {
+            _ = data.next();
+            continue;
         }
-
-        // Build a search index of transliterated version of the words.
-        var buffer: [500]u8 = undefined;
-        for (self.forms.items) |form| {
-            if (form.word.len == 0) {
-                continue;
-            }
-            const transliterated = transliterate_word(form.word, false, &buffer) catch |e| {
-                log.warn("Transliterate {s} failed: {any}", .{ form.word, e });
-                continue;
+        line += 1;
+        if (!(c == SPACE or c == TAB)) {
+            var lexeme = try Lexeme.create(arena);
+            errdefer lexeme.destroy(arena);
+            lexeme.readText(arena, &data) catch |e| {
+                err("Failed reading line: {d}. Error: {any}", .{ line, e });
+                return e;
             };
-            if (transliterated.len == 0) {
-                log.warn("Transliteration of {s} returned {s}", .{
-                    form.word,
-                    transliterated,
-                });
+            if (lexeme.word.len == 0) {
+                err("missing lexeme word field on line: {d}", .{line});
+                break;
             }
-            try self.by_gloss.add(arena, transliterated, form);
-        }
-
-        // Build a search index of the glosses for each word.
-        var seen = StringSet.init(gpa);
-        defer seen.deinit();
-        for (self.lexemes.items) |lexeme| {
-            if (lexeme.forms.items.len == 0) {
+            if (self.seen_lexemes.contains(lexeme.word)) {
+                debug("Skip duplicate root {s} on line {d}", .{ lexeme.word, line });
+                skip_lexeme = true;
+                lexeme.destroy(arena);
                 continue;
             }
-            // Add the primary glosses
-            seen.clear();
-            if (lexeme.forms.items[0].glosses_by_lang(.english)) |gloss| {
-                for (gloss.entries.items) |entry| {
-                    var i = GlossTokens{ .data = entry };
-                    while (i.next()) |text| {
-                        var buff: [@import("search_index.zig").max_word_size * 2]u8 = undefined;
-                        const lower = std.ascii.lowerString(&buff, text);
-                        if (lower.len == entry.len or !is_stopword(lower)) {
-                            try self.by_gloss.add(arena, lower, lexeme.forms.items[0]);
-                            _ = try seen.add(lower);
-                        }
+            skip_lexeme = false;
+            try self.seen_lexemes.put(gpa, lexeme.word, true);
+            current_lexeme = lexeme;
+            try self.lexemes.append(arena, lexeme);
+            try self.by_lexeme.add(arena, lexeme.word, lexeme);
+            if (lexeme.uid < minimum_uid) {
+                try lexeme_needs_uid.append(gpa, lexeme);
+            } else {
+                try lexeme_uid.put(lexeme.uid, lexeme);
+                if (lexeme.uid > max_lexeme_uid) {
+                    max_lexeme_uid = lexeme.uid;
+                }
+            }
+        } else {
+            var form = try Form.create(arena);
+            errdefer form.destroy(arena);
+            form.readText(arena, &data) catch |e| {
+                err("Failed reading line: {any}. Error: {any}", .{ line, e });
+                return e;
+            };
+            if (form.word.len == 0) {
+                err("Missing form word field on line: {any}\n", .{line});
+                form.destroy(arena);
+                break;
+            }
+            if (skip_lexeme) {
+                form.destroy(arena);
+                continue;
+            }
+
+            try self.forms.append(arena, form);
+            try self.by_form.add(arena, form.word, form);
+            if (current_lexeme != null) {
+                form.lexeme = current_lexeme.?;
+                try current_lexeme.?.forms.append(arena, form);
+            }
+            if (form.uid < minimum_uid) {
+                try form_needs_uid.append(gpa, form);
+            } else {
+                try form_uid.put(form.uid, form);
+                if (form.uid > max_lexeme_uid) {
+                    max_form_uid = form.uid;
+                }
+            }
+        }
+        //debug("reading line: {d} lexemes={d} forms={d}\n", .{ data.line, self.lexemes.items.len, self.forms.items.len });
+    }
+
+    // Build a search index of transliterated version of the words.
+    var buffer: [500]u8 = undefined;
+    for (self.forms.items) |form| {
+        if (form.word.len == 0) {
+            continue;
+        }
+        const transliterated = transliterate_word(form.word, false, &buffer) catch |e| {
+            log.warn("Transliterate {s} failed: {any}", .{ form.word, e });
+            continue;
+        };
+        if (transliterated.len == 0) {
+            log.warn("Transliteration of {s} returned {s}", .{
+                form.word,
+                transliterated,
+            });
+        }
+        try self.by_gloss.add(arena, transliterated, form);
+    }
+
+    // Build a search index of the glosses for each word.
+    var seen = StringSet.init(gpa);
+    defer seen.deinit();
+    for (self.lexemes.items) |lexeme| {
+        if (lexeme.forms.items.len == 0) {
+            continue;
+        }
+        // Add the primary glosses
+        seen.clear();
+        if (lexeme.forms.items[0].glosses_by_lang(.english)) |gloss| {
+            for (gloss.entries.items) |entry| {
+                var i = GlossTokens{ .data = entry };
+                while (i.next()) |text| {
+                    var buff: [@import("search_index.zig").max_word_size * 2]u8 = undefined;
+                    const lower = std.ascii.lowerString(&buff, text);
+                    if (lower.len == entry.len or !is_stopword(lower)) {
+                        try self.by_gloss.add(arena, lower, lexeme.forms.items[0]);
+                        _ = try seen.add(lower);
                     }
                 }
             }
-            // Add addtional glosses from alternate forms
-            for (lexeme.forms.items, 0..) |form, x| {
-                if (x == 0) {
+        }
+        // Add addtional glosses from alternate forms
+        for (lexeme.forms.items, 0..) |form, x| {
+            if (x == 0) {
+                continue;
+            }
+            for (form.*.glosses.items) |entry| {
+                if (entry.lang != .english) {
                     continue;
                 }
-                for (form.*.glosses.items) |entry| {
-                    if (entry.lang != .english) {
-                        continue;
-                    }
-                    for (entry.entries.items) |item| {
-                        var i = GlossTokens{ .data = item };
-                        while (i.next()) |text| {
-                            if (text.len == item.len or !is_stopword(text)) {
-                                if (try seen.add(text)) {
-                                    try self.by_gloss.add(arena, text, form);
-                                }
+                for (entry.entries.items) |item| {
+                    var i = GlossTokens{ .data = item };
+                    while (i.next()) |text| {
+                        if (text.len == item.len or !is_stopword(text)) {
+                            if (try seen.add(text)) {
+                                try self.by_gloss.add(arena, text, form);
                             }
                         }
                     }
                 }
             }
         }
+    }
 
-        try self.sort_search_results();
+    try self.sort_search_results();
 
-        if (lexeme_needs_uid.items.len > 0) {
-            info("{d} lexemes need uid.", .{lexeme_needs_uid.items.len});
-            for (lexeme_needs_uid.items) |item| {
-                item.uid = self.generateUniqueUid(&lexeme_uid, &form_uid);
-                info("assign uid {s}={d}", .{ item.word, item.uid });
+    if (lexeme_needs_uid.items.len > 0) {
+        info("{d} lexemes need uid.", .{lexeme_needs_uid.items.len});
+        for (lexeme_needs_uid.items) |item| {
+            item.uid = self.generateUniqueUid(&lexeme_uid, &form_uid);
+            info("assign uid {s}={d}", .{ item.word, item.uid });
+        }
+        lexeme_needs_uid.clearAndFree(gpa);
+    }
+    if (form_needs_uid.items.len > 0) {
+        info("{d} forms need uid.", .{form_needs_uid.items.len});
+        for (form_needs_uid.items) |item| {
+            item.uid = self.generateUniqueUid(&lexeme_uid, &form_uid);
+            info("assign uid {s}={d}", .{ item.word, item.uid });
+        }
+        form_needs_uid.clearAndFree(gpa);
+    }
+
+    debug("Loaded dictionary.", .{});
+    return;
+}
+
+fn generateUniqueUid(
+    _: *const Dictionary,
+    lexeme_uid: *const std.AutoHashMap(u24, *Lexeme),
+    form_uid: *const std.AutoHashMap(u24, *Form),
+) u24 {
+    while (true) {
+        const next = random_u24();
+        if (next < minimum_uid) continue;
+        if (lexeme_uid.get(next) != null) continue;
+        if (form_uid.get(next) != null) continue;
+        return next;
+    }
+}
+
+/// Save all dictionary data, along with a pre-built
+/// search index into an on disk data file.
+pub fn saveBinaryFile(
+    self: *const Dictionary,
+    gpa: Allocator,
+    io: std.Io,
+    dir: std.Io.Dir,
+    filename: []const u8,
+    save_mode: SaveMode,
+) !void {
+    seed(io);
+    var temp_arena = std.heap.ArenaAllocator.init(gpa);
+    defer temp_arena.deinit();
+    var data: std.Io.Writer.Allocating = .init(temp_arena.allocator());
+    defer data.deinit();
+    try self.writeBinaryData(temp_arena.allocator(), &data.writer, save_mode);
+    debug("binary data size: {any}", .{data.written().len});
+    try write_bytes_to_file(io, dir, filename, data.written());
+}
+
+/// Save all dictionary data, along with a pre-built
+/// search index into a byte array.
+pub fn writeBinaryData(
+    self: *const Dictionary,
+    allocator: Allocator,
+    data: *std.Io.Writer,
+    save_mode: SaveMode,
+) (std.Io.Writer.Error || std.mem.Allocator.Error || error{IndexTooLarge})!void {
+    try data.writeByte(99);
+    try data.writeByte(1);
+
+    try append_u32(data, @as(u32, @intCast(self.lexemes.items.len)));
+
+    for (self.lexemes.items) |*lexeme| {
+        if (save_mode == .gnt_words and lexeme.*.glosses.items.len == 0) continue;
+        try lexeme.*.writeBinary(data);
+        try append_u16(data, @intCast(lexeme.*.forms.items.len));
+        for (lexeme.*.forms.items) |*form| {
+            try form.*.writeBinary(data);
+        }
+    }
+    try data.writeByte(FS);
+
+    // Now output the search indexes
+    try self.by_form.writeBinaryBytes(allocator, data);
+    try data.writeByte(FS);
+
+    try self.by_gloss.writeBinaryBytes(allocator, data);
+    try data.writeByte(FS);
+
+    try self.by_transliteration.writeBinaryBytes(allocator, data);
+    try data.writeByte(FS);
+}
+
+/// Load dictionary data that has been stored in
+/// condensed binary format along with a pre-built
+/// search index.
+pub fn loadBinaryData(
+    self: *Dictionary,
+    arena: Allocator,
+    gpa: Allocator,
+    content: []const u8,
+) !void {
+    var data = BinaryReader.init(content);
+    if (try data.u8() != 99) {
+        return error.InvalidDictionaryFile;
+    }
+    if (try data.u8() != 1) {
+        return error.InvalidDictionaryFile;
+    }
+    const count = data.u32() catch {
+        return error.InvalidDictionaryFile;
+    };
+
+    // Keep a cache of seen forms for index loading
+    var form_uid = std.AutoHashMap(u24, *Form).init(gpa);
+    defer form_uid.deinit();
+    try form_uid.ensureTotalCapacity(count);
+    try self.lexemes.ensureTotalCapacity(arena, count);
+    try self.forms.ensureTotalCapacity(arena, count);
+
+    // Read all lexemes with associated forms
+    for (0..count) |i| {
+        var lexeme = try Lexeme.create(arena);
+        errdefer lexeme.destroy(arena);
+        lexeme.readBinary(arena, &data) catch |e| {
+            debug("failed reading word {any} at byte index: {any}. Error: {any}\n", .{ i, data.index, e });
+            if (i > 0) {
+                debug("previous word had uid {d}\n", .{self.lexemes.items[i - 1].uid});
+                debug("processing word {d} of {d}\n", .{ i, count });
             }
-            lexeme_needs_uid.clearAndFree(gpa);
-        }
-        if (form_needs_uid.items.len > 0) {
-            info("{d} forms need uid.", .{form_needs_uid.items.len});
-            for (form_needs_uid.items) |item| {
-                item.uid = self.generateUniqueUid(&lexeme_uid, &form_uid);
-                info("assign uid {s}={d}", .{ item.word, item.uid });
-            }
-            form_needs_uid.clearAndFree(gpa);
-        }
-
-        debug("Loaded dictionary.", .{});
-        return;
-    }
-
-    fn generateUniqueUid(
-        _: *const Dictionary,
-        lexeme_uid: *const std.AutoHashMap(u24, *Lexeme),
-        form_uid: *const std.AutoHashMap(u24, *Form),
-    ) u24 {
-        while (true) {
-            const next = random_u24();
-            if (next < minimum_uid) continue;
-            if (lexeme_uid.get(next) != null) continue;
-            if (form_uid.get(next) != null) continue;
-            return next;
-        }
-    }
-
-    /// Save all dictionary data, along with a pre-built
-    /// search index into an on disk data file.
-    pub fn saveBinaryFile(
-        self: *const Dictionary,
-        gpa: Allocator,
-        io: std.Io,
-        dir: std.Io.Dir,
-        filename: []const u8,
-        save_mode: SaveMode,
-    ) !void {
-        seed(io);
-        var temp_arena = std.heap.ArenaAllocator.init(gpa);
-        defer temp_arena.deinit();
-        var data: std.Io.Writer.Allocating = .init(temp_arena.allocator());
-        defer data.deinit();
-        try self.writeBinaryData(temp_arena.allocator(), &data.writer, save_mode);
-        debug("binary data size: {any}", .{data.written().len});
-        try write_bytes_to_file(io, dir, filename, data.written());
-    }
-
-    /// Save all dictionary data, along with a pre-built
-    /// search index into a byte array.
-    pub fn writeBinaryData(
-        self: *const Dictionary,
-        allocator: Allocator,
-        data: *std.Io.Writer,
-        save_mode: SaveMode,
-    ) (std.Io.Writer.Error || std.mem.Allocator.Error || error{IndexTooLarge})!void {
-        try data.writeByte(99);
-        try data.writeByte(1);
-
-        try append_u32(data, @as(u32, @intCast(self.lexemes.items.len)));
-
-        for (self.lexemes.items) |*lexeme| {
-            if (save_mode == .gnt_words and lexeme.*.glosses.items.len == 0) continue;
-            try lexeme.*.writeBinary(data);
-            try append_u16(data, @intCast(lexeme.*.forms.items.len));
-            for (lexeme.*.forms.items) |*form| {
-                try form.*.writeBinary(data);
-            }
-        }
-        try data.writeByte(FS);
-
-        // Now output the search indexes
-        try self.by_form.writeBinaryBytes(allocator, data);
-        try data.writeByte(FS);
-
-        try self.by_gloss.writeBinaryBytes(allocator, data);
-        try data.writeByte(FS);
-
-        try self.by_transliteration.writeBinaryBytes(allocator, data);
-        try data.writeByte(FS);
-    }
-
-    /// Load dictionary data that has been stored in
-    /// condensed binary format along with a pre-built
-    /// search index.
-    pub fn loadBinaryData(
-        self: *Dictionary,
-        arena: Allocator,
-        gpa: Allocator,
-        content: []const u8,
-    ) !void {
-        var data = BinaryReader.init(content);
-        if (try data.u8() != 99) {
-            return error.InvalidDictionaryFile;
-        }
-        if (try data.u8() != 1) {
-            return error.InvalidDictionaryFile;
-        }
-        const count = data.u32() catch {
-            return error.InvalidDictionaryFile;
+            debug(" buffer: {any} -{d}- {any}\n", .{
+                data.leading_slice(10),
+                data.peek(),
+                data.following_slice(10),
+            });
+            return e;
         };
+        try self.lexemes.append(arena, lexeme);
 
-        // Keep a cache of seen forms for index loading
-        var form_uid = std.AutoHashMap(u24, *Form).init(gpa);
-        defer form_uid.deinit();
-        try form_uid.ensureTotalCapacity(count);
-        try self.lexemes.ensureTotalCapacity(arena, count);
-        try self.forms.ensureTotalCapacity(arena, count);
-
-        // Read all lexemes with associated forms
-        for (0..count) |i| {
-            var lexeme = try Lexeme.create(arena);
-            errdefer lexeme.destroy(arena);
-            lexeme.readBinary(arena, &data) catch |e| {
-                debug("failed reading word {any} at byte index: {any}. Error: {any}\n", .{ i, data.index, e });
-                if (i > 0) {
-                    debug("previous word had uid {d}\n", .{self.lexemes.items[i - 1].uid});
-                    debug("processing word {d} of {d}\n", .{ i, count });
-                }
-                debug(" buffer: {any} -{d}- {any}\n", .{
-                    data.leading_slice(10),
-                    data.peek(),
-                    data.following_slice(10),
-                });
-                return e;
-            };
-            try self.lexemes.append(arena, lexeme);
-
-            // Any forms discovered while reading lexeme should
-            // appear in the form index.
-            for (lexeme.forms.items) |*f| {
-                try form_uid.put(f.*.uid, f.*);
-                try self.forms.append(arena, f.*);
-            }
-            //if (data.next() != RS) {
-            //    return error.InvalidDictionaryFile;
-            //}
+        // Any forms discovered while reading lexeme should
+        // appear in the form index.
+        for (lexeme.forms.items) |*f| {
+            try form_uid.put(f.*.uid, f.*);
+            try self.forms.append(arena, f.*);
         }
-        if (try data.u8() != FS) {
-            return error.InvalidDictionaryFile;
-        }
-
-        // Read all search index data
-        try self.by_form.loadBinaryData(arena, &data, &form_uid);
-        if (try data.u8() != FS) {
-            return error.InvalidDictionaryFile;
-        }
-
-        try self.by_gloss.loadBinaryData(arena, &data, &form_uid);
-        if (try data.u8() != FS) {
-            return error.InvalidDictionaryFile;
-        }
-
-        try self.by_transliteration.loadBinaryData(arena, &data, &form_uid);
-        if (try data.u8() != FS) {
-            return error.InvalidDictionaryFile;
-        }
-
-        log.debug(
-            "Loaded binary dictionary ({d} words, {d} forms).",
-            .{ self.lexemes.items.len, self.forms.items.len },
-        );
-        return;
+        //if (data.next() != RS) {
+        //    return error.InvalidDictionaryFile;
+        //}
+    }
+    if (try data.u8() != FS) {
+        return error.InvalidDictionaryFile;
     }
 
-    pub fn sort_search_results(self: *Dictionary) !void {
-        log.debug("Sorting dictionary indexes.", .{});
-        try self.by_form.sort();
-        try self.by_lexeme.sort();
-        try self.by_gloss.sort();
-        try self.by_transliteration.sort();
+    // Read all search index data
+    try self.by_form.loadBinaryData(arena, &data, &form_uid);
+    if (try data.u8() != FS) {
+        return error.InvalidDictionaryFile;
     }
 
-    /// Export the entire dictionary contents into a user
-    /// readable text file on disk.
-    pub fn saveTextFile(
-        self: *const Dictionary,
-        allocator: Allocator,
-        io: std.Io,
-        filename: []const u8,
-        save_mode: SaveMode,
-    ) !void {
-        seed(io);
-        var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        defer temp_arena.deinit();
-        var data = std.Io.Writer.Allocating.init(allocator);
-        defer data.deinit();
-        try self.writeTextData(allocator, &data.writer, save_mode);
-        std.debug.print("text data size: {any}\n", .{data.items.len});
-        try write_bytes_to_file(io, data.items, filename);
+    try self.by_gloss.loadBinaryData(arena, &data, &form_uid);
+    if (try data.u8() != FS) {
+        return error.InvalidDictionaryFile;
     }
 
-    /// Export the entire dictionary contents into a byte arra
-    /// that can then be saved to disk or another location.
-    pub fn writeTextData(
-        self: *const Dictionary,
-        allocator: Allocator,
-        data: *std.Io.Writer,
-        save_mode: SaveMode,
-    ) !void {
-        var unsorted: ArrayListUnmanaged(*Lexeme) = .empty;
-        defer unsorted.deinit(allocator);
-        for (self.lexemes.items) |lexeme| {
-            if (save_mode == .gnt_words and lexeme.glosses.items.len == 0) continue;
-            try unsorted.append(allocator, lexeme);
-        }
-        std.mem.sort(*Lexeme, unsorted.items, @as(?[]const u8, null), Lexeme.lessThan);
+    try self.by_transliteration.loadBinaryData(arena, &data, &form_uid);
+    if (try data.u8() != FS) {
+        return error.InvalidDictionaryFile;
+    }
 
-        for (unsorted.items) |lexeme| {
-            try lexeme.writeText(data);
+    log.debug(
+        "Loaded binary dictionary ({d} words, {d} forms).",
+        .{ self.lexemes.items.len, self.forms.items.len },
+    );
+    return;
+}
 
-            for (lexeme.forms.items) |form| {
-                try data.writeByte(LF);
-                try data.writeAll("  ");
-                try form.writeText(data);
-                // References into linked modules
-                for (form.references.items, 0..) |*reference, i| {
-                    if (i > 0) {
-                        try data.writeByte(',');
-                    }
-                    try data.writeAll(reference.*.module.info().code);
-                    try data.writeByte('#');
-                    try data.writeAll(reference.*.book.info().english);
-                    try data.writeByte(' ');
-                    try data.print("{}", .{reference.*.chapter});
-                    try data.writeByte(':');
-                    try data.print("{}", .{reference.*.verse});
-                    if (reference.word > 0) {
-                        try data.writeByte(' ');
-                        try data.print("{}", .{reference.*.word});
-                    }
-                }
-            }
+pub fn sort_search_results(self: *Dictionary) !void {
+    log.debug("Sorting dictionary indexes.", .{});
+    try self.by_form.sort();
+    try self.by_lexeme.sort();
+    try self.by_gloss.sort();
+    try self.by_transliteration.sort();
+}
+
+/// Export the entire dictionary contents into a user
+/// readable text file on disk.
+pub fn saveTextFile(
+    self: *const Dictionary,
+    allocator: Allocator,
+    io: std.Io,
+    filename: []const u8,
+    save_mode: SaveMode,
+) !void {
+    seed(io);
+    var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer temp_arena.deinit();
+    var data = std.Io.Writer.Allocating.init(allocator);
+    defer data.deinit();
+    try self.writeTextData(allocator, &data.writer, save_mode);
+    std.debug.print("text data size: {any}\n", .{data.items.len});
+    try write_bytes_to_file(io, data.items, filename);
+}
+
+/// Export the entire dictionary contents into a byte arra
+/// that can then be saved to disk or another location.
+pub fn writeTextData(
+    self: *const Dictionary,
+    allocator: Allocator,
+    data: *std.Io.Writer,
+    save_mode: SaveMode,
+) !void {
+    var unsorted: ArrayListUnmanaged(*Lexeme) = .empty;
+    defer unsorted.deinit(allocator);
+    for (self.lexemes.items) |lexeme| {
+        if (save_mode == .gnt_words and lexeme.glosses.items.len == 0) continue;
+        try unsorted.append(allocator, lexeme);
+    }
+    std.mem.sort(*Lexeme, unsorted.items, @as(?[]const u8, null), Lexeme.lessThan);
+
+    for (unsorted.items) |lexeme| {
+        try lexeme.writeText(data);
+
+        for (lexeme.forms.items) |form| {
             try data.writeByte(LF);
+            try data.writeAll("  ");
+            try form.writeText(data);
+            // References into linked modules
+            for (form.references.items, 0..) |*reference, i| {
+                if (i > 0) {
+                    try data.writeByte(',');
+                }
+                try data.writeAll(reference.*.module.info().code);
+                try data.writeByte('#');
+                try data.writeAll(reference.*.book.info().english);
+                try data.writeByte(' ');
+                try data.print("{}", .{reference.*.chapter});
+                try data.writeByte(':');
+                try data.print("{}", .{reference.*.verse});
+                if (reference.word > 0) {
+                    try data.writeByte(' ');
+                    try data.print("{}", .{reference.*.word});
+                }
+            }
         }
+        try data.writeByte(LF);
     }
-};
+}
 
 /// Helper function to read file contents.
 fn read_bytes_from_file(io: std.Io, filename: []const u8, temp_allocator: Allocator) ![]u8 {
@@ -544,9 +546,9 @@ const debug = std.log.debug;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
-const Lexeme = @import("lexeme.zig");
+const Lexeme = @import("Lexeme.zig");
 const StringSet = @import("string_set.zig");
-const Form = @import("form.zig");
+const Form = @import("Form.zig");
 const SearchIndex = @import("search_index.zig").SearchIndex;
 const Parser = @import("parser.zig");
 const parsing = @import("parsing.zig");

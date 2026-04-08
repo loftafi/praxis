@@ -2,6 +2,8 @@
 /// it would be written or spoken in real life such as "jump,"
 /// "jumping" or "jumps". Related form of a word are collected into
 /// a `Lexeme` object.
+const Form = @This();
+
 uid: u24 = 0,
 word: []const u8,
 parsing: Parsing = .{},
@@ -10,8 +12,6 @@ incorrect: bool = false,
 references: std.ArrayListUnmanaged(Reference) = .empty,
 glosses: std.ArrayListUnmanaged(*Gloss) = .empty,
 lexeme: ?*Lexeme = null,
-
-const Form = @This();
 
 /// Describes an empty `Form` record.
 pub const empty = Form{
@@ -283,7 +283,7 @@ pub fn readText(self: *Form, arena: Allocator, t: *Parser) !void {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Parser = @import("parser.zig");
-const Lexeme = @import("lexeme.zig");
+const Lexeme = @import("Lexeme.zig");
 const Gloss = @import("gloss.zig");
 const Lang = @import("lang.zig").Lang;
 const ParsingError = @import("parsing.zig").Parsing.Error;

@@ -5,6 +5,8 @@
 /// underlying fundamental meaning.
 ///
 /// For example, "jump" is a lexeme, and forms of this word include "jump," "jumps,", "jumping," etc...
+const Lexeme = @This();
+
 uid: u24 = 0,
 word: []const u8,
 lang: Lang = Lang.unknown,
@@ -18,8 +20,6 @@ root: []const u8 = undefined,
 genitiveSuffix: []const u8 = undefined,
 adjective: []const u8 = undefined,
 note: []const u8 = undefined,
-
-const Lexeme = @This();
 
 /// Create this structure then use `init` to set up the fields.
 pub fn create(allocator: std.mem.Allocator) error{OutOfMemory}!*Lexeme {
@@ -630,14 +630,12 @@ test "read_invalid_lexeme_id" {
 const std = @import("std");
 const err = std.log.err;
 const Allocator = std.mem.Allocator;
-const BoundedArray = @import("bounded_array.zig").BoundedArray;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 pub const Parser = @import("parser.zig");
 const is_eol = @import("parser.zig").is_eol;
 const is_whitespace = @import("parser.zig").is_whitespace;
-const form = @import("form.zig");
-const Form = @import("form.zig");
+const Form = @import("Form.zig");
 const is_whitespace_or_eol = @import("parser.zig").is_whitespace_or_eol;
 pub const PartOfSpeech = @import("part_of_speech.zig").PartOfSpeech;
 const parse_pos = @import("part_of_speech.zig").parse_pos;
@@ -657,7 +655,7 @@ const append_u32 = BinaryWriter.append_u32;
 const RS = BinaryWriter.RS;
 const US = BinaryWriter.US;
 
-const Dictionary = @import("dictionary.zig").Dictionary;
+const Dictionary = @import("Dictionary.zig").Dictionary;
 
 const readTextGlosses = @import("gloss.zig").readTextGlosses;
 const readBinaryGlosses = @import("gloss.zig").readBinaryGlosses;

@@ -347,8 +347,6 @@ const append_u32 = BinaryWriter.append_u32;
 const append_u24 = BinaryWriter.append_u24;
 const US = BinaryReader.US;
 
-const BoundedArray = @import("bounded_array.zig").BoundedArray;
-
 const eq = std.testing.expectEqual;
 const se = std.testing.expectEqualStrings;
 

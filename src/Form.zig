@@ -280,42 +280,6 @@ pub fn readText(self: *Form, arena: Allocator, t: *Parser) !void {
     try Reference.readReferenceList(arena, t, &self.references); // References
 }
 
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const Parser = @import("parser.zig");
-const Lexeme = @import("Lexeme.zig");
-const Gloss = @import("gloss.zig");
-const Lang = @import("lang.zig").Lang;
-const ParsingError = @import("parsing.zig").Parsing.Error;
-const Parsing = @import("parsing.zig").Parsing;
-const Gender = Parsing.Gender;
-const Reference = @import("reference.zig");
-const BinaryReader = @import("binary_reader.zig");
-const Book = @import("book.zig").Book;
-const Module = @import("module.zig").Module;
-const is_eol = @import("parser.zig").is_eol;
-const is_whitespace = @import("parser.zig").is_whitespace;
-const is_whitespace_or_eol = @import("parser.zig").is_whitespace_or_eol;
-const readTextGlosses = @import("gloss.zig").readTextGlosses;
-const writeTextGlosses = @import("gloss.zig").writeTextGlosses;
-const readBinaryGlosses = @import("gloss.zig").readBinaryGlosses;
-const byz = @import("byz.zig");
-
-const BinaryWriter = @import("binary_writer.zig");
-const append_u8 = BinaryWriter.append_u8;
-const append_u16 = BinaryWriter.append_u16;
-const append_u24 = BinaryWriter.append_u24;
-const append_u32 = BinaryWriter.append_u32;
-const RS = BinaryWriter.RS;
-const US = BinaryWriter.US;
-
-const eql = @import("std").mem.eql;
-const expect = std.testing.expect;
-const expectEqualDeep = std.testing.expectEqualDeep;
-const expectEqual = std.testing.expectEqual;
-const expectEqualStrings = std.testing.expectEqualStrings;
-const expectEqualSlices = std.testing.expectEqualSlices;
-
 test "read_form" {
     var data = Parser.init("ἄρτος|N-NSM|false|20||\nποῦ|N-NSM|true|21|en:fish|byz#Revelation 20:2 3,kjtr#Revelation 20:2 3\n");
     var form = try Form.create(std.testing.allocator);
@@ -585,3 +549,39 @@ test "read_incomplete_form_parsing" {
     const e = form.readText(std.testing.allocator, &data);
     try expectEqual(ParsingError.InvalidParsing, e);
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const Parser = @import("parser.zig");
+const Lexeme = @import("Lexeme.zig");
+const Gloss = @import("gloss.zig");
+const Lang = @import("lang.zig").Lang;
+const ParsingError = @import("parsing.zig").Parsing.Error;
+const Parsing = @import("parsing.zig").Parsing;
+const Gender = Parsing.Gender;
+const Reference = @import("Reference.zig");
+const BinaryReader = @import("binary_reader.zig");
+const Book = @import("book.zig").Book;
+const Module = @import("module.zig").Module;
+const is_eol = @import("parser.zig").is_eol;
+const is_whitespace = @import("parser.zig").is_whitespace;
+const is_whitespace_or_eol = @import("parser.zig").is_whitespace_or_eol;
+const readTextGlosses = @import("gloss.zig").readTextGlosses;
+const writeTextGlosses = @import("gloss.zig").writeTextGlosses;
+const readBinaryGlosses = @import("gloss.zig").readBinaryGlosses;
+const byz = @import("byz.zig");
+
+const BinaryWriter = @import("binary_writer.zig");
+const append_u8 = BinaryWriter.append_u8;
+const append_u16 = BinaryWriter.append_u16;
+const append_u24 = BinaryWriter.append_u24;
+const append_u32 = BinaryWriter.append_u32;
+const RS = BinaryWriter.RS;
+const US = BinaryWriter.US;
+
+const eql = @import("std").mem.eql;
+const expect = std.testing.expect;
+const expectEqualDeep = std.testing.expectEqualDeep;
+const expectEqual = std.testing.expectEqual;
+const expectEqualStrings = std.testing.expectEqualStrings;
+const expectEqualSlices = std.testing.expectEqualSlices;

@@ -119,9 +119,6 @@
   ἤμεθα|V-IEI-1P|false|41218||sbl#Matthew 23:30 3,sbl#Matthew 23:30 13,sbl#Acts 27:37,sbl#Galatians 4:3 13,sbl#Ephesians 2:3 24
   ἦτε|V-IEI-2P|false|41219||
   ἦσαν|V-IEI-3P|false|41220|en:They were|
-Δαυίδ|el|9995|IndeclinableProperNoun|ὁ||1138|Δαυίδ|en:David#zh:大衛#ru:Давид#es:David||person|
-  Δαυίδ|N-NSM|false|99990|en:David|kjtr#Matthew 1:6 8
-  Δαυίδ|N-ASM|false|99991|en:David|kjtr#Matthew 1:6 4
 ὑδρία|el|105327|Noun|ἡ|-ας|5201|ὑδρί|en:water pot:jar:urn#zh:水罐:罐子:甕#es:tinajuelas:cántaro||object,container|
   ὑδρία|N-NSF|false|140850||
   ὑδρίαν|N-ASF|false|140851||byz#John 4:28 3,kjtr#John 4:28 3
@@ -142,6 +139,35 @@
   γράψομεν|V-FAI-1P|false|30333||
   γράψετε|V-FAI-2P|false|30334||
   γράψουσιν|V-FAI-3P|false|30335||
+Μαρία|el|4785210|ProperNoun|ἡ|-ας|3137|Μαρία|en:Mary:Maria:Miriam#ru:Мария#zh:瑪麗#es:María||person|
+  Μαρία|N-NSF|true|7111081||
+  Μαρίαν|N-ASF|true|16529084||
+  Μαρίας|N-GSF|true|15263081||
+  Μαρίᾳ|N-DSF|true|2919595||
+  Μαρία|N-VSF|true|13591729||
+σανδάλιον|el|7920895|Noun|τό|-ου|4547|σανδάλι|en:sandal#zh:涼鞋#es:sandalia||object|
+  σανδάλιον|N-NSN|false|123672||
+  σανδάλιον|N-ASN|false|123673||
+  σανδάλια|N-NPN|false|123674||
+  σανδάλια|N-APN|false|123675||
+ποτήριον|el|14131251|Noun|τό|-ου|4221|ποτήρι|en:cup:mug:drinking cup#zh:茶杯:茶缸:馬克杯#ru:чаша:кружка#es:taza||object, house|
+  ποτήριον|N-NSN|false|114739|en:cup:mug|
+  ποτήριον|N-ASN|false|114740|en:cup:mug|
+  ποτηρίου|N-GSN|false|114741|en:cup:mug|
+  ποτηρίῳ|N-DSN|false|114742|en:cup:mug|
+  ποτήρια|N-NPN|false|114743|en:cups:mugs|
+  ποτήρια|N-APN|false|114744|en:cups:mugs|
+  ποτηρίων|N-GPN|false|114745|en:cups:mugs|
+  ποτηρίοις|N-DPN|false|7353995|en:cups:mugs|
+δένδρον|el|11352027|Noun|τό|-ου|1186|δένδρ|en:tree#zh:樹:樹木#ru:дерево#es:árbol||object, garden|
+  δένδρον|N-NSN|false|8222586|en:tree#es:árbol|
+  δένδρον|N-ASN|false|16392691|en:tree#es:árbol|
+  δένδρου|N-GSN|false|14894887|en:tree|
+  δένδρῳ|N-DSN|false|6558579|en:tree|
+  δένδρα|N-NPN|false|15002325|en:trees|
+  δένδρα|N-APN|false|1332784|en:trees|
+  δένδρων|N-GPN|false|9872701|en:trees|
+  δένδροις|N-DSN|false|153632|en:tree|
 Δαυίδ|el|23404|IndeclinableProperNoun|ὁ||1138|Δαυίδ|en:David#zh:大衛#ru:Давид#es:David||person|
   Δαυίδ|N-NSM|false|31330||kjtr#Matthew 1:6 8,sr#Matthew 1:6 9,kjtr#Matthew 12:3 9,sr#Matthew 12:3 10,kjtr#Matthew 22:43 5,sr#Matthew 22:43 6,kjtr#Matthew 22:45 2,sr#Matthew 22:45 2,kjtr#Mark 2:25 9,sr#Mark 2:25 9,kjtr#Mark 12:36 2,sr#Mark 12:36 1,kjtr#Mark 12:37 2,sr#Mark 12:37 1,kjtr#Luke 6:3 14,sr#Luke 6:3 15,kjtr#Luke 20:42 2,sr#Luke 20:42 2,kjtr#Luke 20:44,sr#Luke 20:44,kjtr#John 7:42 19,sr#John 7:42 18,kjtr#Acts 2:25,sr#Acts 2:25,kjtr#Acts 2:34 2,sr#Acts 2:34 2,kjtr#Acts 13:36,sr#Acts 13:36,kjtr#Romans 4:6 2,sr#Romans 4:6 2,kjtr#Romans 11:9 1,sr#Romans 11:9 1
   Δαυίδ|N-ASM|false|31331||kjtr#Matthew 1:6 4,sr#Matthew 1:6 4,kjtr#Acts 13:22 7,kjtr#Acts 13:22 18,sr#Acts 13:22 6,sr#Acts 13:22 19

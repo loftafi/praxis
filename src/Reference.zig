@@ -1,12 +1,12 @@
+const Reference = @This();
+
 module: Module = .unknown,
 book: Book = .unknown,
 chapter: u16 = 0,
 verse: u16 = 0,
 word: u16 = 0,
 
-const Self = @This();
-
-pub const unknown: Self = .{
+pub const unknown: Reference = .{
     .module = .unknown,
     .book = .unknown,
     .chapter = 0,
@@ -14,7 +14,7 @@ pub const unknown: Self = .{
     .word = 0,
 };
 
-pub fn eql(self: *const Self, other: *const Self) bool {
+pub fn eql(self: *const Reference, other: *const Reference) bool {
     return (self.word == other.word and
         self.verse == other.verse and
         self.chapter == other.chapter and
@@ -22,7 +22,7 @@ pub fn eql(self: *const Self, other: *const Self) bool {
         self.module == other.module);
 }
 
-pub fn clear(self: *Self) void {
+pub fn clear(self: *Reference) void {
     self.* = .unknown;
 }
 
@@ -31,7 +31,7 @@ pub inline fn parse(text: []const u8) error{
     OutOfMemory,
     invalid_reference,
     InvalidU16,
-}!Self {
+}!Reference {
     var p = Parser.init(text);
     return readReference(&p);
 }
@@ -39,8 +39,8 @@ pub inline fn parse(text: []const u8) error{
 /// Read a bible reference, i.e. "Acts 7:40", "1 John 2:4"
 pub fn readReference(
     t: *Parser,
-) error{ OutOfMemory, invalid_reference, InvalidU16 }!Self {
-    var reference: Self = .{};
+) error{ OutOfMemory, invalid_reference, InvalidU16 }!Reference {
+    var reference: Reference = .{};
 
     // Because a book name can contain multiple words,
     // read until the chapter number.
@@ -87,9 +87,9 @@ pub fn readReference(
 pub fn readReferenceList(
     arena: Allocator,
     t: *Parser,
-    references: *std.ArrayListUnmanaged(Self),
+    references: *std.ArrayListUnmanaged(Reference),
 ) error{ OutOfMemory, invalid_reference, InvalidU16 }!void {
-    var reference: Self = .{}; // Parse into a temporary variable
+    var reference: Reference = .{}; // Parse into a temporary variable
 
     while (true) {
         // expect a module name then a hash
@@ -184,49 +184,49 @@ const Allocator = std.mem.Allocator;
 test "read verse" {
     {
         var p = Parser.init("Mark 1:2");
-        const reference = try Self.readReference(&p);
+        const reference = try Reference.readReference(&p);
         try std.testing.expectEqual(.mark, reference.book);
         try std.testing.expectEqual(1, reference.chapter);
         try std.testing.expectEqual(2, reference.verse);
     }
     {
         var p = Parser.init("Rev 19:28");
-        const reference = try Self.readReference(&p);
+        const reference = try Reference.readReference(&p);
         try std.testing.expectEqual(.revelation, reference.book);
         try std.testing.expectEqual(19, reference.chapter);
         try std.testing.expectEqual(28, reference.verse);
     }
     {
         var p = Parser.init("1 John 123:456");
-        const reference = try Self.readReference(&p);
+        const reference = try Reference.readReference(&p);
         try std.testing.expectEqual(.first_john, reference.book);
         try std.testing.expectEqual(123, reference.chapter);
         try std.testing.expectEqual(456, reference.verse);
     }
     {
         var p = Parser.init("1Th 3:4");
-        const reference = try Self.readReference(&p);
+        const reference = try Reference.readReference(&p);
         try std.testing.expectEqual(.first_thessalonians, reference.book);
         try std.testing.expectEqual(3, reference.chapter);
         try std.testing.expectEqual(4, reference.verse);
     }
     {
         var p1 = Parser.init("1Th 3:4");
-        const r1 = try Self.readReference(&p1);
+        const r1 = try Reference.readReference(&p1);
         var p2 = Parser.init("1Th 3:4");
-        var r2 = try Self.readReference(&p2);
+        var r2 = try Reference.readReference(&p2);
         try std.testing.expect(r1.eql(&r2));
 
         p2 = Parser.init("1Th 3:5");
-        r2 = try Self.readReference(&p2);
+        r2 = try Reference.readReference(&p2);
         try std.testing.expect(!r1.eql(&r2));
 
         p2 = Parser.init("1Th 2:4");
-        r2 = try Self.readReference(&p2);
+        r2 = try Reference.readReference(&p2);
         try std.testing.expect(!r1.eql(&r2));
 
         p2 = Parser.init("Mark 3:4");
-        r2 = try Self.readReference(&p2);
+        r2 = try Reference.readReference(&p2);
         try std.testing.expect(!r1.eql(&r2));
     }
 }
@@ -235,9 +235,9 @@ test "read reference list" {
     const allocator = std.testing.allocator;
     {
         var p = Parser.init("byz#Mark 1:2 3");
-        var references: std.ArrayListUnmanaged(Self) = .empty;
+        var references: std.ArrayListUnmanaged(Reference) = .empty;
         defer references.deinit(allocator);
-        try Self.readReferenceList(allocator, &p, &references);
+        try Reference.readReferenceList(allocator, &p, &references);
         try std.testing.expectEqual(1, references.items.len);
         try std.testing.expectEqual(Module.byzantine, references.items[0].module);
         try std.testing.expectEqual(Book.mark, references.items[0].book);
@@ -248,9 +248,9 @@ test "read reference list" {
     {
         //var p = Parser.init("byz#John 10:20 30");
         var p = Parser.init("byz#John 10:20 30,sr#mark 11:22 33");
-        var references: std.ArrayListUnmanaged(Self) = .empty;
+        var references: std.ArrayListUnmanaged(Reference) = .empty;
         defer references.deinit(allocator);
-        try Self.readReferenceList(allocator, &p, &references);
+        try Reference.readReferenceList(allocator, &p, &references);
         try std.testing.expectEqual(2, references.items.len);
         try std.testing.expectEqual(10, references.items[0].chapter);
         try std.testing.expectEqual(20, references.items[0].verse);

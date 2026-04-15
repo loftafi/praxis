@@ -5,7 +5,7 @@
 ///!
 pub const Dictionary = @import("Dictionary.zig").Dictionary;
 pub const SearchIndex = @import("search_index.zig").SearchIndex;
-pub const normaliser = @import("normaliser.zig");
+pub const Normaliser = @import("Normaliser.zig");
 pub const max_word_size = @import("search_index.zig").max_word_size;
 
 /// Contains information about a lexeme and its associated forms
@@ -63,7 +63,7 @@ pub const Module = @import("module.zig").Module;
 pub const Book = @import("book.zig").Book;
 
 /// A reference is a book, chapter, verse tag into a paragraph of a `Book`.
-pub const Reference = @import("reference.zig");
+pub const Reference = @import("Reference.zig");
 
 /// Parse a string reprentation of a reference into a `Reference` struct,
 /// i.e. `parse_reference("Matt 3:4")` or `parse_reference("Mk 3.4")`.

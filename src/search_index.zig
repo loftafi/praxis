@@ -334,7 +334,7 @@ const std = @import("std");
 const log = std.log;
 const is_stopword = @import("gloss_tokens.zig").is_stopword;
 
-const Normaliser = @import("normaliser.zig").Normaliser;
+const Normaliser = @import("Normaliser.zig");
 
 const farmhash = @import("farmhash64.zig");
 const StringHashMapUnmanaged = std.StringHashMapUnmanaged;

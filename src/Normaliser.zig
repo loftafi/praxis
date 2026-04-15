@@ -1,198 +1,198 @@
+/// normaliser splits and normalises keywords, storing the results
+/// in an internal temporary buffer
+pub const Normaliser = @This();
+
 pub const max_word_size = 500;
 const max_index_keyword_size = 50;
 
-/// normaliser splits and normalises keywords, storing the results
-/// in an internal temporary buffer
-pub const Normaliser = struct {
-    accented_buffer: [max_word_size]u8,
-    unaccented_buffer: [max_word_size]u8,
-    slices: std.ArrayListUnmanaged([]const u8),
+accented_buffer: [max_word_size]u8,
+unaccented_buffer: [max_word_size]u8,
+slices: std.ArrayListUnmanaged([]const u8),
 
-    pub const empty: Normaliser = .{
-        .accented_buffer = undefined,
-        .unaccented_buffer = undefined,
-        .slices = .empty,
+pub const empty: Normaliser = .{
+    .accented_buffer = undefined,
+    .unaccented_buffer = undefined,
+    .slices = .empty,
+};
+
+pub fn deinit(self: *Normaliser, gpa: Allocator) void {
+    self.slices.deinit(gpa);
+}
+
+/// Keywordify returns an unaccented, and normalised version
+/// of a word. It also returns substrings of the unaccented and
+/// normalised word for search indexing.
+///
+///  - The unaccented version removes all accents and breathings.
+///  - The normalised removes only excess accents and standarises the final letter.
+///
+/// The substrings are slices of the `unaccented` and `normalised`
+/// string buffer.
+pub fn keywords(
+    self: *Normaliser,
+    allocator: Allocator,
+    word: []const u8,
+) error{ OutOfMemory, WordTooLong, InvalidUtf8 }!struct {
+    accented: []const u8,
+    unaccented: []const u8,
+    keywords: [][]const u8,
+} {
+    if (word.len >= max_word_size) return error.WordTooLong;
+
+    self.slices.clearRetainingCapacity();
+    try self.slices.ensureUnusedCapacity(allocator, word.len * 2);
+
+    var accented = std.Io.Writer.fixed(&self.accented_buffer);
+    var unaccented = std.Io.Writer.fixed(&self.unaccented_buffer);
+
+    var view = std.unicode.Utf8View.init(word) catch |e| {
+        if (e == error.InvalidUtf8) {
+            std.log.err("keywordify on invalid unicode. {s} -- {any}\n", .{ word, word });
+        }
+        return e;
     };
 
-    pub fn deinit(self: *Normaliser, gpa: Allocator) void {
-        self.slices.deinit(gpa);
-    }
+    // Only one accent per normalised word
+    var saw_accent = false;
 
-    /// Keywordify returns an unaccented, and normalised version
-    /// of a word. It also returns substrings of the unaccented and
-    /// normalised word for search indexing.
-    ///
-    ///  - The unaccented version removes all accents and breathings.
-    ///  - The normalised removes only excess accents and standarises the final letter.
-    ///
-    /// The substrings are slices of the `unaccented` and `normalised`
-    /// string buffer.
-    pub fn keywords(
-        self: *Normaliser,
-        allocator: Allocator,
-        word: []const u8,
-    ) error{ OutOfMemory, WordTooLong, InvalidUtf8 }!struct {
-        accented: []const u8,
-        unaccented: []const u8,
-        keywords: [][]const u8,
-    } {
-        if (word.len >= max_word_size) return error.WordTooLong;
+    var i = view.iterator();
+    var character_count: usize = 0;
 
-        self.slices.clearRetainingCapacity();
-        try self.slices.ensureUnusedCapacity(allocator, word.len * 2);
-
-        var accented = std.Io.Writer.fixed(&self.accented_buffer);
-        var unaccented = std.Io.Writer.fixed(&self.unaccented_buffer);
-
-        var view = std.unicode.Utf8View.init(word) catch |e| {
-            if (e == error.InvalidUtf8) {
-                std.log.err("keywordify on invalid unicode. {s} -- {any}\n", .{ word, word });
+    while (i.nextCodepointSlice()) |slice| {
+        if (character_count > 1 and character_count < max_index_keyword_size) {
+            const k1 = accented.buffer[0..accented.end];
+            const k2 = unaccented.buffer[0..unaccented.end];
+            try self.slices.append(allocator, k1);
+            if (!std.mem.eql(u8, k1, k2)) {
+                try self.slices.append(allocator, k2);
             }
-            return e;
-        };
+        }
 
-        // Only one accent per normalised word
-        var saw_accent = false;
+        const c = std.unicode.utf8Decode(slice) catch return error.InvalidUtf8;
+        if (c == ' ' or c == '\t') saw_accent = false;
+        character_count += 1;
 
-        var i = view.iterator();
-        var character_count: usize = 0;
+        // Removes accents and capitalisation
+        const out = if (unaccent(c)) |s|
+            s
+        else if (lowercase(c)) |lc|
+            lc
+        else
+            slice;
+        unaccented.writeAll(out) catch return error.WordTooLong;
 
-        while (i.nextCodepointSlice()) |slice| {
-            if (character_count > 1 and character_count < max_index_keyword_size) {
-                const k1 = accented.buffer[0..accented.end];
-                const k2 = unaccented.buffer[0..unaccented.end];
-                try self.slices.append(allocator, k1);
-                if (!std.mem.eql(u8, k1, k2)) {
-                    try self.slices.append(allocator, k2);
-                }
+        // Normalisation processing
+        if (remove_accent(c)) |rm| {
+            var out2: []const u8 = undefined;
+            if (saw_accent) {
+                out2 = rm;
+            } else if (lowercase(c)) |lc| {
+                out2 = lc;
+            } else {
+                saw_accent = true;
+                out2 = if (fix_grave(c)) |fixed|
+                    fixed
+                else
+                    slice;
             }
-
-            const c = std.unicode.utf8Decode(slice) catch return error.InvalidUtf8;
-            if (c == ' ' or c == '\t') saw_accent = false;
-            character_count += 1;
-
-            // Removes accents and capitalisation
-            const out = if (unaccent(c)) |s|
-                s
+            accented.writeAll(out2) catch return error.WordTooLong;
+        } else {
+            const out2 = if ((c == 'σ' or c == 'Σ' or c == 'ς') and (i.i == word.len))
+                comptime &ue('ς')
             else if (lowercase(c)) |lc|
                 lc
             else
                 slice;
-            unaccented.writeAll(out) catch return error.WordTooLong;
-
-            // Normalisation processing
-            if (remove_accent(c)) |rm| {
-                var out2: []const u8 = undefined;
-                if (saw_accent) {
-                    out2 = rm;
-                } else if (lowercase(c)) |lc| {
-                    out2 = lc;
-                } else {
-                    saw_accent = true;
-                    out2 = if (fix_grave(c)) |fixed|
-                        fixed
-                    else
-                        slice;
-                }
-                accented.writeAll(out2) catch return error.WordTooLong;
-            } else {
-                const out2 = if ((c == 'σ' or c == 'Σ' or c == 'ς') and (i.i == word.len))
-                    comptime &ue('ς')
-                else if (lowercase(c)) |lc|
-                    lc
-                else
-                    slice;
-                accented.writeAll(out2) catch return error.WordTooLong;
-            }
+            accented.writeAll(out2) catch return error.WordTooLong;
         }
-
-        return .{
-            .accented = accented.buffer[0..accented.end],
-            .unaccented = unaccented.buffer[0..unaccented.end],
-            .keywords = self.slices.items,
-        };
     }
 
-    /// Keywordify returns an unaccented, and normalised version
-    /// of a word. It also returns substrings of the unaccented and
-    /// normalised word for search indexing.
-    ///
-    ///  - The unaccented version removes all accents and breathings.
-    ///  - The normalised removes only excess accents and standarises the final letter.
-    ///
-    /// The substrings are slices of the `unaccented` and `normalised`
-    /// string buffer.
-    pub fn normalise(
-        self: *Normaliser,
-        word: []const u8,
-    ) error{ OutOfMemory, WordTooLong, InvalidUtf8 }!struct {
-        accented: []const u8,
-        unaccented: []const u8,
-    } {
-        if (word.len >= max_word_size) return error.WordTooLong;
+    return .{
+        .accented = accented.buffer[0..accented.end],
+        .unaccented = unaccented.buffer[0..unaccented.end],
+        .keywords = self.slices.items,
+    };
+}
 
-        var accented = std.Io.Writer.fixed(&self.accented_buffer);
-        var unaccented = std.Io.Writer.fixed(&self.unaccented_buffer);
+/// Keywordify returns an unaccented, and normalised version
+/// of a word. It also returns substrings of the unaccented and
+/// normalised word for search indexing.
+///
+///  - The unaccented version removes all accents and breathings.
+///  - The normalised removes only excess accents and standarises the final letter.
+///
+/// The substrings are slices of the `unaccented` and `normalised`
+/// string buffer.
+pub fn normalise(
+    self: *Normaliser,
+    word: []const u8,
+) error{ OutOfMemory, WordTooLong, InvalidUtf8 }!struct {
+    accented: []const u8,
+    unaccented: []const u8,
+} {
+    if (word.len >= max_word_size) return error.WordTooLong;
 
-        var view = std.unicode.Utf8View.init(word) catch |e| {
-            if (e == error.InvalidUtf8) {
-                std.log.err("keywordify on invalid unicode. {s} -- {any}\n", .{ word, word });
+    var accented = std.Io.Writer.fixed(&self.accented_buffer);
+    var unaccented = std.Io.Writer.fixed(&self.unaccented_buffer);
+
+    var view = std.unicode.Utf8View.init(word) catch |e| {
+        if (e == error.InvalidUtf8) {
+            std.log.err("keywordify on invalid unicode. {s} -- {any}\n", .{ word, word });
+        }
+        return e;
+    };
+
+    // Only one accent per normalised word
+    var saw_accent = false;
+
+    var i = view.iterator();
+    var character_count: usize = 0;
+
+    while (i.nextCodepointSlice()) |slice| {
+        const c = std.unicode.utf8Decode(slice) catch return error.InvalidUtf8;
+        if (c == ' ' or c == '\t') saw_accent = false;
+        character_count += 1;
+
+        // Removes accents and capitalisation
+        const out = if (unaccent(c)) |s|
+            s
+        else if (lowercase(c)) |lc|
+            lc
+        else
+            slice;
+        unaccented.writeAll(out) catch return error.WordTooLong;
+
+        // Normalisation processing
+        if (remove_accent(c)) |rm| {
+            var out2: []const u8 = undefined;
+            if (saw_accent) {
+                out2 = rm;
+            } else if (lowercase(c)) |lc| {
+                out2 = lc;
+            } else {
+                saw_accent = true;
+                out2 = if (fix_grave(c)) |fixed|
+                    fixed
+                else
+                    slice;
             }
-            return e;
-        };
-
-        // Only one accent per normalised word
-        var saw_accent = false;
-
-        var i = view.iterator();
-        var character_count: usize = 0;
-
-        while (i.nextCodepointSlice()) |slice| {
-            const c = std.unicode.utf8Decode(slice) catch return error.InvalidUtf8;
-            if (c == ' ' or c == '\t') saw_accent = false;
-            character_count += 1;
-
-            // Removes accents and capitalisation
-            const out = if (unaccent(c)) |s|
-                s
+            accented.writeAll(out2) catch return error.WordTooLong;
+        } else {
+            const out2 = if ((c == 'σ' or c == 'Σ' or c == 'ς') and (i.i == word.len))
+                comptime &ue('ς')
             else if (lowercase(c)) |lc|
                 lc
             else
                 slice;
-            unaccented.writeAll(out) catch return error.WordTooLong;
-
-            // Normalisation processing
-            if (remove_accent(c)) |rm| {
-                var out2: []const u8 = undefined;
-                if (saw_accent) {
-                    out2 = rm;
-                } else if (lowercase(c)) |lc| {
-                    out2 = lc;
-                } else {
-                    saw_accent = true;
-                    out2 = if (fix_grave(c)) |fixed|
-                        fixed
-                    else
-                        slice;
-                }
-                accented.writeAll(out2) catch return error.WordTooLong;
-            } else {
-                const out2 = if ((c == 'σ' or c == 'Σ' or c == 'ς') and (i.i == word.len))
-                    comptime &ue('ς')
-                else if (lowercase(c)) |lc|
-                    lc
-                else
-                    slice;
-                accented.writeAll(out2) catch return error.WordTooLong;
-            }
+            accented.writeAll(out2) catch return error.WordTooLong;
         }
-
-        return .{
-            .accented = accented.buffer[0..accented.end],
-            .unaccented = unaccented.buffer[0..unaccented.end],
-        };
     }
-};
+
+    return .{
+        .accented = accented.buffer[0..accented.end],
+        .unaccented = unaccented.buffer[0..unaccented.end],
+    };
+}
 
 /// Remove accent and breathing marks. Returns an array that is equal or
 /// shorter in length to the original array used to build the character

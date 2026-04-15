@@ -15,13 +15,11 @@ pub const Dictionary = @This();
 
 by_lexeme: SearchIndex(*Lexeme, Lexeme.lessThan),
 by_form: SearchIndex(*Form, Form.autocompleteLessThan),
+by_form_uid: AutoHashMapUnmanaged(u24, *Form),
 by_gloss: SearchIndex(*Form, Form.autocompleteLessThan),
 by_transliteration: SearchIndex(*Form, Form.autocompleteLessThan),
 lexemes: ArrayListUnmanaged(*Lexeme),
 forms: ArrayListUnmanaged(*Form),
-
-// When loading via text file, track which forms have been seen
-seen_lexemes: std.StringHashMapUnmanaged(bool) = .empty,
 
 /// Create a dictionary object with an allocator that may be an
 /// arena, or a general purpose allocator.
@@ -30,11 +28,11 @@ pub fn create(arena: Allocator) error{OutOfMemory}!*Dictionary {
     dictionary.* = .{
         .by_lexeme = .empty,
         .by_form = .empty,
+        .by_form_uid = .empty,
         .by_gloss = .empty,
         .by_transliteration = .empty,
         .lexemes = try ArrayListUnmanaged(*Lexeme).initCapacity(arena, 180000),
         .forms = try ArrayListUnmanaged(*Form).initCapacity(arena, 180000),
-        .seen_lexemes = .empty,
     };
     return dictionary;
 }
@@ -43,20 +41,19 @@ pub fn create(arena: Allocator) error{OutOfMemory}!*Dictionary {
 /// This is usually an arena, but it does not have to be.
 pub fn destroy(self: *Dictionary, arena: Allocator) void {
     self.by_lexeme.deinit(arena);
-    for (self.lexemes.items) |*item| {
+    for (self.lexemes.items) |*item|
         item.*.destroy(arena);
-    }
     self.lexemes.deinit(arena);
 
     self.by_form.deinit(arena);
-    for (self.forms.items) |*item| {
+    self.by_form_uid.deinit(arena);
+    for (self.forms.items) |*item|
         item.*.destroy(arena);
-    }
     self.forms.deinit(arena);
 
     self.by_gloss.deinit(arena);
     self.by_transliteration.deinit(arena);
-    self.seen_lexemes.deinit(arena);
+    self.* = undefined;
     arena.destroy(self);
 }
 
@@ -76,7 +73,7 @@ pub fn loadFile(
     defer gpa.free(data);
 
     if (data.len > 10 and data[0] == 99 and data[1] == 1) {
-        try self.loadBinaryData(arena, gpa, data);
+        try self.loadBinaryData(arena, data);
     } else {
         try self.loadTextData(arena, gpa, data);
     }
@@ -95,16 +92,18 @@ pub fn loadTextData(
     // Don't load duplicate lexeme entries
     var skip_lexeme: bool = false;
 
+    // Deduplicate lexemes with the same root
+    var seen_lexemes: std.StringHashMapUnmanaged(bool) = .empty;
+    defer seen_lexemes.deinit(gpa);
+
     // Keep a cache of seen lexemes, and track which lexemes need a uid.
-    var lexeme_uid = std.AutoHashMap(u24, *Lexeme).init(gpa);
-    defer lexeme_uid.deinit();
+    var lexeme_uid: AutoHashMapUnmanaged(u24, *Lexeme) = .empty;
+    defer lexeme_uid.deinit(gpa);
     var max_lexeme_uid: u24 = 0;
-    var lexeme_needs_uid: std.ArrayListUnmanaged(*Lexeme) = .empty;
+    var lexeme_needs_uid: ArrayListUnmanaged(*Lexeme) = .empty;
     defer lexeme_needs_uid.deinit(gpa);
 
     // Keep a cache of seen forms, and track which forms need a uid.
-    var form_uid = std.AutoHashMap(u24, *Form).init(gpa);
-    defer form_uid.deinit();
     var max_form_uid: u24 = 0;
     var form_needs_uid: std.ArrayListUnmanaged(*Form) = .empty;
     defer form_needs_uid.deinit(gpa);
@@ -132,21 +131,21 @@ pub fn loadTextData(
                 err("missing lexeme word field on line: {d}", .{line});
                 break;
             }
-            if (self.seen_lexemes.contains(lexeme.word)) {
+            if (seen_lexemes.contains(lexeme.word)) {
                 debug("Skip duplicate root {s} on line {d}", .{ lexeme.word, line });
                 skip_lexeme = true;
                 lexeme.destroy(arena);
                 continue;
             }
             skip_lexeme = false;
-            try self.seen_lexemes.put(gpa, lexeme.word, true);
+            try seen_lexemes.put(gpa, lexeme.word, true);
             current_lexeme = lexeme;
             try self.lexemes.append(arena, lexeme);
             try self.by_lexeme.add(arena, lexeme.word, lexeme);
             if (lexeme.uid < minimum_uid) {
                 try lexeme_needs_uid.append(gpa, lexeme);
             } else {
-                try lexeme_uid.put(lexeme.uid, lexeme);
+                try lexeme_uid.put(gpa, lexeme.uid, lexeme);
                 if (lexeme.uid > max_lexeme_uid) {
                     max_lexeme_uid = lexeme.uid;
                 }
@@ -177,7 +176,7 @@ pub fn loadTextData(
             if (form.uid < minimum_uid) {
                 try form_needs_uid.append(gpa, form);
             } else {
-                try form_uid.put(form.uid, form);
+                try self.by_form_uid.put(arena, form.uid, form);
                 if (form.uid > max_lexeme_uid) {
                     max_form_uid = form.uid;
                 }
@@ -255,7 +254,7 @@ pub fn loadTextData(
     if (lexeme_needs_uid.items.len > 0) {
         info("{d} lexemes need uid.", .{lexeme_needs_uid.items.len});
         for (lexeme_needs_uid.items) |item| {
-            item.uid = self.generateUniqueUid(&lexeme_uid, &form_uid);
+            item.uid = self.generateUniqueUid(&lexeme_uid, &self.by_form_uid);
             info("assign uid {s}={d}", .{ item.word, item.uid });
         }
         lexeme_needs_uid.clearAndFree(gpa);
@@ -263,7 +262,7 @@ pub fn loadTextData(
     if (form_needs_uid.items.len > 0) {
         info("{d} forms need uid.", .{form_needs_uid.items.len});
         for (form_needs_uid.items) |item| {
-            item.uid = self.generateUniqueUid(&lexeme_uid, &form_uid);
+            item.uid = self.generateUniqueUid(&lexeme_uid, &self.by_form_uid);
             info("assign uid {s}={d}", .{ item.word, item.uid });
         }
         form_needs_uid.clearAndFree(gpa);
@@ -275,8 +274,8 @@ pub fn loadTextData(
 
 fn generateUniqueUid(
     _: *const Dictionary,
-    lexeme_uid: *const std.AutoHashMap(u24, *Lexeme),
-    form_uid: *const std.AutoHashMap(u24, *Form),
+    lexeme_uid: *const AutoHashMapUnmanaged(u24, *Lexeme),
+    form_uid: *const AutoHashMapUnmanaged(u24, *Form),
 ) u24 {
     while (true) {
         const next = random_u24();
@@ -347,7 +346,6 @@ pub fn writeBinaryData(
 pub fn loadBinaryData(
     self: *Dictionary,
     arena: Allocator,
-    gpa: Allocator,
     content: []const u8,
 ) !void {
     var data = BinaryReader.init(content);
@@ -362,9 +360,7 @@ pub fn loadBinaryData(
     };
 
     // Keep a cache of seen forms for index loading
-    var form_uid = std.AutoHashMap(u24, *Form).init(gpa);
-    defer form_uid.deinit();
-    try form_uid.ensureTotalCapacity(count);
+    try self.by_form_uid.ensureTotalCapacity(arena, count);
     try self.lexemes.ensureTotalCapacity(arena, count);
     try self.forms.ensureTotalCapacity(arena, count);
 
@@ -390,7 +386,7 @@ pub fn loadBinaryData(
         // Any forms discovered while reading lexeme should
         // appear in the form index.
         for (lexeme.forms.items) |*f| {
-            try form_uid.put(f.*.uid, f.*);
+            try self.by_form_uid.put(arena, f.*.uid, f.*);
             try self.forms.append(arena, f.*);
         }
         //if (data.next() != RS) {
@@ -402,17 +398,17 @@ pub fn loadBinaryData(
     }
 
     // Read all search index data
-    try self.by_form.loadBinaryData(arena, &data, &form_uid);
+    try self.by_form.loadBinaryData(arena, &data, &self.by_form_uid);
     if (try data.u8() != FS) {
         return error.InvalidDictionaryFile;
     }
 
-    try self.by_gloss.loadBinaryData(arena, &data, &form_uid);
+    try self.by_gloss.loadBinaryData(arena, &data, &self.by_form_uid);
     if (try data.u8() != FS) {
         return error.InvalidDictionaryFile;
     }
 
-    try self.by_transliteration.loadBinaryData(arena, &data, &form_uid);
+    try self.by_transliteration.loadBinaryData(arena, &data, &self.by_form_uid);
     if (try data.u8() != FS) {
         return error.InvalidDictionaryFile;
     }
@@ -544,6 +540,7 @@ const err = std.log.err;
 const info = std.log.info;
 const debug = std.log.debug;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Lexeme = @import("Lexeme.zig");
@@ -594,6 +591,10 @@ test "basic_dictionary" {
 
     try expectEqual(2, dictionary.lexemes.items.len);
     try expectEqual(5, dictionary.forms.items.len);
+
+    try expectEqual(5, dictionary.by_form_uid.count());
+    try expect(dictionary.by_form_uid.get(1234) == null);
+    try expect(dictionary.by_form_uid.get(700004) != null);
 
     try expectEqual(13, dictionary.by_lexeme.index.count());
     try expectEqual(27, dictionary.by_form.index.count());
@@ -661,7 +662,7 @@ test "basic_dictionary" {
         const dictionary2 = try Dictionary.create(allocator);
         defer dictionary2.destroy(allocator);
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
-        try dictionary2.loadBinaryData(allocator, allocator, out.written());
+        try dictionary2.loadBinaryData(allocator, out.written());
 
         try expectEqual(2, dictionary.lexemes.items.len);
         try expectEqual(5, dictionary.forms.items.len);
@@ -720,6 +721,10 @@ test "load_count" {
     try expectEqual(1, dictionary.lexemes.items.len);
     try expectEqual(2, dictionary.forms.items.len);
     try expectEqual(2, dictionary.lexemes.items[0].forms.items.len);
+
+    try expectEqual(2, dictionary.by_form_uid.count());
+    try expect(dictionary.by_form_uid.get(1234) == null);
+    try expect(dictionary.by_form_uid.get(1286240) != null);
 }
 
 test "gloss_fallback" {
@@ -750,7 +755,7 @@ test "gloss_fallback" {
         const dictionary2 = try Dictionary.create(allocator);
         defer dictionary2.destroy(allocator);
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
-        try dictionary2.loadBinaryData(allocator, allocator, bin1.written());
+        try dictionary2.loadBinaryData(allocator, bin1.written());
         try dictionary2.writeBinaryData(allocator, &bin2.writer, .all_words);
     }
     try expectEqualSlices(u8, bin1.written(), bin2.written());
@@ -787,7 +792,7 @@ test "arena_check" {
         const dictionary2 = try Dictionary.create(allocator);
         defer dictionary2.destroy(allocator);
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
-        try dictionary2.loadBinaryData(allocator, allocator, out.written());
+        try dictionary2.loadBinaryData(allocator, out.written());
         try dictionary2.writeBinaryData(allocator, &out2.writer, .all_words);
     }
     try expectEqualSlices(u8, out.written(), out2.written());
@@ -849,7 +854,7 @@ test "dictionary_destroy" {
     const dictionary2 = try Dictionary.create(allocator);
     defer dictionary2.destroy(allocator);
     //try expectEqualSlices(u8, &[_]u8{}, out.items);
-    try dictionary2.loadBinaryData(allocator, allocator, out.written());
+    try dictionary2.loadBinaryData(allocator, out.written());
 }
 
 test "dictionary_destroy1" {
@@ -899,7 +904,7 @@ test "persist_dictionary" {
     defer dictionary2.destroy(gpa);
     const data2 = try tmp.dir.readFileAlloc(io, "temp_binary_file", gpa, .unlimited);
     defer gpa.free(data2);
-    try dictionary2.loadBinaryData(gpa, gpa, data2);
+    try dictionary2.loadBinaryData(gpa, data2);
     try expectEqual(4, dictionary2.forms.items.len);
     try expectEqual(2, dictionary2.lexemes.items.len);
 }

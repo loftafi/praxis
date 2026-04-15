@@ -130,9 +130,9 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
         pub fn sort(self: *Self) !void {
             var i = self.index.valueIterator();
             while (i.next()) |sr| {
-                std.mem.sort(T, sr.*.exact_accented.items, @as(?[]const u8, sr.*.keyword), cmp);
-                std.mem.sort(T, sr.*.exact_unaccented.items, @as(?[]const u8, sr.*.keyword), cmp);
-                std.mem.sort(T, sr.*.partial_match.items, @as(?[]const u8, sr.*.keyword), cmp);
+                std.mem.sortUnstable(T, sr.*.exact_accented.items, @as(?[]const u8, sr.*.keyword), cmp);
+                std.mem.sortUnstable(T, sr.*.exact_unaccented.items, @as(?[]const u8, sr.*.keyword), cmp);
+                std.mem.sortUnstable(T, sr.*.partial_match.items, @as(?[]const u8, sr.*.keyword), cmp);
             }
         }
 
@@ -154,7 +154,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             while (walk.next()) |i| {
                 try unsorted.append(allocator, i.key_ptr.*);
             }
-            std.mem.sort([]const u8, unsorted.items, {}, stringLessThan);
+            std.mem.sortUnstable([]const u8, unsorted.items, {}, stringLessThan);
 
             // Output the sorted list
             try append_u32(data, self.index.count());
@@ -167,7 +167,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             self: *Self,
             allocator: Allocator,
             data: *BinaryReader,
-            uids: *std.AutoHashMap(u24, T),
+            uids: *std.AutoHashMapUnmanaged(u24, T),
         ) error{ OutOfMemory, InvalidIndexFile, unexpected_eof }!void {
             const indexes = try data.u32();
             for (0..indexes) |_| {

@@ -1,10 +1,11 @@
-//! Reads the parsing/tagging fields of the CCAT data files (characters
-//! 26-36) into the standardised `Parsing` struct.
-//!
-//! Actual CCAT data not included in this repository due to licensing
-//! restrictions.
-//!
-//! https://ccat.sas.upenn.edu/gopher/text/religion/biblical/lxxmorph/
+/// Reads the parsing/tagging fields of the CCAT data files (characters
+/// 26-36) into the standardised `Parsing` struct.
+///
+/// Actual CCAT data not included in this repository due to licensing
+/// restrictions.
+///
+/// https://ccat.sas.upenn.edu/gopher/text/religion/biblical/lxxmorph/
+pub const CCAT = @This();
 
 /// Read a parsing code string in the CCAT format.
 pub fn parse(tag: []const u8) Parsing.Error!Parsing {

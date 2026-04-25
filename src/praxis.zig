@@ -18,7 +18,7 @@ pub const Form = @import("Form.zig");
 pub const Lang = @import("lang.zig").Lang;
 
 /// Short glosses to explain the meaning of a lexeme or form.
-pub const Gloss = @import("gloss.zig");
+pub const Gloss = @import("Gloss.zig");
 
 /// Collate forms of a lexeme into tables that can be displayed to the user.
 /// `init()` or `create()` a `Panel` then use `setLexeme()` to fill the

@@ -3,47 +3,48 @@
 ///
 /// For example: περιπατῶ might be translated into English as
 /// "I walk," or "I live."
-const Self = @This();
+const Gloss = @This();
 
 lang: Lang,
 entries: std.ArrayListUnmanaged([]const u8),
 
-pub fn create(allocator: Allocator) error{OutOfMemory}!*Self {
-    var gloss = try allocator.create(Self);
+pub fn create(allocator: Allocator) error{OutOfMemory}!*Gloss {
+    var gloss = try allocator.create(Gloss);
     errdefer allocator.destroy(gloss);
     gloss.init();
     return gloss;
 }
 
-pub fn destroy(self: *Self, arena: Allocator) void {
+pub fn destroy(self: *Gloss, arena: Allocator) void {
     self.deinit(arena);
     arena.destroy(self);
 }
 
-pub fn init(self: *Self) void {
+pub fn init(self: *Gloss) void {
     self.* = .{
         .lang = Lang.unknown,
         .entries = .empty,
     };
 }
 
-pub fn deinit(self: *Self, arena: Allocator) void {
+pub fn deinit(self: *Gloss, arena: Allocator) void {
     for (self.entries.items) |*gloss| {
         arena.free(gloss.*);
     }
     self.entries.deinit(arena);
+    self.* = undefined;
 }
 
-pub fn add_gloss(self: *Self, arena: Allocator, gloss: []const u8) error{OutOfMemory}!void {
+pub fn add_gloss(self: *Gloss, arena: Allocator, gloss: []const u8) error{OutOfMemory}!void {
     try self.entries.append(arena, try arena.dupe(u8, gloss));
 }
 
-pub fn glosses(self: *Self) []const []const u8 {
+pub fn glosses(self: *Gloss) []const []const u8 {
     return self.entries.items;
 }
 
 pub fn string(
-    self: *const Self,
+    self: *const Gloss,
     out: *std.Io.Writer,
 ) (std.Io.Writer.Error)!void {
     var last: u8 = 0;
@@ -64,7 +65,7 @@ pub fn string(
 }
 
 pub fn writeBinary(
-    self: *const Self,
+    self: *const Gloss,
     writer: *std.Io.Writer,
 ) (std.Io.Writer.Error)!void {
     try writer.writeByte(@intFromEnum(self.lang));
@@ -77,7 +78,7 @@ pub fn writeBinary(
 
 /// Read fields separated by : until an ending character.
 /// Example: en:untie:release:loose#ru:развязывать:освобождать:разрушать
-pub fn readText(self: *Self, arena: Allocator, t: *Parser) error{OutOfMemory}!void {
+pub fn readText(self: *Gloss, arena: Allocator, t: *Parser) error{OutOfMemory}!void {
     var start = t.index;
     while (true) {
         const c = t.peek();
@@ -101,7 +102,7 @@ pub fn readText(self: *Self, arena: Allocator, t: *Parser) error{OutOfMemory}!vo
     }
 }
 
-pub fn writeText(self: *const Self, writer: anytype) !void {
+pub fn writeText(self: *const Gloss, writer: anytype) !void {
     try writer.writeAll(self.lang.to_code());
     try writer.writeByte(':');
     for (self.entries.items, 0..) |token, i| {
@@ -113,12 +114,12 @@ pub fn writeText(self: *const Self, writer: anytype) !void {
 pub fn readTextGlosses(
     arena: Allocator,
     t: *Parser,
-    entries: *std.ArrayListUnmanaged(*Self),
+    entries: *std.ArrayListUnmanaged(*Gloss),
 ) error{OutOfMemory}!void {
     var c = t.peek();
     var loc = t.index;
     while (c != '|' and c != 0) {
-        const gloss = try Self.create(arena);
+        const gloss = try Gloss.create(arena);
         errdefer gloss.destroy(arena);
         try gloss.readText(arena, t);
         try entries.append(arena, gloss);
@@ -134,7 +135,7 @@ pub fn readTextGlosses(
 
 pub fn writeTextGlosses(
     writer: *std.Io.Writer,
-    entries: *const std.ArrayListUnmanaged(*Self),
+    entries: *const std.ArrayListUnmanaged(*Gloss),
 ) std.Io.Writer.Error!void {
     for (entries.items, 0..) |gloss, i| {
         if (i > 0) try writer.writeByte('#');
@@ -145,11 +146,11 @@ pub fn writeTextGlosses(
 pub fn readBinaryGlosses(
     arena: Allocator,
     t: *BinaryReader,
-    entries: *std.ArrayListUnmanaged(*Self),
+    entries: *std.ArrayListUnmanaged(*Gloss),
 ) !void {
     const gloss_count = try t.u16();
     for (0..gloss_count) |_| {
-        const gloss = try Self.create(arena);
+        const gloss = try Gloss.create(arena);
         errdefer gloss.destroy(arena);
         gloss.lang = Lang.from_u8(try t.u8()) catch |e| {
             std.debug.print("invalid language {d} at {d}\n", .{ t.data[t.index - 1], t.index - 1 });
@@ -191,7 +192,7 @@ test "read_gloss" {
     const allocator = std.testing.allocator;
 
     var data = Parser.init("en:fish:cat#ko:apple|");
-    var gloss = try Self.create(allocator);
+    var gloss = try Gloss.create(allocator);
     defer gloss.destroy(allocator);
     try gloss.readText(allocator, &data);
     try expectEqual(Lang.english, gloss.lang);
@@ -200,7 +201,7 @@ test "read_gloss" {
     try expectEqualStrings("cat", gloss.glosses()[1]);
     try expect(data.consume_if('#'));
 
-    var gloss2 = try Self.create(allocator);
+    var gloss2 = try Gloss.create(allocator);
     defer gloss2.destroy(allocator);
     try gloss2.readText(allocator, &data);
     try expectEqual(Lang.korean, gloss2.lang);
@@ -216,7 +217,7 @@ test "read_gloss" {
 
 test "read_bad_gloss1" {
     var data = Parser.init("en:fish,cat|");
-    var gloss = try Self.create(std.testing.allocator);
+    var gloss = try Gloss.create(std.testing.allocator);
     defer gloss.destroy(std.testing.allocator);
     try gloss.readText(std.testing.allocator, &data);
     try expectEqual(Lang.english, gloss.lang);
@@ -227,7 +228,7 @@ test "read_bad_gloss1" {
 
 test "read_bad_gloss2" {
     var data = Parser.init("en:fish,cat#|");
-    var gloss = try Self.create(std.testing.allocator);
+    var gloss = try Gloss.create(std.testing.allocator);
     defer gloss.destroy(std.testing.allocator);
     try gloss.readText(std.testing.allocator, &data);
     try expectEqual(Lang.english, gloss.lang);
@@ -238,7 +239,7 @@ test "read_bad_gloss2" {
 
 test "read_bad_gloss3" {
     var data = Parser.init("en:|");
-    var gloss = try Self.create(std.testing.allocator);
+    var gloss = try Gloss.create(std.testing.allocator);
     defer gloss.destroy(std.testing.allocator);
     try gloss.readText(std.testing.allocator, &data);
     try expectEqual(Lang.english, gloss.lang);
@@ -248,7 +249,7 @@ test "read_bad_gloss3" {
 
 test "read_bad_gloss4" {
     var data = Parser.init("en|");
-    var gloss = try Self.create(std.testing.allocator);
+    var gloss = try Gloss.create(std.testing.allocator);
     defer gloss.destroy(std.testing.allocator);
     try gloss.readText(std.testing.allocator, &data);
     try expectEqual(Lang.english, gloss.lang);
@@ -258,7 +259,7 @@ test "read_bad_gloss4" {
 
 test "read_bad_gloss5" {
     var data = Parser.init("true|");
-    var gloss = try Self.create(std.testing.allocator);
+    var gloss = try Gloss.create(std.testing.allocator);
     defer gloss.destroy(std.testing.allocator);
     try gloss.readText(std.testing.allocator, &data);
     try expectEqual(Lang.unknown, gloss.lang);
@@ -268,7 +269,7 @@ test "read_bad_gloss5" {
 
 test "read_bad_gloss6" {
     var data = Parser.init("en:fish,cat::a|");
-    var gloss = try Self.create(std.testing.allocator);
+    var gloss = try Gloss.create(std.testing.allocator);
     defer gloss.destroy(std.testing.allocator);
     try gloss.readText(std.testing.allocator, &data);
     try expectEqual(Lang.english, gloss.lang);
@@ -280,7 +281,7 @@ test "read_bad_gloss6" {
 
 test "gloss_alloc" {
     var data = Parser.init("en:fish:cat#ko:apple|");
-    var gloss = try Self.create(std.testing.allocator);
+    var gloss = try Gloss.create(std.testing.allocator);
     defer gloss.destroy(std.testing.allocator);
     try gloss.readText(std.testing.allocator, &data);
     try expectEqual(2, gloss.glosses().len);
@@ -291,7 +292,7 @@ test "gloss_alloc" {
 test "read_text_glosses" {
     const allocator = std.testing.allocator;
     var data = Parser.init("en:Aaron#zh:亞倫#es:Aarón||person|");
-    var list: std.ArrayListUnmanaged(*Self) = .empty;
+    var list: std.ArrayListUnmanaged(*Gloss) = .empty;
     errdefer list.deinit(allocator);
     try readTextGlosses(allocator, &data, &list);
     try expectEqual(3, list.items.len);
@@ -313,7 +314,7 @@ test "read_text_glosses" {
 test "gloss_read_write_bytes" {
     const allocator = std.testing.allocator;
 
-    var gloss = try Self.create(allocator);
+    var gloss = try Gloss.create(allocator);
     defer gloss.destroy(allocator);
     gloss.lang = .hebrew;
     try gloss.add_gloss(allocator, "ar");
@@ -339,7 +340,7 @@ test "test_gloss_string" {
     const allocator = std.testing.allocator;
     var out = std.Io.Writer.Allocating.init(allocator);
     defer out.deinit();
-    var gloss = try Self.create(allocator);
+    var gloss = try Gloss.create(allocator);
     defer gloss.destroy(allocator);
     gloss.lang = .hebrew;
     try gloss.add_gloss(allocator, "ar");

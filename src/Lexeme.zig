@@ -21,6 +21,22 @@ genitiveSuffix: []const u8 = undefined,
 adjective: []const u8 = undefined,
 note: []const u8 = undefined,
 
+/// A placeholder lexeme which contains no data.
+pub const empty: Lexeme = .{
+    .uid = 0,
+    .word = "",
+    .lang = .unknown,
+    .article = .unknown,
+    .pos = .{ .part_of_speech = .unknown },
+    .forms = .empty,
+    .glosses = .empty,
+    .strongs = .empty,
+    .tags = null,
+    .root = "",
+    .genitiveSuffix = "",
+    .adjective = "",
+};
+
 /// Create this structure then use `init` to set up the fields.
 pub fn create(allocator: std.mem.Allocator) error{OutOfMemory}!*Lexeme {
     var s = try allocator.create(Lexeme);
@@ -39,37 +55,21 @@ pub fn init(self: *Lexeme) void {
     self.* = .empty;
 }
 
-/// A placeholder lexeme which contains no data.
-pub const empty: Lexeme = .{
-    .uid = 0,
-    .word = "",
-    .lang = .unknown,
-    .article = .unknown,
-    .pos = .{ .part_of_speech = .unknown },
-    .forms = .empty,
-    .glosses = .empty,
-    .strongs = .empty,
-    .tags = null,
-    .root = "",
-    .genitiveSuffix = "",
-    .adjective = "",
-};
-
 /// Release any memory under the control of this struct. The `forms` do not
 /// belong to this struct so are not released.
 pub fn deinit(self: *Lexeme, allocator: Allocator) void {
     if (self.word.len > 0)
         allocator.free(self.word);
 
-    for (self.glosses.items) |gloss| {
+    for (self.glosses.items) |gloss|
         gloss.destroy(allocator);
-    }
+
     self.glosses.deinit(allocator);
 
     if (self.tags) |tags| {
-        for (tags) |*tag| {
+        for (tags) |*tag|
             allocator.free(tag.*);
-        }
+
         allocator.free(tags);
         self.tags = null;
     }
@@ -84,6 +84,7 @@ pub fn deinit(self: *Lexeme, allocator: Allocator) void {
 
     self.strongs.deinit(allocator);
     self.forms.deinit(allocator);
+    self.* = undefined;
 }
 
 /// Lookup the glosses according to the users preferred language
@@ -200,18 +201,26 @@ pub fn primaryForm(self: *const Lexeme) ?*Form {
 /// match, compare the `glosses` count.
 pub fn lessThan(_: ?[]const u8, self: *Lexeme, other: *Lexeme) bool {
     const x = @import("sort.zig").order(self.word, other.word);
-    if (x == .lt) {
-        return true;
-    } else if (x == .gt) {
+    if (x == .lt)
+        return true
+    else if (x == .gt)
         return false;
-    }
+
     // Fallback to compare gloss count
     return self.glosses.items.len < other.glosses.items.len;
 }
 
 /// Read binary `Lexeme` information along with any child `Form` binary
 /// records attached to the lexeme.
-pub fn readBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader) !void {
+pub fn readBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader) error{
+    InvalidDictionaryFile,
+    InvalidLanguage,
+    InvalidGender,
+    InvalidModule,
+    InvalidBook,
+    OutOfMemory,
+    unexpected_eof,
+}!void {
     self.uid = try t.u24();
     const word = try t.string();
     self.word = try arena.dupe(u8, word);
@@ -232,8 +241,7 @@ pub fn readBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader) !void {
     }
     const strongs_count = try t.u8();
     for (0..strongs_count) |_| {
-        const number = try t.u16();
-        try self.strongs.append(arena, number);
+        try self.strongs.append(arena, try t.u16());
     }
 
     const form_count = try t.u16();
@@ -651,9 +659,9 @@ const parse_pos = @import("part_of_speech.zig").parse_pos;
 pub const Parsing = @import("parsing.zig").Parsing;
 pub const Gender = Parsing.Gender;
 pub const parse = @import("byz.zig").parse;
-pub const Gloss = @import("gloss.zig");
+pub const Gloss = @import("Gloss.zig");
 pub const Lang = @import("lang.zig").Lang;
-pub const writeTextGlosses = @import("gloss.zig").writeTextGlosses;
+pub const writeTextGlosses = Gloss.writeTextGlosses;
 
 const BinaryReader = @import("binary_reader.zig");
 const BinaryWriter = @import("binary_writer.zig");
@@ -666,8 +674,8 @@ const US = BinaryWriter.US;
 
 const Dictionary = @import("Dictionary.zig").Dictionary;
 
-const readTextGlosses = @import("gloss.zig").readTextGlosses;
-const readBinaryGlosses = @import("gloss.zig").readBinaryGlosses;
+const readTextGlosses = Gloss.readTextGlosses;
+const readBinaryGlosses = Gloss.readBinaryGlosses;
 
 const eql = @import("std").mem.eql;
 const expect = std.testing.expect;

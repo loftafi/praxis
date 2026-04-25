@@ -1,4 +1,6 @@
-/// convert a byzantine text style parsing string into
+pub const Byzantine = @This();
+
+/// Convert a byzantine text style parsing string into
 /// a u32 by reading from a u8 string, or return an
 /// error if it is inavlid.
 pub fn parse(data: []const u8) Parsing.Error!Parsing {

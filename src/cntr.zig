@@ -1,5 +1,6 @@
-//! Read parsing information as described by the greek
-//! cntr. See: https://greekcntr.org/resources/NTGRG.pdf
+/// Read parsing information as described by the greek
+/// cntr. See: https://greekcntr.org/resources/NTGRG.pdf
+pub const CNTR = @This();
 
 /// Read a two part parsing field as defined by the CNTR format documentation.
 ///

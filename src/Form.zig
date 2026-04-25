@@ -48,11 +48,12 @@ pub fn deinit(self: *Form, allocator: Allocator) void {
     if (self.word.len > 0)
         allocator.free(self.word);
 
-    for (self.glosses.items) |gloss| {
+    for (self.glosses.items) |gloss|
         gloss.destroy(allocator);
-    }
+
     self.glosses.deinit(allocator);
     self.references.deinit(allocator);
+    self.* = undefined;
 }
 
 /// Output the bytes representing the form. No terminator at
@@ -95,15 +96,11 @@ pub fn writeBinary(
 /// no gloss set exists for the requested `lang`.
 pub fn glosses_by_lang(self: *const Form, lang: Lang) ?*Gloss {
     for (self.glosses.items) |gloss| {
-        if (gloss.*.lang == lang) {
-            return gloss;
-        }
+        if (gloss.*.lang == lang) return gloss;
     }
     if (self.lexeme) |l| {
         for (l.glosses.items) |gloss| {
-            if (gloss.*.lang == lang) {
-                return gloss;
-            }
+            if (gloss.*.lang == lang) return gloss;
         }
     }
     return null;
@@ -113,18 +110,13 @@ pub fn glosses_by_lang(self: *const Form, lang: Lang) ?*Gloss {
 /// to sort by `preferred` value and `glosses` count.
 pub fn lessThan(_: void, self: *const Form, other: *const Form) bool {
     const x = @import("sort.zig").order(self.word, other.word);
-    if (x == .lt) {
-        return true;
-    } else if (x == .gt) {
+    if (x == .lt)
+        return true
+    else if (x == .gt)
         return false;
-    }
 
-    if (!self.preferred and other.preferred) {
-        return false;
-    }
-    if (self.preferred and !other.preferred) {
-        return true;
-    }
+    if (!self.preferred and other.preferred) return false;
+    if (self.preferred and !other.preferred) return true;
 
     // Fallback to compare another field
     return self.glosses.items.len > other.glosses.items.len;
@@ -249,34 +241,47 @@ pub fn writeText(
 ///
 /// `Ἀαρών|N-NSM|false|17||`
 /// `δράκοντα|N-ASM|false|37628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3`
-pub fn readText(self: *Form, arena: Allocator, t: *Parser) !void {
+pub fn readText(self: *Form, arena: Allocator, t: *Parser) error{
+    MissingField,
+    Incomplete,
+    UnknownPartOfSpeech,
+    UnknownCase,
+    UnknownNumber,
+    UnknownGender,
+    UnknownPerson,
+    UnknownTenseForm,
+    UnknownVoice,
+    UnknownMood,
+    UnrecognisedValue,
+    InvalidParsing,
+    InvalidBooleanField,
+    InvalidU16,
+    InvalidU24,
+    InvalidReference,
+    OutOfMemory,
+}!void {
     _ = t.skip_whitespace_and_lines();
     //const start = t.index;
     const word_field = t.readField();
-    if (word_field.len == 0) {
-        self.word = "";
-    } else {
+    if (word_field.len == 0)
+        self.word = ""
+    else
         self.word = try arena.dupe(u8, word_field);
-    }
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+
+    if (!t.consume_if('|')) return error.MissingField;
+
     self.parsing = try read_byz_parsing(t); // parsing
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+    if (!t.consume_if('|')) return error.MissingField;
+
     self.preferred = try t.readBool();
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+    if (!t.consume_if('|')) return error.MissingField;
+
     self.uid = try t.readU24(); // uid
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+    if (!t.consume_if('|')) return error.MissingField;
+
     _ = try readTextGlosses(arena, t, &self.glosses); // Glosses
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+    if (!t.consume_if('|')) return error.MissingField;
+
     try Reference.readReferenceList(arena, t, &self.references); // References
 }
 
@@ -408,6 +413,17 @@ fn make_test_form(
     return f1;
 }
 
+test "init_release" {
+    const gpa = std.testing.allocator;
+    const form1 = try make_test_form(gpa, "hal", "hal");
+    form1.lexeme.?.destroy(gpa);
+    form1.destroy(gpa);
+
+    const form2 = try make_test_form(gpa, "car", "ant");
+    defer form2.destroy(gpa);
+    defer form2.lexeme.?.destroy(gpa);
+}
+
 test "form_autocomplete" {
     const gpa = std.testing.allocator;
 
@@ -442,12 +458,12 @@ test "form_autocomplete" {
     }
 
     const g1 = try make_test_form(gpa, "car", "car");
-    defer g1.lexeme.?.destroy(gpa);
     defer g1.destroy(gpa);
+    defer g1.lexeme.?.destroy(gpa);
 
     const g2 = try make_test_form(gpa, "car", "ant");
-    defer g2.lexeme.?.destroy(gpa);
     defer g2.destroy(gpa);
+    defer g2.lexeme.?.destroy(gpa);
 
     var items1 = [_]*Form{ g1, g2 };
     var items2 = [_]*Form{ g1, g2 };
@@ -554,7 +570,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Parser = @import("parser.zig");
 const Lexeme = @import("Lexeme.zig");
-const Gloss = @import("gloss.zig");
+const Gloss = @import("Gloss.zig");
 const Lang = @import("lang.zig").Lang;
 const ParsingError = @import("parsing.zig").Parsing.Error;
 const Parsing = @import("parsing.zig").Parsing;
@@ -566,9 +582,9 @@ const Module = @import("module.zig").Module;
 const is_eol = @import("parser.zig").is_eol;
 const is_whitespace = @import("parser.zig").is_whitespace;
 const is_whitespace_or_eol = @import("parser.zig").is_whitespace_or_eol;
-const readTextGlosses = @import("gloss.zig").readTextGlosses;
-const writeTextGlosses = @import("gloss.zig").writeTextGlosses;
-const readBinaryGlosses = @import("gloss.zig").readBinaryGlosses;
+const readTextGlosses = Gloss.readTextGlosses;
+const writeTextGlosses = Gloss.writeTextGlosses;
+const readBinaryGlosses = Gloss.readBinaryGlosses;
 const byz = @import("byz.zig");
 
 const BinaryWriter = @import("binary_writer.zig");

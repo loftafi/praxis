@@ -1,4 +1,4 @@
-/// Represents a canonical book of scripture, or a commonly
+/// Each canonical book of scripture or other commonly
 /// accepted deuterocanonical book.
 pub const Book = enum(u16) {
     unknown = 0,
@@ -106,24 +106,41 @@ pub const Book = enum(u16) {
         return @enumFromInt(value);
     }
 
-    pub fn parse(value: []const u8) *const BookInfo {
+    /// Map a standard book name or abbreviation into a book enum.
+    pub fn parse(value: []const u8) @This() {
         for (&NAMES) |*item| {
-            for (item.*.names) |name| {
-                if (std.ascii.eqlIgnoreCase(name, value)) {
-                    return item;
-                }
+            for (item.names) |name| {
+                if (std.ascii.eqlIgnoreCase(name, value))
+                    return item.value;
             }
         }
-        return &NAMES[0];
+        return .unknown;
     }
 
-    pub fn info(self: Book) *const BookInfo {
+    /// Return an English description of the book.
+    pub fn info(self: @This()) *const BookInfo {
         const index = @intFromEnum(self);
         if (index < NAMES.len) {
             return &NAMES[@intFromEnum(self)];
         }
-        std.debug.print("Book.info({d}) is an invalid book number.\n", .{index});
+        std.log.err("Book.info({d}) is an invalid book number.\n", .{index});
         @panic("Book Enum contains invalid module id");
+    }
+
+    test parse {
+        try expectEqual(.revelation, Book.parse("rev"));
+        try expectEqual(.revelation, Book.parse("Rev"));
+        try expectEqual(.revelation, Book.parse("Revelation"));
+        try expectEqual(.first_corinthians, Book.parse("1cor"));
+        try expectEqual(.first_corinthians, Book.parse("1 Corinthians"));
+        try expectEqual(.unknown, Book.parse("Startrek"));
+    }
+
+    test info {
+        try expectEqual(.revelation, Book.info(.revelation).value);
+        try expectEqual("Revelation", Book.info(.revelation).english);
+        try expectEqual("Rev", Book.info(.revelation).english_short);
+        try expectEqual("Sus", Book.info(.susannah).english_short);
     }
 };
 
@@ -836,9 +853,10 @@ pub const NAMES = [_]BookInfo{
     },
 };
 
-const std = @import("std");
-
 test "book_parse" {
-    try std.testing.expectEqual(Book.mark, Book.parse("Mark").value);
-    try std.testing.expectEqual(Book.first_john, Book.parse("1jh").value);
+    try std.testing.expectEqual(Book.mark, Book.parse("Mark"));
+    try std.testing.expectEqual(Book.first_john, Book.parse("1jh"));
 }
+
+const std = @import("std");
+pub const expectEqual = std.testing.expectEqual;

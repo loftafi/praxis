@@ -1,3 +1,4 @@
+/// Describe a reference to an individual verse and/or word inside that verse.
 const Reference = @This();
 
 module: Module = .unknown,
@@ -36,8 +37,22 @@ pub inline fn parse(text: []const u8) error{
     return readReference(&p);
 }
 
+test parse {
+    const verse = try @This().parse("Acts 7:40");
+    try expectEqual(.acts, verse.book);
+    try expectEqual(7, verse.chapter);
+    try expectEqual(40, verse.verse);
+
+    const other = try @This().parse("1 John 2:4");
+    try expectEqual(.first_john, other.book);
+    try expectEqual(2, other.chapter);
+    try expectEqual(4, other.verse);
+}
+
+const expectEqual = std.testing.expectEqual;
+
 /// Read a bible reference, i.e. "Acts 7:40", "1 John 2:4"
-pub fn readReference(
+pub inline fn readReference(
     t: *Parser,
 ) error{ OutOfMemory, invalid_reference, InvalidU16 }!Reference {
     var reference: Reference = .{};
@@ -56,7 +71,7 @@ pub fn readReference(
             end = t.index;
         }
         if (c == '\n' or c == '\t' or c == '|' or c == 0 or c == '#' or c == ',' or c == '.' or (c >= '0' and c <= '9')) {
-            reference.book = Book.parse(t.data[start..end]).value;
+            reference.book = Book.parse(t.data[start..end]);
             //std.debug.print("aargh {any} {any} `{s}` \n", .{ c, reference.book, t.data[start..end] });
             break;
         }
@@ -125,8 +140,7 @@ pub fn readReferenceList(
                 end = t.index;
             }
             if (c == '\n' or c == '\t' or c == '|' or c == 0 or c == '#' or c == ',' or c == '.' or (c >= '0' and c <= '9')) {
-                reference.book = Book.parse(t.data[start..end]).value;
-                //std.debug.print("aargh {any} {any} `{s}` \n", .{ c, reference.book, t.data[start..end] });
+                reference.book = Book.parse(t.data[start..end]);
                 break;
             }
             _ = t.next();

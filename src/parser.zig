@@ -1,4 +1,5 @@
-//! Read fields from a data file.
+/// Read fields from a text based data file.
+pub const Parser = @This();
 
 data: []const u8,
 index: usize,
@@ -6,12 +7,10 @@ limit: usize,
 line: u32,
 column: u32,
 
-pub const Self = @This();
-
 /// Wrap a string of bytes with a parser. This wrapper does not need
 /// `deinit()`. Use `next_element()` to fetch items.
-pub fn init(d: []const u8) Self {
-    return Self{
+pub fn init(d: []const u8) Parser {
+    return Parser{
         .data = d,
         .index = 0,
         .limit = d.len,
@@ -20,7 +19,8 @@ pub fn init(d: []const u8) Self {
     };
 }
 
-pub inline fn next(self: *Self) u8 {
+/// Read next ascii character from text data. See also `nextUnicode()`.
+pub inline fn next(self: *Parser) u8 {
     if (self.eof()) {
         return 0;
     }
@@ -37,7 +37,8 @@ pub inline fn next(self: *Self) u8 {
     return c;
 }
 
-pub inline fn next_unicode(self: *Self) error{InvalidUtf8}!u21 {
+/// Read next unicode character from the text data. See also 'next()`.
+pub inline fn nextUnicode(self: *Parser) error{InvalidUtf8}!u21 {
     if (self.eof()) {
         return 0;
     }
@@ -62,14 +63,15 @@ pub inline fn next_unicode(self: *Self) error{InvalidUtf8}!u21 {
     return c;
 }
 
-pub inline fn peek(self: *Self) u8 {
+/// Preview the next ascii character in the file.
+pub inline fn peek(self: *Parser) u8 {
     if (self.eof()) {
         return 0;
     }
     return self.data[self.index];
 }
 
-pub inline fn consume_if(self: *Self, p: u8) bool {
+pub inline fn consume_if(self: *Parser, p: u8) bool {
     if (self.eof()) {
         return false;
     }
@@ -85,7 +87,7 @@ pub inline fn consume_if(self: *Self, p: u8) bool {
     return true;
 }
 
-pub fn skip_whitespace_and_lines(self: *Self) []const u8 {
+pub fn skip_whitespace_and_lines(self: *Parser) []const u8 {
     const start = self.index;
     while (!self.eof()) {
         const c = self.peek();
@@ -97,7 +99,7 @@ pub fn skip_whitespace_and_lines(self: *Self) []const u8 {
     return self.data[start..self.index];
 }
 
-pub fn read_until_eol(self: *Self) []const u8 {
+pub fn readUntilEol(self: *Parser) []const u8 {
     const start = self.index;
     var last_character = start;
     while (!self.eof()) {
@@ -128,37 +130,49 @@ pub inline fn is_whitespace_or_eol(c: u8) bool {
     return c == ' ' or c == '\n' or c == '\r' or c == '\t' or c == 0;
 }
 
-pub inline fn eof(self: *Self) bool {
+pub inline fn eof(self: *Parser) bool {
     return self.index >= self.limit or self.index >= self.data.len;
 }
 
-pub fn read_lang(t: *Self) error{InvalidLanguage}!Lang {
-    const lang = Lang.parse_code(t.read_field());
+pub fn readLang(t: *Parser) error{InvalidLanguage}!Lang {
+    const lang = Lang.parse_code(t.readField());
     if (lang == .unknown) {
         return error.InvalidLanguage;
     }
     return lang;
 }
 
-pub inline fn read_pos(t: *Self) Parsing {
-    const pos = parse_pos(t.read_field());
-    return pos;
+/// Read a slice of a bytes from the source data, ending in a newline, tab, pipe, or zero.
+pub fn readField(t: *Parser) []const u8 {
+    const start = t.index;
+    while (true) {
+        const c = t.peek();
+        if (c == '\n' or c == '\r' or c == '\t' or c == '|' or c == 0) {
+            const field = t.data[start..t.index];
+            return field;
+        }
+        _ = t.next();
+    }
 }
 
-pub inline fn read_article(t: *Self) error{InvalidGender}!Gender {
-    return Gender.parse(t.read_field());
+pub inline fn readPos(t: *Parser) Parsing {
+    return parse_pos(t.readField());
+}
+
+pub inline fn readArticle(t: *Parser) error{InvalidGender}!Gender {
+    return Gender.parse(t.readField());
 }
 
 pub inline fn readStrongs(
-    t: *Self,
+    t: *Parser,
     allocator: Allocator,
     numbers: *std.ArrayListUnmanaged(u16),
 ) error{ OutOfMemory, InvalidU16 }!void {
-    try t.read_u16s(allocator, numbers);
+    try t.readU16s(allocator, numbers);
 }
 
-pub inline fn read_u16s(
-    self: *Self,
+pub inline fn readU16s(
+    self: *Parser,
     allocator: Allocator,
     numbers: *std.ArrayListUnmanaged(u16),
 ) error{ OutOfMemory, InvalidU16 }!void {
@@ -187,7 +201,7 @@ pub inline fn read_u16s(
     }
 }
 
-pub fn read_u16(self: *Self) error{InvalidU16}!?u16 {
+pub fn readU16(self: *Parser) error{InvalidU16}!?u16 {
     if (self.eof()) {
         return null;
     }
@@ -213,16 +227,16 @@ pub fn read_u16(self: *Self) error{InvalidU16}!?u16 {
     return @intCast(value);
 }
 
-pub fn read_u24(t: *Self) error{InvalidU24}!u24 {
-    const field = t.read_field();
+pub fn readU24(t: *Parser) error{InvalidU24}!u24 {
+    const field = t.readField();
     const value = std.fmt.parseInt(u24, field, 10) catch {
         return error.InvalidU24;
     };
     return value;
 }
 
-pub fn read_bool(t: *Self) error{InvalidBooleanField}!bool {
-    const field = t.read_field();
+pub fn readBool(t: *Parser) error{InvalidBooleanField}!bool {
+    const field = t.readField();
     if (std.ascii.eqlIgnoreCase(field, "true") or std.ascii.eqlIgnoreCase(field, "yes")) {
         return true;
     }
@@ -232,22 +246,8 @@ pub fn read_bool(t: *Self) error{InvalidBooleanField}!bool {
     return error.InvalidBooleanField;
 }
 
-/// Read a slice of a bytes from the source data, ending in a newline, tab, pipe, or zero.
-pub fn read_field(t: *Self) []const u8 {
-    const start = t.index;
-    while (true) {
-        const c = t.peek();
-        if (c == '\n' or c == '\r' or c == '\t' or c == '|' or c == 0) {
-            const field = t.data[start..t.index];
-            return field;
-        }
-        _ = t.next();
-    }
-}
-
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayList = std.ArrayList;
 const Lang = @import("lang.zig").Lang;
 const parsing = @import("parsing.zig");
 const Parsing = parsing.Parsing;
@@ -256,7 +256,7 @@ const parse_pos = @import("part_of_speech.zig").parse_pos;
 const expectEqual = std.testing.expectEqual;
 
 test "next and peek" {
-    var data = Self.init("ab.");
+    var data = Parser.init("ab.");
     try expectEqual('a', data.next());
     try expectEqual('b', data.peek());
     try expectEqual('b', data.next());
@@ -264,9 +264,9 @@ test "next and peek" {
     try expectEqual(0, data.next());
 }
 test "next unicode" {
-    var data = Self.init("aα.");
-    try expectEqual('a', data.next_unicode());
-    try expectEqual('α', data.next_unicode());
-    try expectEqual('.', data.next_unicode());
-    try expectEqual(0, data.next_unicode());
+    var data = Parser.init("aα.");
+    try expectEqual('a', data.nextUnicode());
+    try expectEqual('α', data.nextUnicode());
+    try expectEqual('.', data.nextUnicode());
+    try expectEqual(0, data.nextUnicode());
 }

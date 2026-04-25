@@ -30,7 +30,7 @@ pub fn clear(self: *Reference) void {
 /// Read a bible reference, i.e. "Acts 7:40", "1 John 2:4"
 pub inline fn parse(text: []const u8) error{
     OutOfMemory,
-    invalid_reference,
+    InvalidReference,
     InvalidU16,
 }!Reference {
     var p = Parser.init(text);
@@ -54,7 +54,7 @@ const expectEqual = std.testing.expectEqual;
 /// Read a bible reference, i.e. "Acts 7:40", "1 John 2:4"
 pub inline fn readReference(
     t: *Parser,
-) error{ OutOfMemory, invalid_reference, InvalidU16 }!Reference {
+) error{ OutOfMemory, InvalidReference, InvalidU16 }!Reference {
     var reference: Reference = .{};
 
     // Because a book name can contain multiple words,
@@ -79,19 +79,19 @@ pub inline fn readReference(
         c = t.peek();
     }
     if (reference.book == .unknown) {
-        return error.invalid_reference;
+        return error.InvalidReference;
     }
 
-    if (try t.read_u16()) |chapter| {
+    if (try t.readU16()) |chapter| {
         reference.chapter = chapter;
     }
     c = t.peek();
     if (c != ':') {
-        return error.invalid_reference;
+        return error.InvalidReference;
     }
     _ = t.next();
 
-    if (try t.read_u16()) |verse| {
+    if (try t.readU16()) |verse| {
         reference.verse = verse;
     }
 
@@ -103,7 +103,7 @@ pub fn readReferenceList(
     arena: Allocator,
     t: *Parser,
     references: *std.ArrayListUnmanaged(Reference),
-) error{ OutOfMemory, invalid_reference, InvalidU16 }!void {
+) error{ OutOfMemory, InvalidReference, InvalidU16 }!void {
     var reference: Reference = .{}; // Parse into a temporary variable
 
     while (true) {
@@ -122,7 +122,7 @@ pub fn readReferenceList(
             break;
         }
         if (c != '#' or reference.module == .unknown) {
-            return error.invalid_reference;
+            return error.InvalidReference;
         }
 
         // expect a book name then a space. Because a book name can
@@ -147,26 +147,26 @@ pub fn readReferenceList(
             c = t.peek();
         }
         if (reference.book == .unknown) {
-            return error.invalid_reference;
+            return error.InvalidReference;
         }
 
-        if (try t.read_u16()) |chapter| {
+        if (try t.readU16()) |chapter| {
             reference.chapter = chapter;
         }
         c = t.peek();
         if (c != ':') {
-            return error.invalid_reference;
+            return error.InvalidReference;
         }
         _ = t.next();
 
-        if (try t.read_u16()) |verse| {
+        if (try t.readU16()) |verse| {
             reference.verse = verse;
         }
         c = t.peek();
         if (c == ' ') {
             _ = t.next();
 
-            if (try t.read_u16()) |word| {
+            if (try t.readU16()) |word| {
                 reference.word = word;
             }
         }

@@ -114,7 +114,7 @@ pub fn readTextGlosses(
     arena: Allocator,
     t: *Parser,
     entries: *std.ArrayListUnmanaged(*Self),
-) error{ OutOfMemory, invalid_reference }!void {
+) error{OutOfMemory}!void {
     var c = t.peek();
     var loc = t.index;
     while (c != '|' and c != 0) {

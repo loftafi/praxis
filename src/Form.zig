@@ -174,7 +174,7 @@ pub fn autocompleteLessThan(key: ?[]const u8, self: *const Form, other: *const F
 }
 
 pub fn read_byz_parsing(t: *Parser) !Parsing {
-    const field = t.read_field();
+    const field = t.readField();
     if (field.len == 0) {
         return Parsing{ .part_of_speech = .unknown };
     }
@@ -252,7 +252,7 @@ pub fn writeText(
 pub fn readText(self: *Form, arena: Allocator, t: *Parser) !void {
     _ = t.skip_whitespace_and_lines();
     //const start = t.index;
-    const word_field = t.read_field();
+    const word_field = t.readField();
     if (word_field.len == 0) {
         self.word = "";
     } else {
@@ -265,11 +265,11 @@ pub fn readText(self: *Form, arena: Allocator, t: *Parser) !void {
     if (!t.consume_if('|')) {
         return error.MissingField;
     }
-    self.preferred = try t.read_bool();
+    self.preferred = try t.readBool();
     if (!t.consume_if('|')) {
         return error.MissingField;
     }
-    self.uid = try t.read_u24(); // uid
+    self.uid = try t.readU24(); // uid
     if (!t.consume_if('|')) {
         return error.MissingField;
     }

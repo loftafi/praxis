@@ -289,10 +289,19 @@ pub fn writeBinary(
 ///
 /// Ἀαρών|el|17|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
 /// Ἀαρών|el|17|ProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
-pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
+pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) error{
+    MissingField,
+    EmptyField,
+    InvalidLanguage,
+    InvalidGender,
+    InvalidReference,
+    InvalidU24,
+    InvalidU16,
+    OutOfMemory,
+}!void {
     _ = t.skip_whitespace_and_lines();
 
-    const word_field = t.read_field();
+    const word_field = t.readField();
     if (word_field.len == 0) return error.EmptyField;
     self.word = try arena.dupe(u8, word_field);
     if (!t.consume_if('|')) {
@@ -301,19 +310,19 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
         return error.MissingField;
     }
 
-    self.lang = try t.read_lang();
+    self.lang = try t.readLang();
 
     if (!t.consume_if('|')) return error.MissingField;
-    self.uid = try t.read_u24(); // Lexeme UID
+    self.uid = try t.readU24(); // Lexeme UID
 
     if (!t.consume_if('|')) return error.MissingField;
-    self.pos = t.read_pos();
+    self.pos = t.readPos();
 
     if (!t.consume_if('|')) return error.MissingField;
-    self.article = try t.read_article();
+    self.article = try t.readArticle();
 
     if (!t.consume_if('|')) return error.MissingField;
-    const suffix = t.read_field(); // Genitive suffix
+    const suffix = t.readField(); // Genitive suffix
     if (suffix.len > 0) {
         self.genitiveSuffix = try arena.dupe(u8, suffix);
     }
@@ -322,7 +331,7 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
     _ = try t.readStrongs(arena, &self.strongs);
 
     if (!t.consume_if('|')) return error.MissingField;
-    const root = t.read_field(); // Lexeme root
+    const root = t.readField(); // Lexeme root
     if (root.len > 0) {
         self.root = try arena.dupe(u8, root);
     }
@@ -334,13 +343,13 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
     if (!t.consume_if('|')) {
         return error.MissingField;
     }
-    const adjectives = t.read_field(); // Adjective forms
+    const adjectives = t.readField(); // Adjective forms
     if (adjectives.len > 0) {
         self.adjective = try arena.dupe(u8, adjectives);
     }
 
     if (!t.consume_if('|')) return error.MissingField;
-    const tag_set = t.read_field(); // Tags
+    const tag_set = t.readField(); // Tags
     var i = std.mem.tokenizeAny(u8, tag_set, " ,\n\r\t");
     var tags: [10][]const u8 = undefined;
     var ti: usize = 0;
@@ -354,11 +363,11 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) !void {
     for (0..ti) |x| {
         self.tags.?[x] = try arena.dupe(u8, tags[x]);
     }
-    _ = t.read_field(); // ??
+    _ = t.readField(); // ??
 
     if (!t.consume_if('|')) return error.MissingField;
-    self.note = t.read_field();
-    _ = t.read_until_eol();
+    self.note = t.readField();
+    _ = t.readUntilEol();
 }
 
 /// Write lexeme data in text format to a `writer`.

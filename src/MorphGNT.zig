@@ -1,23 +1,23 @@
-//! Reads the parsing/tagging fields of the SBL data files in the morphgnt
-//! GIT repol
-//!
-//! https://ccat.sas.upenn.edu/gopher/text/religion/biblical/lxxmorph/
-//!
-//! ```
-//!    RP ----DP--
-//!    RA ----DSF-
-//!    V- -PMN----
-//!    D- --------
-//!    RA ----DPM-
-//!    A- ----DPM-
-//!    N- ----DSF-
-//!    V- 1AAI-S--
-//!    V- 1AAI-S--
-//!    V- -AAN----
-//!    V- -PAPNSM-
-//!    V- -APPDSF-
-//!    V- 3AAI-P--
-//! ```
+/// Reads the parsing/tagging fields of the SBL data files in the morphgnt
+/// GIT repol
+///
+/// https://ccat.sas.upenn.edu/gopher/text/religion/biblical/lxxmorph/
+///
+/// ```
+///    RP ----DP--
+///    RA ----DSF-
+///    V- -PMN----
+///    D- --------
+///    RA ----DPM-
+///    A- ----DPM-
+///    N- ----DSF-
+///    V- 1AAI-S--
+///    V- 1AAI-S--
+///    V- -AAN----
+///    V- -PAPNSM-
+///    V- -APPDSF-
+///    V- 3AAI-P--
+pub const MorphGnt = @This();
 
 /// Read a two part parsing field in the SBL MorphGNT tag format.
 pub fn parse(tag: []const u8) Parsing.Error!Parsing {

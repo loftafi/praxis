@@ -45,16 +45,16 @@ const parsing = @import("parsing.zig");
 pub const Parsing = parsing.Parsing;
 
 /// Load a `Parsing` struct with parsing in the Byz format.
-pub const byz = @import("byz.zig");
+pub const Byzantine = @import("Byzantine.zig");
 
 /// Load a `Parsing` struct with parsing in the CCAT format.
-pub const ccat = @import("ccat.zig");
+pub const CCAT = @import("CCAT.zig");
 
 /// Load a `Parsing` struct with parsing in the CNTR format.
-pub const cntr = @import("cntr.zig");
+pub const CNTR = @import("CNTR.zig");
 
 /// Load a `Parsing` struct with parsing in the CCAT format.
-pub const morphgnt = @import("morphgnt.zig");
+pub const MorphGNT = @import("MorphGNT.zig");
 
 /// The `Module` enum represnts names of common modules.
 pub const Module = @import("module.zig").Module;

@@ -170,7 +170,7 @@ pub fn read_byz_parsing(t: *Parser) !Parsing {
     if (field.len == 0) {
         return Parsing{ .part_of_speech = .unknown };
     }
-    return byz.parse(field);
+    return Byzantine.parse(field);
 }
 
 /// Read all fields for a form. No final terminmating RS is consumed.
@@ -585,7 +585,7 @@ const is_whitespace_or_eol = @import("parser.zig").is_whitespace_or_eol;
 const readTextGlosses = Gloss.readTextGlosses;
 const writeTextGlosses = Gloss.writeTextGlosses;
 const readBinaryGlosses = Gloss.readBinaryGlosses;
-const byz = @import("byz.zig");
+const Byzantine = @import("Byzantine.zig");
 
 const BinaryWriter = @import("binary_writer.zig");
 const append_u8 = BinaryWriter.append_u8;

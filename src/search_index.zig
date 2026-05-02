@@ -15,13 +15,8 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
         /// Map a search `keyword` string to a `SearchResult` record.
         index: std.HashMapUnmanaged([]const u8, *SearchResult, farmhash.FarmHashContext, std.hash_map.default_max_load_percentage) = .empty,
 
-        /// normaliser splits and normalises keywords, storing the results
-        /// in an internal temporary buffer
-        normaliser: Normaliser,
-
         pub const empty: Self = .{
             .index = .empty,
-            .normaliser = .empty,
         };
 
         /// `deinit` is required if do not use an arena allocator.
@@ -31,7 +26,6 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                 allocator.free(item.key_ptr.*);
                 item.value_ptr.*.destroy(allocator);
             }
-            self.normaliser.deinit(allocator);
             self.index.deinit(allocator);
         }
 
@@ -55,7 +49,8 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                 return IndexError.EmptyWord;
             }
 
-            const info = try self.normaliser.keywords(allocator, word);
+            var keywords: Keywords(max_word_size) = undefined;
+            const info = try keywords.keywords(word);
 
             var result = try self.getOrCreateSearchResult(
                 allocator,
@@ -71,7 +66,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                 try result.exact_unaccented.append(allocator, form);
             }
 
-            for (self.normaliser.slices.items) |substring| {
+            for (info.keywords) |substring| {
                 if (is_stopword(substring)) {
                     continue;
                 }
@@ -107,7 +102,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                 return null;
             }
 
-            var n: Normaliser = .empty;
+            var n: Keywords(max_word_size) = .empty;
             const info = n.normalise(word) catch |e| {
                 // If normalisation fails due to invalid utf8 encoding
                 // then we know this query has no results.
@@ -334,7 +329,7 @@ const std = @import("std");
 const log = std.log;
 const is_stopword = @import("gloss_tokens.zig").is_stopword;
 
-const Normaliser = @import("Normaliser.zig");
+const Keywords = @import("Normaliser.zig").Keywords;
 
 const farmhash = @import("farmhash64.zig");
 const StringHashMapUnmanaged = std.StringHashMapUnmanaged;
@@ -418,12 +413,10 @@ test "search_index basics" {
 }
 
 test "search_index_duplicates" {
-    const gpa = std.testing.allocator;
-    var n: Normaliser = .empty;
-    defer n.deinit(gpa);
+    var n: Keywords(max_word_size) = undefined;
 
     {
-        const info = try n.keywords(gpa, "περιπατεῖτε");
+        const info = try n.keywords("περιπατεῖτε");
         try eq(11, info.keywords.len);
     }
 

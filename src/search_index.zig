@@ -95,7 +95,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
         // Returns all records that exactly match (accents included). If no
         // records exactly match. Returns all records that match with accents
         // removed.
-        pub fn lookup(self: *Self, word: []const u8) (error{NormalisationFailed})!?*SearchResult {
+        pub fn lookup(self: *const Self, word: []const u8) error{NormalisationFailed}!?*SearchResult {
             if (word.len >= max_word_size) {
                 // If search word is too long, it definitely
                 // is not in the search result.
@@ -325,26 +325,6 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
     };
 }
 
-const std = @import("std");
-const log = std.log;
-const is_stopword = @import("gloss_tokens.zig").is_stopword;
-
-const Keywords = @import("Normaliser.zig").Keywords;
-
-const farmhash = @import("farmhash64.zig");
-const StringHashMapUnmanaged = std.StringHashMapUnmanaged;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
-const Allocator = std.mem.Allocator;
-const BinaryReader = @import("binary_reader.zig");
-const BinaryWriter = @import("binary_writer.zig");
-const stringLessThan = @import("sort.zig").lessThan;
-const append_u32 = BinaryWriter.append_u32;
-const append_u24 = BinaryWriter.append_u24;
-const US = BinaryReader.US;
-
-const eq = std.testing.expectEqual;
-const se = std.testing.expectEqualStrings;
-
 test "search_index basics" {
     const allocator = std.testing.allocator;
 
@@ -494,3 +474,22 @@ test "search_index arena" {
         try eq(2, sr.?.partial_match.items.len);
     }
 }
+
+const std = @import("std");
+const log = std.log;
+const is_stopword = @import("gloss_tokens.zig").is_stopword;
+
+const Keywords = @import("Normaliser.zig").Keywords;
+
+const farmhash = @import("farmhash64.zig");
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const Allocator = std.mem.Allocator;
+const BinaryReader = @import("binary_reader.zig");
+const BinaryWriter = @import("binary_writer.zig");
+const stringLessThan = @import("sort.zig").lessThan;
+const append_u32 = BinaryWriter.append_u32;
+const append_u24 = BinaryWriter.append_u24;
+const US = BinaryReader.US;
+
+const eq = std.testing.expectEqual;
+const se = std.testing.expectEqualStrings;

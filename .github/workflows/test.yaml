@@ -7,7 +7,7 @@ on:
 jobs:
   test-ubuntu:
     runs-on: ubuntu-latest
-    name: Build and Test Praxis on Ubuntu
+    name: Build and Test Praxis on Ubuntu (zig master)
     steps:
       - uses: actions/checkout@v3
       - uses: mlugg/setup-zig@v2
@@ -16,11 +16,20 @@ jobs:
       - run: zig build test
   test-mac:
     runs-on: macos-latest
-    name: Build and Test Praxis on MacOS
+    name: Build and Test Praxis on MacOS (zig master)
     steps:
       - uses: actions/checkout@v3
       - uses: mlugg/setup-zig@v2
         with:
           version: master
+      - run: zig build test
+  test-mac:
+    runs-on: macos-latest
+    name: Build and Test Praxis on MacOS (zig 0.16.0)
+    steps:
+      - uses: actions/checkout@v3
+      - uses: @v2
+        with:
+          version: 0.16.0
       - run: zig build test
 

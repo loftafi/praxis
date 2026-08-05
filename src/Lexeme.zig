@@ -119,6 +119,11 @@ pub const NOUN_PRIMARY = [_]Parsing{
     parse("N-NSF") catch unreachable,
     parse("N-NSN") catch unreachable,
 };
+pub const PROPER_NOUN_PRIMARY = [_]Parsing{
+    parse("PN-NSM") catch unreachable,
+    parse("PN-NSF") catch unreachable,
+    parse("PN-NSN") catch unreachable,
+};
 pub const ADJECTIVE_PRIMARY = [_]Parsing{
     parse("A-NSM") catch unreachable,
     parse("A-NSF") catch unreachable,
@@ -179,6 +184,13 @@ pub fn primaryForm(self: *const Lexeme) ?*Form {
         },
         .noun => {
             for (NOUN_PRIMARY) |parsing| {
+                if (self.formByParsing(parsing)) |found| {
+                    return found;
+                }
+            }
+        },
+        .proper_noun => {
+            for (PROPER_NOUN_PRIMARY) |parsing| {
                 if (self.formByParsing(parsing)) |found| {
                     return found;
                 }

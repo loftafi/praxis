@@ -36,8 +36,8 @@ pub const formLessThan = Form.lessThan;
 pub const stringLessThan = @import("sort.zig").lessThan;
 
 /// Convert betacode strings into unicode strings.
-pub const betacode_to_greek = @import("betacode.zig").betacode_to_greek;
-pub const BetacodeType = @import("betacode.zig").Type;
+pub const Betacode = @import("Betacode.zig");
+pub const BetacodeType = @import("Betacode.zig").Type;
 
 const parsing = @import("parsing.zig");
 
@@ -78,10 +78,6 @@ pub const random = @import("random.zig");
 /// Deprecated. Was used to share a standard way to read a sequence of
 /// ascii or unicode characters from a string. Will be removed in the future.
 pub const Parser = @import("parser.zig");
-
-/// BoundedArray was removed in 0.15.1, this os provided as a
-/// temporary workaround.
-pub const BoundedArray = @import("bounded_array.zig").BoundedArray;
 
 /// A slightly faster hash for HashMaps that use strings.
 pub const FarmHashContext = @import("farmhash64.zig").FarmHashContext;

@@ -723,7 +723,6 @@ const eq = std.testing.expectEqualStrings;
 const ee = std.testing.expectEqual;
 const expect = std.testing.expect;
 const ue = std.unicode.utf8EncodeComptime;
-const BoundedArray = @import("bounded_array.zig").BoundedArray;
 
 test "test_traits" {
     var buffer: [max_word_size]u8 = undefined;

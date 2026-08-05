@@ -397,7 +397,7 @@ pub fn writeText(
 ) (std.Io.Writer.Error)!void {
     try writer.writeAll(self.word);
     try writer.writeByte('|');
-    try writer.writeAll(self.lang.to_code());
+    try writer.writeAll(self.lang.code());
     try writer.writeByte('|');
     try writer.print("{d}", .{self.uid});
     try writer.writeByte('|');

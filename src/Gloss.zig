@@ -85,7 +85,7 @@ pub fn readText(self: *Gloss, arena: Allocator, t: *Parser) error{OutOfMemory}!v
         if (c == '\n' or c == '\t' or c == '|' or c == 0 or c == '#' or c == ':') {
             const field = t.data[start..t.index];
             if (self.lang == .unknown) {
-                self.lang = Lang.parse_code(field);
+                self.lang = Lang.parseCode(field);
             } else if (field.len > 0) {
                 try self.add_gloss(arena, field);
             }
@@ -103,7 +103,7 @@ pub fn readText(self: *Gloss, arena: Allocator, t: *Parser) error{OutOfMemory}!v
 }
 
 pub fn writeText(self: *const Gloss, writer: anytype) !void {
-    try writer.writeAll(self.lang.to_code());
+    try writer.writeAll(self.lang.code());
     try writer.writeByte(':');
     for (self.entries.items, 0..) |token, i| {
         if (i > 0) try writer.writeByte(':');

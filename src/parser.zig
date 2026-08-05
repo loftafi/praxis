@@ -135,7 +135,7 @@ pub inline fn eof(self: *Parser) bool {
 }
 
 pub fn readLang(t: *Parser) error{InvalidLanguage}!Lang {
-    const lang = Lang.parse_code(t.readField());
+    const lang = Lang.parseCode(t.readField());
     if (lang == .unknown) {
         return error.InvalidLanguage;
     }

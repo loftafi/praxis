@@ -27,7 +27,7 @@ pub const Lang = enum(u8) {
         };
     }
 
-    pub fn to_code(self: Lang) []const u8 {
+    pub fn code(self: Lang) []const u8 {
         return switch (self) {
             .hebrew => "he",
             .greek => "el",
@@ -42,20 +42,28 @@ pub const Lang = enum(u8) {
         };
     }
 
-    pub fn parse_code(code: []const u8) Lang {
-        if (std.ascii.eqlIgnoreCase(code, "he")) return .hebrew;
-        if (std.ascii.eqlIgnoreCase(code, "el")) return .greek;
-        if (std.ascii.eqlIgnoreCase(code, "aaa")) return .aramaic;
-        if (std.ascii.eqlIgnoreCase(code, "en")) return .english;
-        if (std.ascii.eqlIgnoreCase(code, "zh")) return .chinese;
-        if (std.ascii.eqlIgnoreCase(code, "es")) return .spanish;
-        if (std.ascii.eqlIgnoreCase(code, "ru")) return .russian;
-        if (std.ascii.eqlIgnoreCase(code, "uk")) return .russian;
-        if (std.ascii.eqlIgnoreCase(code, "ko")) return .korean;
-        if (std.ascii.eqlIgnoreCase(code, "zh_tw")) return .chinese;
-        if (std.ascii.eqlIgnoreCase(code, "zh_hanst")) return .chinese;
+    pub fn parseCode(value: []const u8) Lang {
+        if (std.ascii.eqlIgnoreCase(value, "he")) return .hebrew;
+        if (std.ascii.eqlIgnoreCase(value, "el")) return .greek;
+        if (std.ascii.eqlIgnoreCase(value, "aaa")) return .aramaic;
+        if (std.ascii.eqlIgnoreCase(value, "en")) return .english;
+        if (std.ascii.eqlIgnoreCase(value, "zh")) return .chinese;
+        if (std.ascii.eqlIgnoreCase(value, "es")) return .spanish;
+        if (std.ascii.eqlIgnoreCase(value, "ru")) return .russian;
+        if (std.ascii.eqlIgnoreCase(value, "uk")) return .russian;
+        if (std.ascii.eqlIgnoreCase(value, "ko")) return .korean;
+        if (std.ascii.eqlIgnoreCase(value, "zh_tw")) return .chinese;
+        if (std.ascii.eqlIgnoreCase(value, "zh_hanst")) return .chinese;
         return .unknown;
     }
 };
+
+test "parseCode" {
+    try std.testing.expectEqual(.chinese, Lang.parseCode("zh"));
+}
+
+test "code" {
+    try std.testing.expectEqual("zh", Lang.chinese.code());
+}
 
 const std = @import("std");

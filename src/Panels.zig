@@ -2,8 +2,13 @@
 
 const Panels = @This();
 
-lexeme: *Lexeme = undefined,
-tables: std.ArrayListUnmanaged(Panel) = .empty,
+lexeme: *const Lexeme,
+tables: std.ArrayListUnmanaged(Panel),
+
+pub const empty = Panels{
+    .lexeme = &Lexeme.empty,
+    .tables = .empty,
+};
 
 pub fn create(allocator: std.mem.Allocator) !*Panels {
     var p = try allocator.create(Panels);
@@ -18,13 +23,15 @@ pub fn destroy(self: *Panels, allocator: std.mem.Allocator) void {
 
 pub fn init(self: *Panels) void {
     self.tables = .empty;
+    self.lexeme = &Lexeme.empty;
 }
 
 pub fn deinit(self: *Panel) void {
     self.tables.deinit();
+    self.* = undefined;
 }
 
-pub fn setLexeme(self: *Panels, lexeme: *Lexeme) void {
+pub fn setLexeme(self: *Panels, lexeme: *const Lexeme) void {
     self.lexeme = lexeme;
     self.tables.clearRetainingCapacity();
 }
@@ -45,7 +52,7 @@ pub const Panel = struct {
     }
 };
 
-pub fn panels(self: *Panels) ![]Panel {
+pub fn panels(self: *Panels, gpa: Allocator) ![]Panel {
     std.log.debug("panels for {s}", .{self.lexeme.word});
     const forms = self.lexeme.forms.items;
     self.tables.clearRetainingCapacity();
@@ -59,7 +66,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .present, .active, .indicative, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .present, .active, .indicative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Future", .subtitle = "Active", .count = 3 };
@@ -70,7 +77,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .future, .active, .indicative, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .future, .active, .indicative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
         panel = Panel{ .title = "Imperfect", .subtitle = "Active", .count = 3 };
         panel.top[0] = ff(forms, .verb, .imperfect, .active, .indicative, .first, .singular);
@@ -80,7 +87,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .imperfect, .active, .indicative, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .imperfect, .active, .indicative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
         panel = Panel{ .title = "Aorist", .subtitle = "Active", .count = 3 };
         panel.top[0] = ff(forms, .verb, .aorist, .active, .indicative, .first, .singular);
@@ -90,7 +97,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .aorist, .active, .indicative, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .aorist, .active, .indicative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
         panel = Panel{ .title = "Perfect", .subtitle = "Active", .count = 3 };
         panel.top[0] = ff(forms, .verb, .perfect, .active, .indicative, .first, .singular);
@@ -100,7 +107,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .perfect, .active, .indicative, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .perfect, .active, .indicative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Pluperfect", .subtitle = "Active", .count = 3 };
@@ -111,7 +118,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .pluperfect, .active, .indicative, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .pluperfect, .active, .indicative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Subjunctive", .subtitle = "Present", .count = 3 };
@@ -122,7 +129,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .present, .active, .subjunctive, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .present, .active, .subjunctive, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Subjunctive", .subtitle = "Aorist", .count = 3 };
@@ -133,7 +140,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .aorist, .active, .subjunctive, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .aorist, .active, .subjunctive, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Subjunctive", .subtitle = "Present Mid", .count = 3 };
@@ -144,7 +151,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .present, .middle, .subjunctive, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .present, .middle, .subjunctive, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Subjunctive", .subtitle = "Aorist Mid", .count = 3 };
@@ -155,7 +162,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .aorist, .middle, .subjunctive, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .aorist, .middle, .subjunctive, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Subjunctive", .subtitle = "Present Psv", .count = 3 };
@@ -166,7 +173,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .present, .passive, .subjunctive, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .present, .passive, .subjunctive, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Subjunctive", .subtitle = "Aorist Psv", .count = 3 };
@@ -177,7 +184,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .aorist, .passive, .subjunctive, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .aorist, .passive, .subjunctive, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Infinitive", .subtitle = "", .count = 2 };
@@ -186,7 +193,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[0] = ff(forms, .verb, .present, .passive, .infinitive, .unknown, .unknown);
         panel.bottom[1] = ff(forms, .verb, .aorist, .passive, .infinitive, .unknown, .unknown);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Present", .subtitle = "Passive", .count = 3 };
@@ -197,7 +204,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .present, .passive, .indicative, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .present, .passive, .indicative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Future", .subtitle = "Middle", .count = 3 };
@@ -208,7 +215,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .future, .middle, .indicative, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .future, .middle, .indicative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Future", .subtitle = "Passive", .count = 3 };
@@ -219,7 +226,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .future, .passive, .indicative, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .future, .passive, .indicative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Imperfect", .subtitle = "Passive", .count = 3 };
@@ -230,7 +237,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .imperfect, .passive, .indicative, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .imperfect, .passive, .indicative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Aorist", .subtitle = "Passive", .count = 3 };
@@ -241,7 +248,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[1] = ff(forms, .verb, .aorist, .passive, .indicative, .second, .plural);
         panel.bottom[2] = ff(forms, .verb, .aorist, .passive, .indicative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Imperative", .subtitle = "Present", .count = 2 };
@@ -250,7 +257,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[0] = ff(forms, .verb, .present, .active, .imperative, .second, .plural);
         panel.bottom[1] = ff(forms, .verb, .present, .active, .imperative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Imperative", .subtitle = "Aorist", .count = 2 };
@@ -259,7 +266,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[0] = ff(forms, .verb, .aorist, .active, .imperative, .second, .plural);
         panel.bottom[1] = ff(forms, .verb, .aorist, .active, .imperative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Imperative", .subtitle = "Present Psv", .count = 2 };
@@ -268,7 +275,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[0] = ff(forms, .verb, .present, .passive, .imperative, .second, .plural);
         panel.bottom[1] = ff(forms, .verb, .present, .passive, .imperative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
 
         panel = Panel{ .title = "Imperative", .subtitle = "Aorist Psv", .count = 2 };
@@ -277,7 +284,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[0] = ff(forms, .verb, .aorist, .passive, .imperative, .second, .plural);
         panel.bottom[1] = ff(forms, .verb, .aorist, .passive, .imperative, .third, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
     }
 
@@ -293,7 +300,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[2] = nf(forms, .noun, .dative, .masculine, .plural);
         panel.bottom[3] = nf(forms, .noun, .accusative, .masculine, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
         panel = Panel{ .title = "Feminine", .subtitle = "", .count = 4 };
         panel.gender = .feminine;
@@ -306,7 +313,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[2] = nf(forms, .noun, .dative, .feminine, .plural);
         panel.bottom[3] = nf(forms, .noun, .accusative, .feminine, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
         panel = Panel{ .title = "Neuter", .subtitle = "", .count = 4 };
         panel.gender = .neuter;
@@ -319,7 +326,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[2] = nf(forms, .noun, .dative, .neuter, .plural);
         panel.bottom[3] = nf(forms, .noun, .accusative, .neuter, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
     }
 
@@ -332,7 +339,7 @@ pub fn panels(self: *Panels) ![]Panel {
             panel.top[2] = pp(forms, .personal_pronoun, .genitive, .singular, .first);
             panel.top[3] = pp(forms, .personal_pronoun, .dative, .singular, .first);
             if (panel.hasData()) {
-                try self.tables.append(panel);
+                try self.tables.append(gpa, panel);
             }
             panel = Panel{ .title = "Plural", .subtitle = "", .count = 4 };
             panel.top[0] = pp(forms, .personal_pronoun, .nominative, .plural, .first);
@@ -340,7 +347,7 @@ pub fn panels(self: *Panels) ![]Panel {
             panel.top[2] = pp(forms, .personal_pronoun, .genitive, .plural, .first);
             panel.top[3] = pp(forms, .personal_pronoun, .dative, .plural, .first);
             if (panel.hasData()) {
-                try self.tables.append(panel);
+                try self.tables.append(gpa, panel);
             }
         }
         if (self.lexeme.uid == 96456) {
@@ -350,7 +357,7 @@ pub fn panels(self: *Panels) ![]Panel {
             panel.top[2] = pp(forms, .personal_pronoun, .genitive, .singular, .second);
             panel.top[3] = pp(forms, .personal_pronoun, .dative, .singular, .second);
             if (panel.hasData()) {
-                try self.tables.append(panel);
+                try self.tables.append(gpa, panel);
             }
             panel = Panel{ .title = "Plural", .subtitle = "", .count = 4 };
             panel.top[0] = pp(forms, .personal_pronoun, .nominative, .plural, .second);
@@ -358,7 +365,7 @@ pub fn panels(self: *Panels) ![]Panel {
             panel.top[2] = pp(forms, .personal_pronoun, .genitive, .plural, .second);
             panel.top[3] = pp(forms, .personal_pronoun, .dative, .plural, .second);
             if (panel.hasData()) {
-                try self.tables.append(panel);
+                try self.tables.append(gpa, panel);
             }
         }
     }
@@ -377,7 +384,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[2] = nf(forms, pos, .dative, .masculine, .plural);
         panel.bottom[3] = nf(forms, pos, .accusative, .masculine, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
         panel = Panel{ .title = "Feminine", .subtitle = "", .count = 4 };
         panel.gender = .feminine;
@@ -390,7 +397,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[2] = nf(forms, pos, .dative, .feminine, .plural);
         panel.bottom[3] = nf(forms, pos, .accusative, .feminine, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
         panel = Panel{ .title = "Neuter", .subtitle = "", .count = 4 };
         panel.gender = .neuter;
@@ -403,7 +410,7 @@ pub fn panels(self: *Panels) ![]Panel {
         panel.bottom[2] = nf(forms, pos, .dative, .neuter, .plural);
         panel.bottom[3] = nf(forms, pos, .accusative, .neuter, .plural);
         if (panel.hasData()) {
-            try self.tables.append(panel);
+            try self.tables.append(gpa, panel);
         }
     }
 
@@ -517,11 +524,15 @@ pub fn pp(
 test "init_panels" {
     const gpa = std.testing.allocator;
     var p = try Panels.create(gpa);
-    p.destroy(gpa);
+    defer p.destroy(gpa);
+    const l = Lexeme.empty;
+    p.setLexeme(&l);
+    _ = try p.panels(gpa);
 }
 
 const std = @import("std");
 const ArrayList = std.ArrayList;
+const Allocator = std.mem.Allocator;
 
 const Lexeme = @import("Lexeme.zig");
 const Form = @import("Form.zig");

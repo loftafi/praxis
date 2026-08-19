@@ -134,7 +134,7 @@ pub inline fn unicode(self: *Self) error{ unexpected_eof, InvalidUtf8 }!u21 {
 }
 
 pub fn leading_slice(self: *Self, size: usize) []const u8 {
-    if (size >= self.index) {
+    if (size <= self.index) {
         return self.original[self.index - size .. self.index];
     }
     return self.original[0..self.index];

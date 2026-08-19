@@ -29,6 +29,10 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             self.index.deinit(allocator);
         }
 
+        pub fn keywordCount(self: *const Self) usize {
+            return self.index.count();
+        }
+
         /// The key is cloned and owned, the value is neither cloned nor owned.
         pub fn add(
             self: *Self,
@@ -95,7 +99,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
         // Returns all records that exactly match (accents included). If no
         // records exactly match. Returns all records that match with accents
         // removed.
-        pub fn lookup(self: *const Self, word: []const u8) error{NormalisationFailed}!?*SearchResult {
+        pub fn lookup(self: *const Self, word: []const u8) error{NormalisationFailed}!?*const SearchResult {
             if (word.len >= max_word_size) {
                 // If search word is too long, it definitely
                 // is not in the search result.
@@ -110,7 +114,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                 // Theoretically strange unicode issues could cause an
                 // out of memory error, but again this is an invalid
                 // search query.
-                std.log.err("normalisation failed: {any}", .{e});
+                err("normalisation failed: {any}", .{e});
                 return error.NormalisationFailed;
             };
 
@@ -165,7 +169,9 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             uids: *std.AutoHashMapUnmanaged(u24, T),
         ) error{ OutOfMemory, InvalidIndexFile, unexpected_eof }!void {
             const indexes = try data.u32();
-            for (0..indexes) |_| {
+            debug("loading {s} keyword index size={d}", .{ @typeName(T), indexes });
+            for (0..indexes) |i| {
+                //std.log.err("index entry {d} of {d}", .{ i, indexes });
                 const keyword = data.string() catch return error.InvalidIndexFile;
                 const value = try allocator.alloc(u8, keyword.len);
                 @memcpy(value, keyword);
@@ -178,7 +184,12 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                     if (uids.get(uid)) |item| {
                         results.exact_accented.appendAssumeCapacity(item);
                     } else {
-                        std.debug.print("Missing record search index uid {d}\n", .{uid});
+                        err("Index entry {d} {s}: Missing {s} search index uid {d}", .{
+                            i,
+                            keyword,
+                            @typeName(T),
+                            uid,
+                        });
                     }
                 }
                 size = try data.u8();
@@ -188,7 +199,12 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                     if (uids.get(uid)) |item| {
                         results.exact_unaccented.appendAssumeCapacity(item);
                     } else {
-                        std.debug.print("Missing record search index uid {d}\n", .{uid});
+                        err("Index entry {d} {s}: Missing {s} search index uid {d}", .{
+                            i,
+                            keyword,
+                            @typeName(T),
+                            uid,
+                        });
                     }
                 }
                 size = try data.u8();
@@ -198,7 +214,12 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                     if (uids.get(uid)) |item| {
                         results.partial_match.appendAssumeCapacity(item);
                     } else {
-                        std.debug.print("Missing record search index uid {d}\n", .{uid});
+                        err("Index entry {d} {s}: Missing {s} search index uid {d}", .{
+                            i,
+                            keyword,
+                            @typeName(T),
+                            uid,
+                        });
                     }
                 }
             }
@@ -218,7 +239,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
 
             pub const Iterator = struct {
                 const SI = @This();
-                results: *SearchResult,
+                results: *const SearchResult,
                 i: usize,
                 j: usize,
                 k: usize,
@@ -243,7 +264,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                 }
             };
 
-            pub fn iterator(self: *SearchResult) Iterator {
+            pub fn iterator(self: *const SearchResult) Iterator {
                 return .{
                     .results = self,
                     .i = 0,
@@ -287,7 +308,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
 
                 var count: usize = @min(self.exact_accented.items.len, max_search_results);
                 if (count > 0xff) {
-                    log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_accented.items.len });
+                    err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_accented.items.len });
                     return error.IndexTooLarge;
                 }
                 try data.writeByte(@intCast(count));
@@ -299,7 +320,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
 
                 count = @min(self.exact_unaccented.items.len, max_search_results);
                 if (count > 0xff) {
-                    log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_unaccented.items.len });
+                    err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.exact_unaccented.items.len });
                     return error.IndexTooLarge;
                 }
                 try data.writeByte(@intCast(count));
@@ -311,7 +332,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
 
                 count = @min(self.partial_match.items.len, max_search_results);
                 if (count > 0xff) {
-                    log.err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.partial_match.items.len });
+                    err("Keyword {s} has too many results. {d} > 256", .{ self.keyword, self.partial_match.items.len });
                     return error.IndexTooLarge;
                 }
                 try data.writeByte(@intCast(count));
@@ -476,7 +497,8 @@ test "search_index arena" {
 }
 
 const std = @import("std");
-const log = std.log;
+const err = std.log.err;
+const debug = std.log.debug;
 const is_stopword = @import("gloss_tokens.zig").is_stopword;
 
 const Keywords = @import("Normaliser.zig").Keywords;

@@ -18,8 +18,9 @@ by_form: SearchIndex(*Form, Form.autocompleteLessThan),
 by_form_uid: AutoHashMapUnmanaged(u24, *Form),
 by_gloss: SearchIndex(*Form, Form.autocompleteLessThan),
 by_transliteration: SearchIndex(*Form, Form.autocompleteLessThan),
-lexemes: ArrayListUnmanaged(*Lexeme),
-forms: ArrayListUnmanaged(*Form),
+
+lexemes: Pool(Lexeme, 20000),
+forms: Pool(Form, 50000),
 
 /// Create a dictionary object with an allocator that may be an
 /// arena, or a general purpose allocator.
@@ -31,8 +32,8 @@ pub fn create(arena: Allocator) error{OutOfMemory}!*Dictionary {
         .by_form_uid = .empty,
         .by_gloss = .empty,
         .by_transliteration = .empty,
-        .lexemes = try ArrayListUnmanaged(*Lexeme).initCapacity(arena, 180000),
-        .forms = try ArrayListUnmanaged(*Form).initCapacity(arena, 180000),
+        .lexemes = try .init(arena),
+        .forms = try .init(arena),
     };
     return dictionary;
 }
@@ -41,15 +42,18 @@ pub fn create(arena: Allocator) error{OutOfMemory}!*Dictionary {
 /// This is usually an arena, but it does not have to be.
 pub fn destroy(self: *Dictionary, arena: Allocator) void {
     self.by_lexeme.deinit(arena);
-    for (self.lexemes.items) |*item|
-        item.*.destroy(arena);
-    self.lexemes.deinit(arena);
+    var lexeme_iter = self.lexemes.iterator();
+    while (lexeme_iter.next()) |lexeme| {
+        lexeme.deinit(arena);
+    }
+    self.lexemes.deinit();
 
     self.by_form.deinit(arena);
     self.by_form_uid.deinit(arena);
-    for (self.forms.items) |*item|
-        item.*.destroy(arena);
-    self.forms.deinit(arena);
+    var forms_iter = self.forms.iterator();
+    while (forms_iter.next()) |form|
+        form.deinit(arena);
+    self.forms.deinit();
 
     self.by_gloss.deinit(arena);
     self.by_transliteration.deinit(arena);
@@ -73,8 +77,27 @@ pub fn loadFile(
     defer gpa.free(data);
 
     if (data.len > 10 and data[0] == 99 and data[1] == 1) {
+        debug("Detected binary dictionary", .{});
         try self.loadBinaryData(arena, data);
     } else {
+        debug("Detected text dictionary", .{});
+        try self.loadTextData(arena, gpa, data);
+    }
+}
+
+/// Load dictionary data from a buffer. Detect if the data is text or
+/// binary format. See `loadTextData()` and `loadBinaryData()` for details.
+pub fn loadData(
+    self: *Dictionary,
+    arena: Allocator,
+    gpa: Allocator,
+    data: []const u8,
+) !void {
+    if (data.len > 10 and data[0] == 99 and data[1] == 1) {
+        std.log.debug("Detected binary dictionary", .{});
+        try self.loadBinaryData(arena, data);
+    } else {
+        std.log.debug("Detected text dictionary", .{});
         try self.loadTextData(arena, gpa, data);
     }
 }
@@ -121,12 +144,14 @@ pub fn loadTextData(
         }
         line += 1;
         if (!(c == SPACE or c == TAB)) {
-            var lexeme = try Lexeme.create(arena);
-            errdefer lexeme.destroy(arena);
-            lexeme.readText(arena, &data) catch |e| {
-                err("Failed reading line: {d}. Error: {any}", .{ line, e });
+            var lexeme = try self.lexemes.alloc();
+            errdefer self.lexemes.free(lexeme);
+            lexeme.initText(arena, &data) catch |e| {
+                err("Failed reading lexeme line: {d}. Error: {any}", .{ line, e });
                 return e;
             };
+            errdefer lexeme.deinit(arena);
+
             if (lexeme.word.len == 0) {
                 err("missing lexeme word field on line: {d}", .{line});
                 break;
@@ -134,13 +159,13 @@ pub fn loadTextData(
             if (seen_lexemes.contains(lexeme.word)) {
                 debug("Skip duplicate root {s} on line {d}", .{ lexeme.word, line });
                 skip_lexeme = true;
-                lexeme.destroy(arena);
+                lexeme.deinit(gpa);
+                self.lexemes.free(lexeme);
                 continue;
             }
             skip_lexeme = false;
             try seen_lexemes.put(gpa, lexeme.word, true);
             current_lexeme = lexeme;
-            try self.lexemes.append(arena, lexeme);
             try self.by_lexeme.add(arena, lexeme.word, lexeme);
             if (lexeme.uid < minimum_uid) {
                 try lexeme_needs_uid.append(gpa, lexeme);
@@ -151,28 +176,35 @@ pub fn loadTextData(
                 }
             }
         } else {
-            var form = try Form.create(arena);
-            errdefer form.destroy(arena);
-            form.readText(arena, &data) catch |e| {
-                err("Failed reading line: {any}. Error: {any}", .{ line, e });
+            var form = try self.forms.alloc();
+            errdefer self.forms.free(form);
+
+            form.initText(arena, &data) catch |e| {
+                err("Failed reading form line: {any}. Error: {any}", .{ line, e });
                 return e;
             };
+            errdefer form.deinit(arena);
+
             if (form.word.len == 0) {
                 err("Missing form word field on line: {any}\n", .{line});
-                form.destroy(arena);
+                form.deinit(gpa);
+                self.forms.free(form);
                 break;
             }
             if (skip_lexeme) {
-                form.destroy(arena);
+                form.deinit(gpa);
+                self.forms.free(form);
                 continue;
             }
 
-            try self.forms.append(arena, form);
+            // Add this form to the lexeme it belongs to.
             try self.by_form.add(arena, form.word, form);
             if (current_lexeme != null) {
                 form.lexeme = current_lexeme.?;
                 try current_lexeme.?.forms.append(arena, form);
             }
+
+            // Add this form to the form uid lookup map
             if (form.uid < minimum_uid) {
                 try form_needs_uid.append(gpa, form);
             } else {
@@ -182,12 +214,17 @@ pub fn loadTextData(
                 }
             }
         }
-        //debug("reading line: {d} lexemes={d} forms={d}\n", .{ data.line, self.lexemes.items.len, self.forms.items.len });
+        debug("reading text line: {d} lexemes={d} forms={d}", .{
+            data.line,
+            self.lexemes.count(),
+            self.forms.count(),
+        });
     }
 
     // Build a search index of transliterated version of the words.
     var buffer: [500]u8 = undefined;
-    for (self.forms.items) |form| {
+    var form_iterator = self.forms.iterator();
+    while (form_iterator.next()) |form| {
         if (form.word.len == 0) {
             continue;
         }
@@ -207,7 +244,9 @@ pub fn loadTextData(
     // Build a search index of the glosses for each word.
     var seen = StringSet.init(gpa);
     defer seen.deinit();
-    for (self.lexemes.items) |lexeme| {
+
+    var iter = self.lexemes.iterator();
+    while (iter.next()) |lexeme| {
         if (lexeme.forms.items.len == 0) {
             continue;
         }
@@ -317,25 +356,29 @@ pub fn writeBinaryData(
     try data.writeByte(99);
     try data.writeByte(1);
 
-    try append_u32(data, @as(u32, @intCast(self.lexemes.items.len)));
+    try append_u32(data, @as(u32, @intCast(self.lexemes.count())));
 
-    for (self.lexemes.items) |*lexeme| {
-        if (save_mode == .gnt_words and lexeme.*.glosses.items.len == 0) continue;
-        try lexeme.*.writeBinary(data);
-        try append_u16(data, @intCast(lexeme.*.forms.items.len));
-        for (lexeme.*.forms.items) |*form| {
+    var iter = self.lexemes.iterator();
+    while (iter.next()) |lexeme| {
+        if (save_mode == .gnt_words and lexeme.glosses.items.len == 0) continue;
+        try lexeme.writeBinary(data);
+        try append_u16(data, @intCast(lexeme.forms.items.len));
+        for (lexeme.forms.items) |*form| {
             try form.*.writeBinary(data);
         }
     }
     try data.writeByte(FS);
 
     // Now output the search indexes
+    debug("write form keyword index size={d}", .{self.by_form.keywordCount()});
     try self.by_form.writeBinaryBytes(allocator, data);
     try data.writeByte(FS);
 
+    debug("write gloss keyword index size={d}", .{self.by_gloss.keywordCount()});
     try self.by_gloss.writeBinaryBytes(allocator, data);
     try data.writeByte(FS);
 
+    debug("write transliteration keyword index size={d}", .{self.by_transliteration.keywordCount()});
     try self.by_transliteration.writeBinaryBytes(allocator, data);
     try data.writeByte(FS);
 }
@@ -361,17 +404,16 @@ pub fn loadBinaryData(
 
     // Keep a cache of seen forms for index loading
     try self.by_form_uid.ensureTotalCapacity(arena, count);
-    try self.lexemes.ensureTotalCapacity(arena, count);
-    try self.forms.ensureTotalCapacity(arena, count);
 
     // Read all lexemes with associated forms
     for (0..count) |i| {
-        var lexeme = try Lexeme.create(arena);
-        errdefer lexeme.destroy(arena);
-        lexeme.readBinary(arena, &data) catch |e| {
+        var lexeme = try self.lexemes.alloc();
+        errdefer lexeme.deinit(arena);
+
+        lexeme.initBinary(arena, &data, &self.forms) catch |e| {
             debug("failed reading word {any} at byte index: {any}. Error: {any}\n", .{ i, data.index, e });
             if (i > 0) {
-                debug("previous word had uid {d}\n", .{self.lexemes.items[i - 1].uid});
+                //debug("previous word had uid {d}\n", .{self.lexemes.items[i - 1].uid});
                 debug("processing word {d} of {d}\n", .{ i, count });
             }
             debug(" buffer: {any} -{d}- {any}\n", .{
@@ -381,13 +423,13 @@ pub fn loadBinaryData(
             });
             return e;
         };
-        try self.lexemes.append(arena, lexeme);
+        errdefer self.lexemes.free(lexeme);
 
         // Any forms discovered while reading lexeme should
         // appear in the form index.
         for (lexeme.forms.items) |*f| {
             try self.by_form_uid.put(arena, f.*.uid, f.*);
-            try self.forms.append(arena, f.*);
+            //std.log.info("{s} add form {s} {d}", .{ lexeme.word, f.*.word, f.*.uid });
         }
         //if (data.next() != RS) {
         //    return error.InvalidDictionaryFile;
@@ -396,27 +438,38 @@ pub fn loadBinaryData(
     if (try data.u8() != FS) {
         return error.InvalidDictionaryFile;
     }
+    debug("loaded {d} forms and {d} lexemes", .{
+        self.forms.count(),
+        self.lexemes.count(),
+    });
+    //var iter = self.forms.iterator();
+    //while (iter.next()) |f| {
+    //    std.log.err("  -> form {d: >10} {s: <10}", .{ f.uid, f.word });
+    //}
 
     // Read all search index data
+    debug("loading form index", .{});
     try self.by_form.loadBinaryData(arena, &data, &self.by_form_uid);
     if (try data.u8() != FS) {
         return error.InvalidDictionaryFile;
     }
 
+    debug("loading form gloss", .{});
     try self.by_gloss.loadBinaryData(arena, &data, &self.by_form_uid);
     if (try data.u8() != FS) {
         return error.InvalidDictionaryFile;
     }
 
+    debug("loading transliteration index", .{});
     try self.by_transliteration.loadBinaryData(arena, &data, &self.by_form_uid);
     if (try data.u8() != FS) {
         return error.InvalidDictionaryFile;
     }
 
-    log.debug(
-        "Loaded binary dictionary ({d} words, {d} forms).",
-        .{ self.lexemes.items.len, self.forms.items.len },
-    );
+    debug("Loaded binary dictionary ({d} words, {d} forms).", .{
+        self.lexemes.count(),
+        self.forms.count(),
+    });
     return;
 }
 
@@ -457,7 +510,9 @@ pub fn writeTextData(
 ) !void {
     var unsorted: ArrayListUnmanaged(*Lexeme) = .empty;
     defer unsorted.deinit(allocator);
-    for (self.lexemes.items) |lexeme| {
+
+    var iter = self.lexemes.iterator();
+    while (iter.next()) |lexeme| {
         if (save_mode == .gnt_words and lexeme.glosses.items.len == 0) continue;
         try unsorted.append(allocator, lexeme);
     }
@@ -561,6 +616,7 @@ const append_u32 = @import("binary_writer.zig").append_u32;
 const random_u24 = @import("random.zig").random_u24;
 const seed = @import("random.zig").seed;
 const random_string = @import("random.zig").random_string;
+const Pool = @import("Pool.zig").Pool;
 
 const eql = @import("std").mem.eql;
 const expect = std.testing.expect;
@@ -584,15 +640,17 @@ test "basic_dictionary" {
         \\  λύω|V-PAI-1S|false|700002|en:I untie:I release:I loose|
         \\  λύεις|V-PAI-2S|false|700003|en:You untie:You release|
         \\  λύει|V-PAI-3S|false|700004|en:You untie:You release|
+        \\  λύε|V-PAI-3S|false|700009||
+        \\  λύ|V-PAI-3S|false|700008||
         \\
     ;
 
     try dictionary.loadTextData(allocator, allocator, data);
 
-    try expectEqual(2, dictionary.lexemes.items.len);
-    try expectEqual(5, dictionary.forms.items.len);
+    try expectEqual(2, dictionary.lexemes.count());
+    try expectEqual(7, dictionary.forms.count());
 
-    try expectEqual(5, dictionary.by_form_uid.count());
+    try expectEqual(7, dictionary.by_form_uid.count());
     try expect(dictionary.by_form_uid.get(1234) == null);
     try expect(dictionary.by_form_uid.get(700004) != null);
 
@@ -664,8 +722,8 @@ test "basic_dictionary" {
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
         try dictionary2.loadBinaryData(allocator, out.written());
 
-        try expectEqual(2, dictionary.lexemes.items.len);
-        try expectEqual(5, dictionary.forms.items.len);
+        try expectEqual(2, dictionary.lexemes.count());
+        try expectEqual(7, dictionary.forms.count());
 
         try expectEqual(13, dictionary.by_lexeme.index.count());
         try expectEqual(27, dictionary.by_form.index.count());
@@ -718,9 +776,12 @@ test "load_count" {
         \\  στόμαχον|N-ASM|false|1286250||byz#1 Timothy 5:23 10,kjtr#1 Timothy 5:23 9,sbl#1 Timothy 5:23 9,sr#1 Timothy 5:23 10
     ;
     try dictionary.loadTextData(allocator, allocator, data);
-    try expectEqual(1, dictionary.lexemes.items.len);
-    try expectEqual(2, dictionary.forms.items.len);
-    try expectEqual(2, dictionary.lexemes.items[0].forms.items.len);
+    try expectEqual(1, dictionary.lexemes.count());
+    try expectEqual(2, dictionary.forms.count());
+
+    var result = (try dictionary.by_lexeme.lookup("στόμαχος")).?.iterator();
+    const lexeme = result.next();
+    try expectEqual(2, lexeme.?.forms.items.len);
 
     try expectEqual(2, dictionary.by_form_uid.count());
     try expect(dictionary.by_form_uid.get(1234) == null);
@@ -879,6 +940,39 @@ test "dictionary_destroy2" {
     try dictionary.loadTextData(allocator, allocator, data);
 }
 
+test "full_binary_dictionary" {
+    if (false) {
+        const gpa = std.testing.allocator;
+        const io = std.testing.io;
+
+        const data = try std.Io.Dir.cwd().readFileAlloc(io, "./test/full_binary.bin", gpa, .unlimited);
+        defer gpa.free(data);
+        try expectEqual(49759619, data.len);
+
+        const dictionary = try Dictionary.create(gpa);
+        defer dictionary.destroy(gpa);
+        try dictionary.loadBinaryData(gpa, data);
+        try expectEqual(157986, dictionary.forms.count());
+    }
+}
+
+test "full_text_dictionary" {
+    if (false) {
+        const gpa = std.testing.allocator;
+        const io = std.testing.io;
+
+        const data = try std.Io.Dir.cwd().readFileAlloc(io, "./test/full_text.bin", gpa, .unlimited);
+        defer gpa.free(data);
+        try expectEqual(12155992, data.len);
+
+        const dictionary = try Dictionary.create(gpa);
+        defer dictionary.destroy(gpa);
+        try dictionary.loadTextData(gpa, gpa, data);
+
+        try expectEqual(157910, dictionary.forms.count());
+    }
+}
+
 test "persist_dictionary" {
     const gpa = std.testing.allocator;
     const io = std.testing.io;
@@ -886,7 +980,8 @@ test "persist_dictionary" {
     defer tmp.cleanup();
 
     const dictionary = try Dictionary.create(gpa);
-    defer dictionary.destroy(gpa);
+    errdefer dictionary.destroy(gpa);
+
     const data =
         \\λύω|el|636607|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
         \\  λύω|V-PAI-1S|false|855809|en:I untie:I release:I loose|
@@ -896,17 +991,28 @@ test "persist_dictionary" {
         \\  δράκοντα|N-ASM|false|3700628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;
     try dictionary.loadTextData(gpa, gpa, data);
-    try expectEqual(4, dictionary.forms.items.len);
-    try expectEqual(2, dictionary.lexemes.items.len);
+    try expectEqual(4, dictionary.forms.count());
+    try expectEqual(4, dictionary.by_form_uid.count());
+    try expectEqual(27, dictionary.by_form.keywordCount());
+
+    try expectEqual(2, dictionary.lexemes.count());
+    try expectEqual(13, dictionary.by_lexeme.keywordCount());
     try dictionary.saveBinaryFile(gpa, io, tmp.dir, "temp_binary_file", .all_words);
 
     var dictionary2 = try Dictionary.create(gpa);
-    defer dictionary2.destroy(gpa);
+    errdefer dictionary2.destroy(gpa);
     const data2 = try tmp.dir.readFileAlloc(io, "temp_binary_file", gpa, .unlimited);
     defer gpa.free(data2);
     try dictionary2.loadBinaryData(gpa, data2);
-    try expectEqual(4, dictionary2.forms.items.len);
-    try expectEqual(2, dictionary2.lexemes.items.len);
+    try expectEqual(4, dictionary2.forms.count());
+    try expectEqual(4, dictionary2.by_form_uid.count());
+    try expectEqual(2, dictionary2.lexemes.count());
+    try expectEqual(27, dictionary2.by_form.keywordCount());
+    // Lexeme index is not saved right now
+    try expectEqual(0, dictionary2.by_lexeme.keywordCount());
+
+    dictionary.destroy(gpa);
+    dictionary2.destroy(gpa);
 }
 
 test "partial dictionary search" {

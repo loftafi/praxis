@@ -324,7 +324,10 @@ pub const Parsing = packed struct(u32) {
                 4 => .neuter,
                 5 => .masculine_neuter,
                 7 => .masculine_feminine_neuter,
-                else => error.InvalidGender,
+                else => {
+                    std.log.debug("parse({d}) invalid gender u8", .{gender});
+                    return error.InvalidGender;
+                },
             };
         }
 
@@ -365,6 +368,7 @@ pub const Parsing = packed struct(u32) {
             if (std.mem.eql(u8, value, "ὁ ἡ τό") or std.mem.eql(u8, value, "ὁ,ἡ,τό")) {
                 return .masculine_feminine_neuter;
             }
+            std.log.debug("parse(\"{s}\") invalid gender", .{value});
             return error.InvalidGender;
         }
 

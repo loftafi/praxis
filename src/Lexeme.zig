@@ -37,24 +37,6 @@ pub const empty: Lexeme = .{
     .adjective = "",
 };
 
-/// Create this structure then use `init` to set up the fields.
-pub fn create(allocator: std.mem.Allocator) error{OutOfMemory}!*Lexeme {
-    var s = try allocator.create(Lexeme);
-    s.init();
-    return s;
-}
-
-/// Deinit this structure and destroy it.
-pub fn destroy(self: *Lexeme, allocator: Allocator) void {
-    self.deinit(allocator);
-    allocator.destroy(self);
-}
-
-/// Initialise all fields to reasonable defaults.
-pub fn init(self: *Lexeme) void {
-    self.* = .empty;
-}
-
 /// Release any memory under the control of this struct. The `forms` do not
 /// belong to this struct so are not released.
 pub fn deinit(self: *Lexeme, allocator: Allocator) void {
@@ -224,7 +206,7 @@ pub fn lessThan(_: ?[]const u8, self: *Lexeme, other: *Lexeme) bool {
 
 /// Read binary `Lexeme` information along with any child `Form` binary
 /// records attached to the lexeme.
-pub fn readBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader) error{
+pub fn initBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader, form_pool: anytype) error{
     InvalidDictionaryFile,
     InvalidLanguage,
     InvalidGender,
@@ -233,12 +215,14 @@ pub fn readBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader) error{
     OutOfMemory,
     unexpected_eof,
 }!void {
+    self.* = .empty;
     self.uid = try t.u24();
     const word = try t.string();
     self.word = try arena.dupe(u8, word);
     self.lang = try Lang.from_u8(try t.u8());
     self.pos = @bitCast(try t.u32());
     self.article = try Gender.from_u8(try t.u8());
+
     try readBinaryGlosses(arena, t, &self.glosses);
     self.tags = null;
     const tag_count = try t.u8();
@@ -257,11 +241,11 @@ pub fn readBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader) error{
     }
 
     const form_count = try t.u16();
-    try self.forms.ensureTotalCapacity(arena, form_count);
     for (0..form_count) |_| {
-        const form_entry = try Form.create(arena);
-        errdefer form_entry.destroy(arena);
-        try form_entry.readBinary(arena, t);
+        const form_entry: *Form = try form_pool.alloc();
+        errdefer form_pool.free(form_entry);
+        try form_entry.initBinary(arena, t);
+        errdefer form_entry.deinit(arena);
         form_entry.lexeme = self;
         try self.forms.append(arena, form_entry);
     }
@@ -303,13 +287,13 @@ pub fn writeBinary(
     }
 }
 
-/// Read text `Lexeme` information representing  basic information about a
-/// lexeme. Reads one line only. Does not read form entries on the
+/// init `Lexeme` using text containing the lexeme information.
+/// Reads one line only. Does not read form entries on the
 /// following lines.
 ///
 /// Ἀαρών|el|17|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
 /// Ἀαρών|el|17|ProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
-pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) error{
+pub fn initText(self: *Lexeme, allocator: Allocator, t: *Parser) error{
     MissingField,
     EmptyField,
     InvalidLanguage,
@@ -320,10 +304,16 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) error{
     OutOfMemory,
 }!void {
     _ = t.skip_whitespace_and_lines();
+    self.forms = .empty;
 
     const word_field = t.readField();
     if (word_field.len == 0) return error.EmptyField;
-    self.word = try arena.dupe(u8, word_field);
+    self.word = try allocator.dupe(u8, word_field);
+    errdefer {
+        allocator.free(self.word);
+        self.word = "";
+    }
+
     if (!t.consume_if('|')) {
         // Extra warning on first field to highlight where problem is
         err("expected |, found {d} while reading line {d} (word={s})", .{ t.peek(), t.line, word_field });
@@ -344,29 +334,57 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) error{
     if (!t.consume_if('|')) return error.MissingField;
     const suffix = t.readField(); // Genitive suffix
     if (suffix.len > 0) {
-        self.genitiveSuffix = try arena.dupe(u8, suffix);
+        self.genitiveSuffix = try allocator.dupe(u8, suffix);
+    } else {
+        self.genitiveSuffix = "";
     }
+    errdefer if (self.genitiveSuffix.len > 0) {
+        allocator.free(self.genitiveSuffix);
+        self.genitiveSuffix = "";
+    };
 
     if (!t.consume_if('|')) return error.MissingField;
-    _ = try t.readStrongs(arena, &self.strongs);
+    self.strongs = .empty;
+    errdefer {
+        self.strongs.deinit(allocator);
+        self.strongs = .empty;
+    }
+    _ = try t.readStrongs(allocator, &self.strongs);
 
     if (!t.consume_if('|')) return error.MissingField;
     const root = t.readField(); // Lexeme root
     if (root.len > 0) {
-        self.root = try arena.dupe(u8, root);
+        self.root = try allocator.dupe(u8, root);
+    } else {
+        self.root = "";
     }
-    if (!t.consume_if('|')) {
-        return error.MissingField;
-    }
+    errdefer if (self.root.len > 0) {
+        allocator.free(self.root);
+        self.root = "";
+    };
 
-    try readTextGlosses(arena, t, &self.glosses); // Glosses
-    if (!t.consume_if('|')) {
-        return error.MissingField;
+    if (!t.consume_if('|')) return error.MissingField;
+
+    self.glosses = .empty;
+    errdefer {
+        self.glosses.deinit(allocator);
+        self.glosses = .empty;
     }
-    const adjectives = t.readField(); // Adjective forms
+    try readTextGlosses(allocator, t, &self.glosses);
+    errdefer for (self.glosses.items) |gloss| gloss.destroy(allocator);
+
+    if (!t.consume_if('|')) return error.MissingField;
+
+    const adjectives = t.readField();
     if (adjectives.len > 0) {
-        self.adjective = try arena.dupe(u8, adjectives);
+        self.adjective = try allocator.dupe(u8, adjectives);
+    } else {
+        self.adjective = "";
     }
+    errdefer if (self.adjective.len > 0) {
+        allocator.free(self.adjective);
+        self.adjective = "";
+    };
 
     if (!t.consume_if('|')) return error.MissingField;
     const tag_set = t.readField(); // Tags
@@ -379,10 +397,19 @@ pub fn readText(self: *Lexeme, arena: Allocator, t: *Parser) error{
         tags[ti] = tag;
         ti += 1;
     }
-    self.tags = try arena.alloc([]const u8, ti);
-    for (0..ti) |x| {
-        self.tags.?[x] = try arena.dupe(u8, tags[x]);
+    self.tags = null;
+    if (ti > 0) {
+        self.tags = try allocator.alloc([]const u8, ti);
     }
+    errdefer if (self.tags != null) {
+        allocator.free(self.tags.?);
+        self.tags = null;
+    };
+    for (0..ti) |x| {
+        self.tags.?[x] = try allocator.dupe(u8, tags[x]);
+    }
+    errdefer for (0..ti) |x| allocator.free(self.tags.?[x]);
+
     _ = t.readField(); // ??
 
     if (!t.consume_if('|')) return error.MissingField;
@@ -433,9 +460,10 @@ pub fn writeText(
 //   Ἀαρών|N-NSM|false|17||
 test "read_lexeme" {
     var data = Parser.init("Ἀαρών|el|17|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|");
-    var lexeme = try Lexeme.create(std.testing.allocator);
-    defer lexeme.destroy(std.testing.allocator);
-    try lexeme.readText(std.testing.allocator, &data);
+    var lexeme: Lexeme = .empty;
+    try lexeme.initText(std.testing.allocator, &data);
+    defer lexeme.deinit(std.testing.allocator);
+
     try expectEqualStrings("Ἀαρών", lexeme.word);
     try expectEqual(17, lexeme.uid);
     try expectEqual(Lang.greek, lexeme.lang);
@@ -455,9 +483,9 @@ test "read_lexeme" {
 
 test "read_lexeme_short" {
     var data = Parser.init("α|el|123123|Letter|||||en:alpha||alphabet|");
-    var lexeme = try Lexeme.create(std.testing.allocator);
-    defer lexeme.destroy(std.testing.allocator);
-    try lexeme.readText(std.testing.allocator, &data);
+    var lexeme: Lexeme = .empty;
+    try lexeme.initText(std.testing.allocator, &data);
+    defer lexeme.deinit(std.testing.allocator);
     try expectEqualStrings("α", lexeme.word);
     try expectEqual(123123, lexeme.uid);
 }
@@ -466,9 +494,10 @@ test "read_lexeme2" {
     var data = Parser.init(
         \\ἀγγεῖον|el|388|Noun|τό|-ου|30,55|ἀγγεῖ|en:vessel:flask:container:can|a b c|tag|
     );
-    var lexeme = try Lexeme.create(std.testing.allocator);
-    defer lexeme.destroy(std.testing.allocator);
-    try lexeme.readText(std.testing.allocator, &data);
+    var lexeme: Lexeme = .empty;
+    try lexeme.initText(std.testing.allocator, &data);
+    defer lexeme.deinit(std.testing.allocator);
+
     try expectEqual(Lang.greek, lexeme.lang);
     try expectEqual(388, lexeme.uid);
     try expectEqual(2, lexeme.strongs.items.len);
@@ -481,9 +510,9 @@ test "read_lexeme2" {
 test "lexeme_bytes" {
     const allocator = std.testing.allocator;
     var data = Parser.init("cat|el|17|IndeclinableProperNoun|ὁ||2|cat|en:cat#zh:ara#es:nat||person|");
-    var lexeme = try Lexeme.create(allocator);
-    defer lexeme.destroy(allocator);
-    try lexeme.readText(std.testing.allocator, &data);
+    var lexeme: Lexeme = .empty;
+    defer lexeme.deinit(allocator);
+    try lexeme.initText(std.testing.allocator, &data);
 
     var buffer: std.Io.Writer.Allocating = .init(allocator);
     defer buffer.deinit();
@@ -517,19 +546,22 @@ test "compare_lexeme" {
             \\Ἀαρών|el|18|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
             \\Ἀαρώνα|el|19|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
         );
-        var lexeme1 = try Lexeme.create(allocator);
-        defer lexeme1.destroy(allocator);
-        try lexeme1.readText(allocator, &data);
-        var lexeme2 = try Lexeme.create(allocator);
-        defer lexeme2.destroy(allocator);
-        try lexeme2.readText(allocator, &data);
-        var lexeme3 = try Lexeme.create(allocator);
-        defer lexeme3.destroy(allocator);
-        try lexeme3.readText(std.testing.allocator, &data);
-        try expectEqual(true, lessThan(null, lexeme1, lexeme2));
-        try expectEqual(true, lessThan(null, lexeme1, lexeme3));
-        try expectEqual(false, lessThan(null, lexeme3, lexeme2));
-        try expectEqual(false, lessThan(null, lexeme3, lexeme1));
+        var lexeme1: Lexeme = .empty;
+        try lexeme1.initText(allocator, &data);
+        defer lexeme1.deinit(allocator);
+
+        var lexeme2: Lexeme = .empty;
+        try lexeme2.initText(allocator, &data);
+        defer lexeme2.deinit(allocator);
+
+        var lexeme3: Lexeme = .empty;
+        try lexeme3.initText(std.testing.allocator, &data);
+        defer lexeme3.deinit(allocator);
+
+        try expectEqual(true, lessThan(null, &lexeme1, &lexeme2));
+        try expectEqual(true, lessThan(null, &lexeme1, &lexeme3));
+        try expectEqual(false, lessThan(null, &lexeme3, &lexeme2));
+        try expectEqual(false, lessThan(null, &lexeme3, &lexeme1));
     }
     {
         var data = Parser.init(
@@ -537,98 +569,101 @@ test "compare_lexeme" {
             \\Ἀαρών|el|18|IndeclinableProperNoun||ὁ|3|Ἀαρών|en:Aaron#zh:亞倫||person|
             \\Ἀαρών|el|19|IndeclinableProperNoun||ὁ|3|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|
         );
-        var lexeme1 = try Lexeme.create(allocator);
-        defer lexeme1.destroy(allocator);
-        try lexeme1.readText(allocator, &data);
-        var lexeme2 = try Lexeme.create(allocator);
-        defer lexeme2.destroy(allocator);
-        try lexeme2.readText(allocator, &data);
-        var lexeme3 = try Lexeme.create(allocator);
-        defer lexeme3.destroy(allocator);
-        try lexeme3.readText(allocator, &data);
-        try expectEqual(true, lessThan(null, lexeme1, lexeme2));
-        try expectEqual(true, lessThan(null, lexeme1, lexeme3));
-        try expectEqual(false, lessThan(null, lexeme3, lexeme2));
-        try expectEqual(false, lessThan(null, lexeme3, lexeme1));
+        var lexeme1: Lexeme = .empty;
+        try lexeme1.initText(allocator, &data);
+        defer lexeme1.deinit(allocator);
+
+        var lexeme2: Lexeme = .empty;
+        try lexeme2.initText(allocator, &data);
+        defer lexeme2.deinit(allocator);
+
+        var lexeme3: Lexeme = .empty;
+        try lexeme3.initText(allocator, &data);
+        defer lexeme3.deinit(allocator);
+
+        try expectEqual(true, lessThan(null, &lexeme1, &lexeme2));
+        try expectEqual(true, lessThan(null, &lexeme1, &lexeme3));
+        try expectEqual(false, lessThan(null, &lexeme3, &lexeme2));
+        try expectEqual(false, lessThan(null, &lexeme3, &lexeme1));
     }
 }
 
 test "return_correct_preferred_form" {
     const allocator = std.testing.allocator;
 
-    {
-        const dictionary = try Dictionary.create(allocator);
-        defer dictionary.destroy(allocator);
+    const dictionary = try Dictionary.create(allocator);
+    //errdefer dictionary.destroy(allocator);
 
-        const data =
-            \\δράκων|el|180000|Noun|ὁ|-οντος|1404|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
-            \\  δράκων|N-NSM|false|170000||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
-            \\  δράκοντα|N-ASM|false|170001|en:the sneaky|byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
-            \\λύω|el|180001|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
-            \\  λύω|V-PAI-1S|false|170002|en:I untie:I release:I loose|
-            \\  λύω|V-PAI-1S|false|170003||
-            \\  λύεις|V-PAI-2S|false|170004||
-            \\  λύεις|V-PAI-2S|false|170005|en:You untie:You release|
-            \\  λύει|V-PAI-3S|true|170006|en:You untie:You release|
-            \\  λύει|V-PAI-3S|false|170007|en:You untie:You release|
-            \\  λύετε|V-PAI-2P|false|170008||
-            \\  λύετε|V-PAI-2P|true|170009||
-            \\
-        ;
-        try dictionary.loadTextData(allocator, allocator, data);
+    const data =
+        \\δράκων|el|180000|Noun|ὁ|-οντος|1404|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
+        \\  δράκων|N-NSM|false|170000||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
+        \\  δράκοντα|N-ASM|false|170001|en:the sneaky|byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
+        \\λύω|el|180001|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
+        \\  λύω|V-PAI-1S|false|170002|en:I untie:I release:I loose|
+        \\  λύω|V-PAI-1S|false|170003||
+        \\  λύεις|V-PAI-2S|false|170004||
+        \\  λύεις|V-PAI-2S|false|170005|en:You untie:You release|
+        \\  λύει|V-PAI-3S|true|170006|en:You untie:You release|
+        \\  λύει|V-PAI-3S|false|170007|en:You untie:You release|
+        \\  λύετε|V-PAI-2P|false|170008||
+        \\  λύετε|V-PAI-2P|true|170009||
+        \\
+    ;
+    try dictionary.loadTextData(allocator, allocator, data);
 
-        try expectEqual(2, dictionary.lexemes.items.len);
-        try expectEqual(10, dictionary.forms.items.len);
+    try expectEqual(2, dictionary.lexemes.count());
+    try expectEqual(10, dictionary.forms.count());
 
-        var results = try dictionary.by_form.lookup("λύω");
-        try expect(results != null);
-        try expectEqual(2, results.?.exact_accented.items.len);
-        try expectEqual(170002, results.?.exact_accented.items[0].uid);
+    var results = try dictionary.by_form.lookup("λύω");
+    try expect(results != null);
+    try expectEqual(2, results.?.exact_accented.items.len);
+    try expectEqual(170002, results.?.exact_accented.items[0].uid);
 
-        results = try dictionary.by_form.lookup("λύεις");
-        try expect(results != null);
-        try expectEqual(2, results.?.exact_accented.items.len);
-        try expectEqual(170005, results.?.exact_accented.items[0].uid);
+    results = try dictionary.by_form.lookup("λύεις");
+    try expect(results != null);
+    try expectEqual(2, results.?.exact_accented.items.len);
+    try expectEqual(170005, results.?.exact_accented.items[0].uid);
 
-        results = try dictionary.by_form.lookup("λύει");
-        try expect(results != null);
-        try expectEqual(2, results.?.exact_accented.items.len);
-        try expectEqual(170006, results.?.exact_accented.items[0].uid);
+    results = try dictionary.by_form.lookup("λύει");
+    try expect(results != null);
+    try expectEqual(2, results.?.exact_accented.items.len);
+    try expectEqual(170006, results.?.exact_accented.items[0].uid);
 
-        results = try dictionary.by_form.lookup("λύετε");
-        try expect(results != null);
-        try expectEqual(2, results.?.exact_accented.items.len);
-        try expectEqual(170009, results.?.exact_accented.items[0].uid);
+    results = try dictionary.by_form.lookup("λύετε");
+    try expect(results != null);
+    try expectEqual(2, results.?.exact_accented.items.len);
+    try expectEqual(170009, results.?.exact_accented.items[0].uid);
 
-        const words = try dictionary.by_lexeme.lookup("λύω");
-        try expect(words != null);
-        try expectEqual(1, words.?.exact_accented.items.len);
-        var f = words.?.exact_accented.items[0].primaryForm();
-        try expectEqual(170002, f.?.uid);
+    const words = try dictionary.by_lexeme.lookup("λύω");
+    try expect(words != null);
+    try expectEqual(1, words.?.exact_accented.items.len);
+    var f = words.?.exact_accented.items[0].primaryForm();
+    try expectEqual(170002, f.?.uid);
 
-        try expect(words != null);
-        try expectEqual(1, words.?.exact_accented.items.len);
-        f = words.?.exact_accented.items[0].formByParsing(try parse("V-PAI-2S"));
-        try expectEqual(170005, f.?.uid);
+    try expect(words != null);
+    try expectEqual(1, words.?.exact_accented.items.len);
+    f = words.?.exact_accented.items[0].formByParsing(try parse("V-PAI-2S"));
+    try expectEqual(170005, f.?.uid);
 
-        try expect(words != null);
-        try expectEqual(1, words.?.exact_accented.items.len);
-        f = words.?.exact_accented.items[0].formByParsing(try parse("V-PAI-3S"));
-        try expectEqual(170006, f.?.uid);
+    try expect(words != null);
+    try expectEqual(1, words.?.exact_accented.items.len);
+    f = words.?.exact_accented.items[0].formByParsing(try parse("V-PAI-3S"));
+    try expectEqual(170006, f.?.uid);
 
-        try expect(words != null);
-        try expectEqual(1, words.?.exact_accented.items.len);
-        f = words.?.exact_accented.items[0].formByParsing(try parse("V-PAI-2P"));
-        try expectEqual(170009, f.?.uid);
-    }
+    try expect(words != null);
+    try expectEqual(1, words.?.exact_accented.items.len);
+    f = words.?.exact_accented.items[0].formByParsing(try parse("V-PAI-2P"));
+    try expectEqual(170009, f.?.uid);
+
+    dictionary.destroy(allocator);
 }
 
 test "binary_lexeme_load_save" {
     const allocator = std.testing.allocator;
     var data = Parser.init("ἅγιος|el|519|Adjective|||40,39|ἅγι|en:holy:set apart:sacred#zh:聖潔的:至聖所:聖所:聖徒:聖:聖潔#es:santo:apartado:sagrado|ἅγιος,-α,-ον|worship, church|\n");
-    var lexeme = try Lexeme.create(allocator);
-    defer lexeme.destroy(allocator);
-    try lexeme.readText(allocator, &data);
+    var lexeme: Lexeme = .empty;
+    try lexeme.initText(allocator, &data);
+    defer lexeme.deinit(allocator);
     try expectEqual(2, lexeme.strongs.items.len);
     try expectEqual(40, lexeme.strongs.items[0]);
     try expectEqual(39, lexeme.strongs.items[1]);
@@ -639,10 +674,12 @@ test "binary_lexeme_load_save" {
     try lexeme.writeBinary(&out.writer);
     try append_u16(&out.writer, 0); // no forms
 
-    var lexeme2 = try Lexeme.create(allocator);
-    defer lexeme2.destroy(allocator);
+    var form_pool: @import("Pool.zig").Pool(Form, 40) = try .init(allocator);
+    defer form_pool.deinit();
+    var lexeme2: Lexeme = .empty;
+    defer lexeme2.deinit(allocator);
     var r = BinaryReader.init(out.written());
-    try lexeme2.readBinary(allocator, &r);
+    try lexeme2.initBinary(allocator, &r, &form_pool);
     try expectEqual(2, lexeme.strongs.items.len);
     try expectEqual(40, lexeme.strongs.items[0]);
     try expectEqual(39, lexeme.strongs.items[1]);
@@ -650,9 +687,9 @@ test "binary_lexeme_load_save" {
 
 test "read_invalid_lexeme_id" {
     var data = Parser.init("Ἀαρών|el|nana|IndeclinableProperNoun|ὁ||2|Ἀαρών|en:Aaron#zh:亞倫#es:Aarón||person|\n");
-    var lexeme = try Lexeme.create(std.testing.allocator);
-    defer lexeme.destroy(std.testing.allocator);
-    const e = lexeme.readText(std.testing.allocator, &data);
+    var lexeme: Lexeme = .empty;
+    defer lexeme.deinit(std.testing.allocator);
+    const e = lexeme.initText(std.testing.allocator, &data);
     try expectEqual(e, error.InvalidU24);
 }
 

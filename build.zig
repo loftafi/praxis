@@ -15,6 +15,7 @@ pub fn build(b: *std.Build) void {
         .linkage = .static,
         .name = "praxis",
         .root_module = lib_mod,
+        .use_llvm = true,
     });
     lib.root_module.addAnonymousImport("larger_dict", .{
         .root_source_file = b.path("./test/larger_dict.txt"),
@@ -34,6 +35,7 @@ pub fn build(b: *std.Build) void {
     const lib_unit_tests = b.addTest(.{
         .root_module = test_mod,
         .filters = test_filters,
+        .use_llvm = true,
     });
     lib_unit_tests.root_module.addOptions("options", options);
 
@@ -58,6 +60,24 @@ pub fn build(b: *std.Build) void {
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
     const test_step = b.step("test", "Run unit tests");
+
+    //
+    // Build the command line tool
+    //
+    const praxis_cmd = b.createModule(.{
+        .root_source_file = b.path("cmd/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "praxis", .module = lib_mod },
+        },
+    });
+
+    const praxis_exe = b.addExecutable(.{
+        .name = "praxis",
+        .root_module = praxis_cmd,
+    });
+    b.installArtifact(praxis_exe);
 
     const install_docs = b.addInstallDirectory(.{
         .source_dir = lib.getEmittedDocs(),

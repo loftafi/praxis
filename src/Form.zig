@@ -25,20 +25,6 @@ pub const empty = Form{
     .references = .empty,
 };
 
-/// Create a `Form` object as an empty record.
-pub fn create(allocator: Allocator) error{OutOfMemory}!*Form {
-    var s = try allocator.create(Form);
-    errdefer allocator.destroy(Form);
-    s.init();
-    return s;
-}
-
-/// Deinitialise and destroy this `Form`.
-pub fn destroy(self: *Form, allocator: Allocator) void {
-    self.deinit(allocator);
-    allocator.destroy(self);
-}
-
 pub fn init(self: *Form) void {
     self.* = .empty;
 }
@@ -185,7 +171,7 @@ pub fn read_byz_parsing(t: *Parser) !Parsing {
 ///  - gloss end RS (1)
 ///  - reference count (4)
 ///  - module, book, chapter, verse, word (2,2,2,2,2)
-pub fn readBinary(self: *Form, arena: Allocator, t: *BinaryReader) !void {
+pub fn initBinary(self: *Form, arena: Allocator, t: *BinaryReader) !void {
     self.uid = try t.u24();
     self.parsing = @bitCast(try t.u32());
     const flags = try t.u8();
@@ -197,6 +183,8 @@ pub fn readBinary(self: *Form, arena: Allocator, t: *BinaryReader) !void {
     } else {
         self.word = "";
     }
+    self.glosses = .empty;
+    self.references = .empty;
     try readBinaryGlosses(arena, t, &self.glosses);
     const references_count = try t.u32();
     for (0..references_count) |_| {
@@ -241,7 +229,7 @@ pub fn writeText(
 ///
 /// `Ἀαρών|N-NSM|false|17||`
 /// `δράκοντα|N-ASM|false|37628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3`
-pub fn readText(self: *Form, arena: Allocator, t: *Parser) error{
+pub fn initText(self: *Form, allocator: Allocator, t: *Parser) error{
     MissingField,
     Incomplete,
     UnknownPartOfSpeech,
@@ -260,13 +248,16 @@ pub fn readText(self: *Form, arena: Allocator, t: *Parser) error{
     InvalidReference,
     OutOfMemory,
 }!void {
+    self.* = .empty;
+
     _ = t.skip_whitespace_and_lines();
     //const start = t.index;
     const word_field = t.readField();
     if (word_field.len == 0)
         self.word = ""
     else
-        self.word = try arena.dupe(u8, word_field);
+        self.word = try allocator.dupe(u8, word_field);
+    errdefer if (self.word.len > 0) allocator.free(self.word);
 
     if (!t.consume_if('|')) return error.MissingField;
 
@@ -279,196 +270,231 @@ pub fn readText(self: *Form, arena: Allocator, t: *Parser) error{
     self.uid = try t.readU24(); // uid
     if (!t.consume_if('|')) return error.MissingField;
 
-    _ = try readTextGlosses(arena, t, &self.glosses); // Glosses
+    _ = try readTextGlosses(allocator, t, &self.glosses); // Glosses
     if (!t.consume_if('|')) return error.MissingField;
 
-    try Reference.readReferenceList(arena, t, &self.references); // References
+    try Reference.readReferenceList(allocator, t, &self.references); // References
 }
 
-test "read_form" {
-    var data = Parser.init("ἄρτος|N-NSM|false|20||\nποῦ|N-NSM|true|21|en:fish|byz#Revelation 20:2 3,kjtr#Revelation 20:2 3\n");
-    var form = try Form.create(std.testing.allocator);
-    defer form.destroy(std.testing.allocator);
-    try form.readText(std.testing.allocator, &data);
-    try expectEqualStrings("ἄρτος", form.word);
-    try expectEqual(20, form.uid);
-    try expectEqual(false, form.preferred);
-    try expectEqual(0, form.glosses.items.len);
-    try expect(data.consume_if('\n'));
+test "read_text_form" {
+    const gpa = std.testing.allocator;
+    var tp = try make_test_pool(gpa);
 
-    var form2 = try Form.create(std.testing.allocator);
-    defer form2.destroy(std.testing.allocator);
-    try form2.readText(std.testing.allocator, &data);
-    try expectEqualStrings("ποῦ", form2.word);
-    try expectEqual(21, form2.uid);
-    try expectEqual(true, form2.preferred);
-    try expect(data.consume_if('\n'));
-    try expectEqual(1, form2.glosses.items.len);
+    {
+        var data = Parser.init("ἄρτος|N-NSM|false|20||\nποῦ|N-NSM|true|21|en:fish|byz#Revelation 20:2 3,kjtr#Revelation 20:2 3\n");
+
+        var form = try tp.form_pool.alloc();
+        defer tp.form_pool.free(form);
+        try form.initText(std.testing.allocator, &data);
+        defer form.deinit(gpa);
+
+        try expectEqualStrings("ἄρτος", form.word);
+        try expectEqual(20, form.uid);
+        try expectEqual(false, form.preferred);
+        try expectEqual(0, form.glosses.items.len);
+        try expect(data.consume_if('\n'));
+
+        var form2 = try tp.form_pool.alloc();
+        defer tp.form_pool.free(form2);
+        try form2.initText(gpa, &data);
+        defer form2.deinit(gpa);
+
+        try expectEqualStrings("ποῦ", form2.word);
+        try expectEqual(21, form2.uid);
+        try expectEqual(true, form2.preferred);
+        try expect(data.consume_if('\n'));
+        try expectEqual(1, form2.glosses.items.len);
+    }
+
+    try tp.deinit(.leak_check);
 }
 
 pub const std_options = struct {
     pub const log_level: std.log.Level = .debug;
 };
 
-test "form_init" {
-    var form = try Form.create(std.testing.allocator);
-    defer form.destroy(std.testing.allocator);
-    try expectEqual(0, form.word.len);
-    try expectEqual(false, form.preferred);
-    try expectEqual(false, form.incorrect);
-    try expectEqual(0, form.glosses.items.len);
-    try expectEqual(0, form.references.items.len);
+test "read_write_text" {
+    const gpa = std.testing.allocator;
+    var tp = try make_test_pool(gpa);
+
+    {
+        const in = "fish|N-NSM|true|20|en:swim:to arch#zh:你好|sbl#Mark 11:22 33,sr#Luke 1:2 3\n";
+        var t = Parser.init(in);
+        var form = try tp.form_pool.alloc();
+        defer tp.form_pool.free(form);
+        try form.initText(gpa, &t);
+        defer form.deinit(gpa);
+
+        var out = std.Io.Writer.Allocating.init(gpa);
+        defer out.deinit();
+        try form.writeText(&out.writer);
+        const text = "fish|N-NSM|true|20|en:swim:to arch#zh:你好|";
+        try expectEqualStrings(text, out.written());
+    }
+
+    try tp.deinit(.leak_check);
 }
 
-test "form_read_write_text" {
-    const allocator = std.testing.allocator;
-    const in = "fish|N-NSM|true|20|en:swim:to arch#zh:你好|sbl#Mark 11:22 33,sr#Luke 1:2 3\n";
-    var t = Parser.init(in);
-    var form = try Form.create(allocator);
-    defer form.destroy(allocator);
-    try form.readText(allocator, &t);
+test "read_write_bytes" {
+    const gpa = std.testing.allocator;
+    var tp = try make_test_pool(gpa);
 
-    var out = std.Io.Writer.Allocating.init(allocator);
-    defer out.deinit();
-    try form.writeText(&out.writer);
-    const text = "fish|N-NSM|true|20|en:swim:to arch#zh:你好|";
-    try expectEqualStrings(text, out.written());
-}
+    {
+        var t = Parser.init("fish|N-NSM|true|7700|en:swim:to arch#zh:你好|sbl#Mark 11:22 33,sr#Luke 1:2 3\n");
+        var form = try tp.form_pool.alloc();
+        defer tp.form_pool.free(form);
+        try form.initText(gpa, &t);
+        defer form.deinit(gpa);
 
-test "form_read_write_bytes" {
-    var t = Parser.init("fish|N-NSM|true|20|en:swim:to arch#zh:你好|sbl#Mark 11:22 33,sr#Luke 1:2 3\n");
-    var form = try Form.create(std.testing.allocator);
-    defer form.destroy(std.testing.allocator);
-    try form.readText(std.testing.allocator, &t);
+        var writer = std.Io.Writer.Allocating.init(gpa);
+        defer writer.deinit();
+        try form.writeBinary(&writer.writer);
+        const out = writer.written();
 
-    var writer = std.Io.Writer.Allocating.init(std.testing.allocator);
-    defer writer.deinit();
-    try form.writeBinary(&writer.writer);
-    const out = writer.written();
+        try expectEqual(2, form.glosses.items.len);
+        try expectEqual(2, form.references.items.len);
 
-    try expectEqual(2, form.glosses.items.len);
-    try expectEqual(2, form.references.items.len);
+        try expectEqualSlices(
+            u8,
+            &.{
+                20, 30, 0, 3, 16, 132, 0, 1, 'f', 'i', 's', 'h', 31, 2, 0, 4, 's',
+            },
+            out[0..17],
+        );
+        try expectEqual(63, out.len);
 
-    try expectEqualSlices(
-        u8,
-        &.{
-            20, 0, 0, 3, 16, 132, 0, 1, 'f', 'i', 's', 'h', 31, 2, 0, 4, 's',
-        },
-        out[0..17],
-    );
-    try expectEqual(63, out.len);
+        var form_loaded = try tp.form_pool.alloc();
+        defer tp.form_pool.free(form_loaded);
+        var p = BinaryReader.init(out);
+        try form_loaded.initBinary(gpa, &p);
+        defer form_loaded.deinit(gpa);
 
-    var form_loaded = try Form.create(std.testing.allocator);
-    defer form_loaded.destroy(std.testing.allocator);
-    var p = BinaryReader.init(out);
-    try form_loaded.readBinary(std.testing.allocator, &p);
-
-    try expectEqual(20, form_loaded.uid);
-    try expectEqualStrings("fish", form_loaded.word);
-    try expectEqual(2, form_loaded.references.items.len);
+        try expectEqual(7700, form_loaded.uid);
+        try expectEqualStrings("fish", form_loaded.word);
+        try expectEqual(2, form_loaded.references.items.len);
+    }
+    try tp.deinit(.leak_check);
 }
 
 test "form_read_write_two_items" {
-    const allocator = std.testing.allocator;
+    const gpa = std.testing.allocator;
+    var tp = try make_test_pool(gpa);
 
-    var t = Parser.init(
-        \\fish|N-NSM|true|20|en:swim|
-        \\cars|N-NSM|true|21|en:to arch|sr#Luke 1:2 3,byz#Mark 11:22 33
-    );
-    var form1 = try Form.create(allocator);
-    defer form1.destroy(allocator);
-    var form2 = try Form.create(allocator);
-    defer form2.destroy(allocator);
-    try form1.readText(allocator, &t);
-    try form2.readText(allocator, &t);
-
-    var out = std.Io.Writer.Allocating.init(allocator);
+    var out = std.Io.Writer.Allocating.init(gpa);
     defer out.deinit();
-    try form1.writeBinary(&out.writer);
-    try form2.writeBinary(&out.writer);
+    {
+        var t = Parser.init(
+            \\fish|N-NSM|true|79920|en:swim|
+            \\cars|N-NSM|true|21|en:to arch|sr#Luke 1:2 3,byz#Mark 11:22 33
+        );
+        var form1 = try tp.form_pool.alloc();
+        defer tp.form_pool.free(form1);
+        try form1.initText(gpa, &t);
+        defer form1.deinit(gpa);
 
-    //try expectEqualSlices(u8, &.{0}, out.items);
-    var form3 = try Form.create(allocator);
-    defer form3.destroy(allocator);
-    var form4 = try Form.create(allocator);
-    defer form4.destroy(allocator);
-    var data = BinaryReader.init(out.written());
-    try form3.readBinary(allocator, &data);
-    try form4.readBinary(allocator, &data);
-    try expectEqual(20, form3.uid);
-    try expectEqual(21, form4.uid);
-    try expectEqual(2, form4.references.items.len);
-    //try expectEqualSlices(u8, &.{0}, out.items);
-}
+        var form2 = try tp.form_pool.alloc();
+        defer tp.form_pool.free(form2);
+        try form2.initText(gpa, &t);
+        defer form2.deinit(gpa);
 
-fn make_test_form(
-    gpa: Allocator,
-    form: []const u8,
-    lexeme: []const u8,
-) error{OutOfMemory}!*Form {
-    const f1 = try Form.create(gpa);
-    f1.word = try gpa.dupe(u8, form);
-    f1.lexeme = try Lexeme.create(gpa);
-    f1.lexeme.?.word = try gpa.dupe(u8, lexeme);
-    return f1;
+        try form1.writeBinary(&out.writer);
+        try form2.writeBinary(&out.writer);
+    }
+
+    {
+        var data = BinaryReader.init(out.written());
+        //try expectEqualSlices(u8, &.{0}, out.items);
+
+        var form3 = try tp.form_pool.alloc();
+        defer tp.form_pool.free(form3);
+        try form3.initBinary(gpa, &data);
+        defer form3.deinit(gpa);
+
+        var form4 = try tp.form_pool.alloc();
+        defer tp.form_pool.free(form4);
+        try form4.initBinary(gpa, &data);
+        defer form4.deinit(gpa);
+
+        try expectEqual(79920, form3.uid);
+        try expectEqual(21, form4.uid);
+        try expectEqual(2, form4.references.items.len);
+    }
+    try tp.deinit(.leak_check);
 }
 
 test "init_release" {
     const gpa = std.testing.allocator;
-    const form1 = try make_test_form(gpa, "hal", "hal");
-    form1.lexeme.?.destroy(gpa);
-    form1.destroy(gpa);
+    var tp = try make_test_pool(gpa);
 
-    const form2 = try make_test_form(gpa, "car", "ant");
-    defer form2.destroy(gpa);
-    defer form2.lexeme.?.destroy(gpa);
+    {
+        const form1 = try tp.new_form("hal", "hal");
+        defer {
+            form1.lexeme.?.deinit(gpa);
+            tp.lexeme_pool.free(form1.lexeme.?);
+            form1.deinit(gpa);
+            tp.form_pool.free(form1);
+        }
+    }
+
+    {
+        const form2 = try tp.new_form("car", "ant");
+        defer tp.form_pool.free(form2);
+        defer form2.deinit(gpa);
+        defer tp.lexeme_pool.free(form2.lexeme.?);
+        defer form2.lexeme.?.deinit(gpa);
+    }
+
+    try tp.deinit(.leak_check);
 }
 
 test "form_autocomplete" {
     const gpa = std.testing.allocator;
-
-    const f1 = try make_test_form(gpa, "hal", "hal");
-    defer f1.destroy(gpa);
-    defer f1.lexeme.?.destroy(gpa);
-
-    const f2 = try make_test_form(gpa, "ant", "ant");
-    defer f2.destroy(gpa);
-    defer f2.lexeme.?.destroy(gpa);
-
-    var items = [_]*Form{ f1, f2 };
+    var tp = try make_test_pool(gpa);
 
     {
+        const f1 = try tp.new_form("hal", "hal");
+        defer tp.form_pool.free(f1);
+        defer f1.deinit(gpa);
+        defer tp.lexeme_pool.free(f1.lexeme.?);
+        defer f1.lexeme.?.deinit(gpa);
+
+        const f2 = try tp.new_form("ant", "ant");
+        defer tp.form_pool.free(f2);
+        defer f2.deinit(gpa);
+        defer tp.lexeme_pool.free(f2.lexeme.?);
+        defer f2.lexeme.?.deinit(gpa);
+
+        var items = [_]*Form{ f1, f2 };
+
         // Normal autocomplete order
         try expect(!autocompleteLessThan(null, f1, f2));
         try expect(autocompleteLessThan(null, f2, f1));
-
         std.mem.sort(*Form, &items, @as(?[]const u8, null), autocompleteLessThan);
         try expectEqualStrings("ant", items[0].word);
         try expectEqualStrings("hal", items[1].word);
-    }
 
-    {
         // Prefer ant in the lexeme
         try expect(!autocompleteLessThan("ant", f1, f2));
         try expect(autocompleteLessThan("ant", f2, f1));
-
         std.mem.sort(*Form, &items, @as(?[]const u8, "ant"), autocompleteLessThan);
         try expectEqualStrings("ant", items[0].word);
         try expectEqualStrings("hal", items[1].word);
-    }
 
-    const g1 = try make_test_form(gpa, "car", "car");
-    defer g1.destroy(gpa);
-    defer g1.lexeme.?.destroy(gpa);
+        const g1 = try tp.new_form("car", "car");
+        defer tp.form_pool.free(g1);
+        defer g1.deinit(gpa);
+        defer tp.lexeme_pool.free(g1.lexeme.?);
+        defer g1.lexeme.?.deinit(gpa);
 
-    const g2 = try make_test_form(gpa, "car", "ant");
-    defer g2.destroy(gpa);
-    defer g2.lexeme.?.destroy(gpa);
+        const g2 = try tp.new_form("car", "ant");
+        defer tp.form_pool.free(g2);
+        defer g2.deinit(gpa);
+        defer tp.lexeme_pool.free(g2.lexeme.?);
+        defer g2.lexeme.?.deinit(gpa);
 
-    var items1 = [_]*Form{ g1, g2 };
-    var items2 = [_]*Form{ g1, g2 };
+        var items1 = [_]*Form{ g1, g2 };
+        var items2 = [_]*Form{ g1, g2 };
 
-    {
         // Hal gets prioritised first as a lexical form
         //try expect(autocompleteLessThan("hal", f1, f2));
         //try expect(!autocompleteLessThan("hal", f2, f1));
@@ -481,10 +507,13 @@ test "form_autocomplete" {
         try expectEqualStrings("ant", items2[0].lexeme.?.word);
         try expectEqualStrings("car", items2[1].lexeme.?.word);
     }
+    try tp.deinit(.leak_check);
 }
 
 test "compare_form" {
-    const allocator = std.testing.allocator;
+    const gpa = std.testing.allocator;
+    var tp = try make_test_pool(gpa);
+    defer tp.deinit(.leak) catch {};
 
     {
         var data = Parser.init(
@@ -492,15 +521,18 @@ test "compare_form" {
             \\ἄρτο|N-NSM|false|21|en:fish|
             \\ἄρτος|N-NSM|false|22|en:fish|
         );
-        var form1 = try Form.create(allocator);
-        defer form1.destroy(allocator);
-        try form1.readText(allocator, &data);
-        var form2 = try Form.create(allocator);
-        defer form2.destroy(allocator);
-        try form2.readText(allocator, &data);
-        var form3 = try Form.create(allocator);
-        defer form3.destroy(allocator);
-        try form3.readText(allocator, &data);
+        var form1 = try tp.form_pool.alloc();
+        try form1.initText(gpa, &data);
+        defer form1.deinit(gpa);
+
+        var form2 = try tp.form_pool.alloc();
+        try form2.initText(gpa, &data);
+        defer form2.deinit(gpa);
+
+        var form3 = try tp.form_pool.alloc();
+        try form3.initText(gpa, &data);
+        defer form3.deinit(gpa);
+
         try expectEqual(true, lessThan({}, form1, form2));
         try expectEqual(true, lessThan({}, form1, form3));
         try expectEqual(false, lessThan({}, form3, form2));
@@ -512,15 +544,15 @@ test "compare_form" {
             \\ἄρτος|N-NSM|false|21|en:fish#zh:fish|
             \\ἄρτος|N-NSM|false|22|en:fish#zh:fishing#es:fishes|
         );
-        var form1 = try Form.create(allocator);
-        defer form1.destroy(allocator);
-        try form1.readText(allocator, &data);
-        var form2 = try Form.create(allocator);
-        defer form2.destroy(allocator);
-        try form2.readText(allocator, &data);
-        var form3 = try Form.create(allocator);
-        defer form3.destroy(allocator);
-        try form3.readText(allocator, &data);
+        var form1 = try tp.form_pool.alloc();
+        try form1.initText(gpa, &data);
+        defer form1.deinit(gpa);
+        var form2 = try tp.form_pool.alloc();
+        try form2.initText(gpa, &data);
+        defer form2.deinit(gpa);
+        var form3 = try tp.form_pool.alloc();
+        try form3.initText(gpa, &data);
+        defer form3.deinit(gpa);
     }
     {
         var data = Parser.init(
@@ -528,15 +560,15 @@ test "compare_form" {
             \\ἄρτος|N-NSM|true|21|en:fish#zh:fish|
             \\ἄρτος|N-NSM|false|22|en:fish#zh:fishing#es:fishes|
         );
-        var form1 = try Form.create(allocator);
-        defer form1.destroy(allocator);
-        try form1.readText(allocator, &data);
-        var form2 = try Form.create(allocator);
-        defer form2.destroy(allocator);
-        try form2.readText(allocator, &data);
-        var form3 = try Form.create(allocator);
-        defer form3.destroy(allocator);
-        try form3.readText(allocator, &data);
+        var form1 = try tp.form_pool.alloc();
+        try form1.initText(gpa, &data);
+        defer form1.deinit(gpa);
+        var form2 = try tp.form_pool.alloc();
+        try form2.initText(gpa, &data);
+        defer form2.deinit(gpa);
+        var form3 = try tp.form_pool.alloc();
+        try form3.initText(gpa, &data);
+        defer form3.deinit(gpa);
 
         try expectEqual(false, form1.preferred);
         try expectEqual(true, form2.preferred);
@@ -551,19 +583,70 @@ test "compare_form" {
 }
 
 test "read_invalid_form_parsing" {
-    var data = Parser.init("ἄρτος|N-NZ|false|29||\nποῦ|N-NSM|true|21||\n");
-    var form = try Form.create(std.testing.allocator);
-    defer form.destroy(std.testing.allocator);
-    const e = form.readText(std.testing.allocator, &data);
-    try expectEqual(ParsingError.InvalidParsing, e);
+    const gpa = std.testing.allocator;
+    var tp = try make_test_pool(gpa);
+
+    {
+        var data = Parser.init("ἄρτος|N-NZ|false|29||\nποῦ|N-NSM|true|21||\n");
+        var form = try tp.form_pool.alloc();
+        defer tp.form_pool.free(form);
+        const e = form.initText(gpa, &data);
+        try expectEqual(ParsingError.InvalidParsing, e);
+    }
+
+    try tp.deinit(.leak_check);
 }
 
 test "read_incomplete_form_parsing" {
-    var data = Parser.init("ἄρτος|N-NA|false|20||\nποῦ|N-NSM|true|21||\n");
-    var form = try Form.create(std.testing.allocator);
-    defer form.destroy(std.testing.allocator);
-    const e = form.readText(std.testing.allocator, &data);
-    try expectEqual(ParsingError.InvalidParsing, e);
+    const gpa = std.testing.allocator;
+    var tp = try make_test_pool(gpa);
+
+    {
+        var data = Parser.init("ἄρτος|N-NA|false|20||\nποῦ|N-NSM|true|21||\n");
+        var form = try tp.form_pool.alloc();
+        defer tp.form_pool.free(form);
+        const e = form.initText(gpa, &data);
+        try expectEqual(ParsingError.InvalidParsing, e);
+    }
+
+    try tp.deinit(.leak_check);
+}
+
+fn make_test_pool(gpa: Allocator) !struct {
+    allocator: Allocator,
+    lexeme_pool: Pool(Lexeme, 20),
+    form_pool: Pool(Form, 20),
+
+    fn new_form(
+        self: *@This(),
+        form: []const u8,
+        lexeme: []const u8,
+    ) error{OutOfMemory}!*Form {
+        var f = try self.form_pool.alloc();
+        errdefer self.form_pool.free(f);
+        f.* = .empty;
+        f.word = try self.allocator.dupe(u8, form);
+
+        f.lexeme = try self.lexeme_pool.alloc();
+        errdefer self.lexeme_pool.free(f.lexeme.?);
+        f.lexeme.?.* = .empty;
+        f.lexeme.?.word = try self.allocator.dupe(u8, lexeme);
+
+        return f;
+    }
+
+    fn deinit(self: *@This(), leak: enum { leak_check, leak }) !void {
+        if (leak == .leak_check) try expectEqual(0, self.form_pool.count());
+        if (leak == .leak_check) try expectEqual(0, self.lexeme_pool.count());
+        self.form_pool.deinit();
+        self.lexeme_pool.deinit();
+    }
+} {
+    return .{
+        .allocator = gpa,
+        .form_pool = try .init(gpa),
+        .lexeme_pool = try .init(gpa),
+    };
 }
 
 const std = @import("std");
@@ -586,6 +669,8 @@ const readTextGlosses = Gloss.readTextGlosses;
 const writeTextGlosses = Gloss.writeTextGlosses;
 const readBinaryGlosses = Gloss.readBinaryGlosses;
 const Byzantine = @import("Byzantine.zig");
+
+const Pool = @import("Pool.zig").Pool;
 
 const BinaryWriter = @import("binary_writer.zig");
 const append_u8 = BinaryWriter.append_u8;

@@ -35,7 +35,8 @@ pub fn deinit(self: *Gloss, arena: Allocator) void {
     self.* = undefined;
 }
 
-pub fn add_gloss(self: *Gloss, arena: Allocator, gloss: []const u8) error{OutOfMemory}!void {
+// Add a gloss
+pub fn add(self: *Gloss, arena: Allocator, gloss: []const u8) error{OutOfMemory}!void {
     try self.entries.append(arena, try arena.dupe(u8, gloss));
 }
 
@@ -87,7 +88,7 @@ pub fn readText(self: *Gloss, arena: Allocator, t: *Parser) error{OutOfMemory}!v
             if (self.lang == .unknown) {
                 self.lang = Lang.parseCode(field);
             } else if (field.len > 0) {
-                try self.add_gloss(arena, field);
+                try self.add(arena, field);
             }
             if (c != ':') {
                 // The : means continue reading another field,
@@ -161,7 +162,7 @@ pub fn readBinaryGlosses(
                 break;
             }
             const entry = try t.string();
-            try gloss.add_gloss(arena, entry);
+            try gloss.add(arena, entry);
         }
         if (t.peek() != RS) {
             std.debug.print("expected RS, found: {}", .{t.peek()});
@@ -317,8 +318,8 @@ test "gloss_read_write_bytes" {
     var gloss = try Gloss.create(allocator);
     defer gloss.destroy(allocator);
     gloss.lang = .hebrew;
-    try gloss.add_gloss(allocator, "ar");
-    try gloss.add_gloss(allocator, "ci");
+    try gloss.add(allocator, "ar");
+    try gloss.add(allocator, "ci");
 
     var buffer = std.Io.Writer.Allocating.init(allocator);
     defer buffer.deinit();
@@ -343,18 +344,18 @@ test "test_gloss_string" {
     var gloss = try Gloss.create(allocator);
     defer gloss.destroy(allocator);
     gloss.lang = .hebrew;
-    try gloss.add_gloss(allocator, "ar");
-    try gloss.add_gloss(allocator, "ci");
+    try gloss.add(allocator, "ar");
+    try gloss.add(allocator, "ci");
     try gloss.string(&out.writer);
     try expectEqualStrings("ar, ci.", out.written());
     out.clearRetainingCapacity();
 
-    try gloss.add_gloss(allocator, "art.");
+    try gloss.add(allocator, "art.");
     try gloss.string(&out.writer);
     try expectEqualStrings("ar, ci, art.", out.written());
     out.clearRetainingCapacity();
 
-    try gloss.add_gloss(allocator, "(small)");
+    try gloss.add(allocator, "(small)");
     try gloss.string(&out.writer);
     try expectEqualStrings("ar, ci, art., (small)", out.written());
     out.clearRetainingCapacity();

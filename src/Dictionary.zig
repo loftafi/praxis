@@ -13,6 +13,8 @@ const minimum_uid: u24 = 100000;
 ///
 pub const Dictionary = @This();
 
+allocator: Allocator,
+
 by_lexeme: SearchIndex(*Lexeme, Lexeme.lessThan),
 by_form: SearchIndex(*Form, Form.autocompleteLessThan),
 by_form_uid: AutoHashMapUnmanaged(u24, *Form),
@@ -24,48 +26,49 @@ forms: Pool(Form, 50000),
 
 /// Create a dictionary object with an allocator that may be an
 /// arena, or a general purpose allocator.
-pub fn create(arena: Allocator) error{OutOfMemory}!*Dictionary {
-    const dictionary: *Dictionary = try arena.create(Dictionary);
+pub fn create(allocator: Allocator) error{OutOfMemory}!*Dictionary {
+    const dictionary: *Dictionary = try allocator.create(Dictionary);
     dictionary.* = .{
+        .allocator = allocator,
         .by_lexeme = .empty,
         .by_form = .empty,
         .by_form_uid = .empty,
         .by_gloss = .empty,
         .by_transliteration = .empty,
-        .lexemes = try .init(arena),
-        .forms = try .init(arena),
+        .lexemes = try .init(allocator),
+        .forms = try .init(allocator),
     };
     return dictionary;
 }
 
 /// Destroy a dictionary with the same allocator that it was created with.
 /// This is usually an arena, but it does not have to be.
-pub fn destroy(self: *Dictionary, arena: Allocator) void {
-    self.by_lexeme.deinit(arena);
+pub fn destroy(self: *Dictionary) void {
+    self.by_lexeme.deinit(self.allocator);
     var lexeme_iter = self.lexemes.iterator();
     while (lexeme_iter.next()) |lexeme| {
-        lexeme.deinit(arena);
+        lexeme.deinit(self.allocator);
     }
     self.lexemes.deinit();
 
-    self.by_form.deinit(arena);
-    self.by_form_uid.deinit(arena);
+    self.by_form.deinit(self.allocator);
+    self.by_form_uid.deinit(self.allocator);
     var forms_iter = self.forms.iterator();
     while (forms_iter.next()) |form|
-        form.deinit(arena);
+        form.deinit(self.allocator);
     self.forms.deinit();
 
-    self.by_gloss.deinit(arena);
-    self.by_transliteration.deinit(arena);
+    self.by_gloss.deinit(self.allocator);
+    self.by_transliteration.deinit(self.allocator);
+    const allocator = self.allocator;
     self.* = undefined;
-    arena.destroy(self);
+    allocator.destroy(self);
 }
 
 /// Load dictionary data from a file. Detect if the data is text or
 /// binary format. See `loadTextData()` and `loadBinaryData()` for details.
 pub fn loadFile(
     self: *Dictionary,
-    arena: Allocator,
     gpa: Allocator,
     io: std.Io,
     filename: []const u8,
@@ -78,10 +81,10 @@ pub fn loadFile(
 
     if (data.len > 10 and data[0] == 99 and data[1] == 1) {
         debug("Detected binary dictionary", .{});
-        try self.loadBinaryData(arena, data);
+        try self.loadBinaryData(data);
     } else {
         debug("Detected text dictionary", .{});
-        try self.loadTextData(arena, gpa, data);
+        try self.loadTextData(gpa, data);
     }
 }
 
@@ -89,26 +92,22 @@ pub fn loadFile(
 /// binary format. See `loadTextData()` and `loadBinaryData()` for details.
 pub fn loadData(
     self: *Dictionary,
-    arena: Allocator,
     gpa: Allocator,
     data: []const u8,
 ) !void {
     if (data.len > 10 and data[0] == 99 and data[1] == 1) {
         std.log.debug("Detected binary dictionary", .{});
-        try self.loadBinaryData(arena, data);
+        try self.loadBinaryData(data);
     } else {
         std.log.debug("Detected text dictionary", .{});
-        try self.loadTextData(arena, gpa, data);
+        try self.loadTextData(gpa, data);
     }
 }
 
-/// Load dictionary data that has been stored in a
-/// user readable text format. The `arena` allocator stores
-/// data for the lifetime of the dictionary and the `gpa`
-/// stores trandient data used while loading the dictionary.
+/// Load dictionary data from a user readable text file.
+/// `gpa` is used to temporarily store transient memory objects.
 pub fn loadTextData(
     self: *Dictionary,
-    arena: Allocator,
     gpa: Allocator,
     content: []const u8,
 ) !void {
@@ -146,11 +145,11 @@ pub fn loadTextData(
         if (!(c == SPACE or c == TAB)) {
             var lexeme = try self.lexemes.alloc();
             errdefer self.lexemes.free(lexeme);
-            lexeme.initText(arena, &data) catch |e| {
+            lexeme.initText(self.allocator, &data) catch |e| {
                 err("Failed reading lexeme line: {d}. Error: {any}", .{ line, e });
                 return e;
             };
-            errdefer lexeme.deinit(arena);
+            errdefer lexeme.deinit(self.allocator);
 
             if (lexeme.word.len == 0) {
                 err("missing lexeme word field on line: {d}", .{line});
@@ -166,7 +165,7 @@ pub fn loadTextData(
             skip_lexeme = false;
             try seen_lexemes.put(gpa, lexeme.word, true);
             current_lexeme = lexeme;
-            try self.by_lexeme.add(arena, lexeme.word, lexeme);
+            try self.by_lexeme.add(self.allocator, lexeme.word, lexeme);
             if (lexeme.uid < minimum_uid) {
                 try lexeme_needs_uid.append(gpa, lexeme);
             } else {
@@ -179,11 +178,11 @@ pub fn loadTextData(
             var form = try self.forms.alloc();
             errdefer self.forms.free(form);
 
-            form.initText(arena, &data) catch |e| {
+            form.initText(self.allocator, &data) catch |e| {
                 err("Failed reading form line: {any}. Error: {any}", .{ line, e });
                 return e;
             };
-            errdefer form.deinit(arena);
+            errdefer form.deinit(self.allocator);
 
             if (form.word.len == 0) {
                 err("Missing form word field on line: {any}\n", .{line});
@@ -198,17 +197,17 @@ pub fn loadTextData(
             }
 
             // Add this form to the lexeme it belongs to.
-            try self.by_form.add(arena, form.word, form);
+            try self.by_form.add(self.allocator, form.word, form);
             if (current_lexeme != null) {
                 form.lexeme = current_lexeme.?;
-                try current_lexeme.?.forms.append(arena, form);
+                try current_lexeme.?.forms.append(self.allocator, form);
             }
 
             // Add this form to the form uid lookup map
             if (form.uid < minimum_uid) {
                 try form_needs_uid.append(gpa, form);
             } else {
-                try self.by_form_uid.put(arena, form.uid, form);
+                try self.by_form_uid.put(self.allocator, form.uid, form);
                 if (form.uid > max_lexeme_uid) {
                     max_form_uid = form.uid;
                 }
@@ -238,7 +237,7 @@ pub fn loadTextData(
                 transliterated,
             });
         }
-        try self.by_gloss.add(arena, transliterated, form);
+        try self.by_gloss.add(self.allocator, transliterated, form);
     }
 
     // Build a search index of the glosses for each word.
@@ -252,14 +251,14 @@ pub fn loadTextData(
         }
         // Add the primary glosses
         seen.clear();
-        if (lexeme.forms.items[0].glosses_by_lang(.english)) |gloss| {
+        if (lexeme.forms.items[0].glossesByLang(.english)) |gloss| {
             for (gloss.entries.items) |entry| {
                 var i = GlossTokens{ .data = entry };
                 while (i.next()) |text| {
                     var buff: [@import("search_index.zig").max_word_size * 2]u8 = undefined;
                     const lower = std.ascii.lowerString(&buff, text);
                     if (lower.len == entry.len or !is_stopword(lower)) {
-                        try self.by_gloss.add(arena, lower, lexeme.forms.items[0]);
+                        try self.by_gloss.add(self.allocator, lower, lexeme.forms.items[0]);
                         _ = try seen.add(lower);
                     }
                 }
@@ -279,7 +278,7 @@ pub fn loadTextData(
                     while (i.next()) |text| {
                         if (text.len == item.len or !is_stopword(text)) {
                             if (try seen.add(text)) {
-                                try self.by_gloss.add(arena, text, form);
+                                try self.by_gloss.add(self.allocator, text, form);
                             }
                         }
                     }
@@ -349,7 +348,7 @@ pub fn saveBinaryFile(
 /// search index into a byte array.
 pub fn writeBinaryData(
     self: *const Dictionary,
-    allocator: Allocator,
+    gpa: Allocator,
     data: *std.Io.Writer,
     save_mode: SaveMode,
 ) (std.Io.Writer.Error || std.mem.Allocator.Error || error{IndexTooLarge})!void {
@@ -371,15 +370,15 @@ pub fn writeBinaryData(
 
     // Now output the search indexes
     debug("write form keyword index size={d}", .{self.by_form.keywordCount()});
-    try self.by_form.writeBinaryBytes(allocator, data);
+    try self.by_form.writeBinaryBytes(gpa, data);
     try data.writeByte(FS);
 
     debug("write gloss keyword index size={d}", .{self.by_gloss.keywordCount()});
-    try self.by_gloss.writeBinaryBytes(allocator, data);
+    try self.by_gloss.writeBinaryBytes(gpa, data);
     try data.writeByte(FS);
 
     debug("write transliteration keyword index size={d}", .{self.by_transliteration.keywordCount()});
-    try self.by_transliteration.writeBinaryBytes(allocator, data);
+    try self.by_transliteration.writeBinaryBytes(gpa, data);
     try data.writeByte(FS);
 }
 
@@ -388,7 +387,6 @@ pub fn writeBinaryData(
 /// search index.
 pub fn loadBinaryData(
     self: *Dictionary,
-    arena: Allocator,
     content: []const u8,
 ) !void {
     var data = BinaryReader.init(content);
@@ -403,14 +401,14 @@ pub fn loadBinaryData(
     };
 
     // Keep a cache of seen forms for index loading
-    try self.by_form_uid.ensureTotalCapacity(arena, count);
+    try self.by_form_uid.ensureTotalCapacity(self.allocator, count);
 
     // Read all lexemes with associated forms
     for (0..count) |i| {
         var lexeme = try self.lexemes.alloc();
-        errdefer lexeme.deinit(arena);
+        errdefer lexeme.deinit(self.allocator);
 
-        lexeme.initBinary(arena, &data, &self.forms) catch |e| {
+        lexeme.initBinary(self.allocator, &data, &self.forms) catch |e| {
             debug("failed reading word {any} at byte index: {any}. Error: {any}\n", .{ i, data.index, e });
             if (i > 0) {
                 //debug("previous word had uid {d}\n", .{self.lexemes.items[i - 1].uid});
@@ -428,7 +426,7 @@ pub fn loadBinaryData(
         // Any forms discovered while reading lexeme should
         // appear in the form index.
         for (lexeme.forms.items) |*f| {
-            try self.by_form_uid.put(arena, f.*.uid, f.*);
+            try self.by_form_uid.put(self.allocator, f.*.uid, f.*);
             //std.log.info("{s} add form {s} {d}", .{ lexeme.word, f.*.word, f.*.uid });
         }
         //if (data.next() != RS) {
@@ -449,19 +447,19 @@ pub fn loadBinaryData(
 
     // Read all search index data
     debug("loading form index", .{});
-    try self.by_form.loadBinaryData(arena, &data, &self.by_form_uid);
+    try self.by_form.loadBinaryData(self.allocator, &data, &self.by_form_uid);
     if (try data.u8() != FS) {
         return error.InvalidDictionaryFile;
     }
 
     debug("loading form gloss", .{});
-    try self.by_gloss.loadBinaryData(arena, &data, &self.by_form_uid);
+    try self.by_gloss.loadBinaryData(self.allocator, &data, &self.by_form_uid);
     if (try data.u8() != FS) {
         return error.InvalidDictionaryFile;
     }
 
     debug("loading transliteration index", .{});
-    try self.by_transliteration.loadBinaryData(arena, &data, &self.by_form_uid);
+    try self.by_transliteration.loadBinaryData(self.allocator, &data, &self.by_form_uid);
     if (try data.u8() != FS) {
         return error.InvalidDictionaryFile;
     }
@@ -630,7 +628,7 @@ test "basic_dictionary" {
 
     // Do some basic black box testing on a short simple dictionary file.
     const dictionary = try Dictionary.create(allocator);
-    defer dictionary.destroy(allocator);
+    defer dictionary.destroy();
 
     const data =
         \\δράκων|el|800000|Noun|ὁ|-οντος|1404|δράκ|en:dragon:large serpent#ru:дракон:большой змей#zh:龍:大蛇#es:dragón:serpiente grande||animal|
@@ -645,7 +643,7 @@ test "basic_dictionary" {
         \\
     ;
 
-    try dictionary.loadTextData(allocator, allocator, data);
+    try dictionary.loadTextData(allocator, data);
 
     try expectEqual(2, dictionary.lexemes.count());
     try expectEqual(7, dictionary.forms.count());
@@ -718,9 +716,9 @@ test "basic_dictionary" {
         try expectEqualSlices(u8, header, out.written()[0..header.len]);
 
         const dictionary2 = try Dictionary.create(allocator);
-        defer dictionary2.destroy(allocator);
+        defer dictionary2.destroy();
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
-        try dictionary2.loadBinaryData(allocator, out.written());
+        try dictionary2.loadBinaryData(out.written());
 
         try expectEqual(2, dictionary.lexemes.count());
         try expectEqual(7, dictionary.forms.count());
@@ -748,7 +746,7 @@ test "unaccented dictionary search" {
     const allocator = std.testing.allocator;
     // Test that unaccented searches return the correct result
     const dictionary = try Dictionary.create(allocator);
-    defer dictionary.destroy(allocator);
+    defer dictionary.destroy();
     const data =
         \\λύω|el|636670|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
         \\  λύω|V-PAI-1S|false|855890|en:I untie:I release:I loose|
@@ -757,7 +755,7 @@ test "unaccented dictionary search" {
         \\  δράκων|N-NSM|false|376270||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
         \\  δράκοντα|N-ASM|false|376280||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;
-    try dictionary.loadTextData(allocator, allocator, data);
+    try dictionary.loadTextData(allocator, data);
     const results = try dictionary.by_form.lookup("δρακων");
     try expect(results != null);
     try expectEqual(0, results.?.exact_accented.items.len);
@@ -769,13 +767,13 @@ test "load_count" {
     const allocator = std.testing.allocator;
 
     const dictionary = try Dictionary.create(allocator);
-    defer dictionary.destroy(allocator);
+    defer dictionary.destroy();
     const data =
         \\στόμαχος|el|960190|Noun|ὁ|-ου|4751|στόμαχ|en:stomach|||
         \\  στόμαχος|N-NSM|false|1286240||
         \\  στόμαχον|N-ASM|false|1286250||byz#1 Timothy 5:23 10,kjtr#1 Timothy 5:23 9,sbl#1 Timothy 5:23 9,sr#1 Timothy 5:23 10
     ;
-    try dictionary.loadTextData(allocator, allocator, data);
+    try dictionary.loadTextData(allocator, data);
     try expectEqual(1, dictionary.lexemes.count());
     try expectEqual(2, dictionary.forms.count());
 
@@ -792,7 +790,7 @@ test "gloss_fallback" {
     const allocator = std.testing.allocator;
 
     const dictionary = try Dictionary.create(allocator);
-    defer dictionary.destroy(allocator);
+    defer dictionary.destroy();
     const data =
         \\λύω|el|900000|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
         \\  λύω|V-PAI-1S|false|500000|en:I untie:I release:I loose|
@@ -802,7 +800,7 @@ test "gloss_fallback" {
         \\  δράκων|N-NSM|false|1000050||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
         \\  δράκοντα|N-ASM|false|1000051||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;
-    try dictionary.loadTextData(allocator, allocator, data);
+    try dictionary.loadTextData(allocator, data);
 
     try gloss_fallback_checker(dictionary);
 
@@ -814,9 +812,9 @@ test "gloss_fallback" {
     {
         try dictionary.writeBinaryData(allocator, &bin1.writer, .all_words);
         const dictionary2 = try Dictionary.create(allocator);
-        defer dictionary2.destroy(allocator);
+        defer dictionary2.destroy();
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
-        try dictionary2.loadBinaryData(allocator, bin1.written());
+        try dictionary2.loadBinaryData(bin1.written());
         try dictionary2.writeBinaryData(allocator, &bin2.writer, .all_words);
     }
     try expectEqualSlices(u8, bin1.written(), bin2.written());
@@ -829,7 +827,7 @@ test "arena_check" {
 
     // Test that unaccented searches return the correct result
     const dictionary = try Dictionary.create(allocator);
-    defer dictionary.destroy(allocator);
+    defer dictionary.destroy();
     const data =
         \\λύω|el|900000|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
         \\  λύω|V-PAI-1S|false|500000|en:I untie:I release:I loose|
@@ -839,7 +837,7 @@ test "arena_check" {
         \\  δράκων|N-NSM|false|1000050||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
         \\  δράκοντα|N-ASM|false|1000051||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;
-    try dictionary.loadTextData(allocator, allocator, data);
+    try dictionary.loadTextData(allocator, data);
 
     try gloss_fallback_checker(dictionary);
 
@@ -851,9 +849,9 @@ test "arena_check" {
     {
         try dictionary.writeBinaryData(allocator, &out.writer, .all_words);
         const dictionary2 = try Dictionary.create(allocator);
-        defer dictionary2.destroy(allocator);
+        defer dictionary2.destroy();
         //try expectEqualSlices(u8, &[_]u8{}, out.items);
-        try dictionary2.loadBinaryData(allocator, out.written());
+        try dictionary2.loadBinaryData(out.written());
         try dictionary2.writeBinaryData(allocator, &out2.writer, .all_words);
     }
     try expectEqualSlices(u8, out.written(), out2.written());
@@ -867,28 +865,28 @@ fn gloss_fallback_checker(dictionary: *Dictionary) !void {
         try expect(results != null);
         try expectEqual(1, results.?.exact_unaccented.items.len);
         const form = results.?.exact_unaccented.items[0];
-        try expectEqual(2, form.glosses_by_lang(Lang.english).?.glosses().len);
-        try expectEqualStrings("You untie", form.glosses_by_lang(Lang.english).?.glosses()[0]);
-        try expectEqualStrings("You release", form.glosses_by_lang(Lang.english).?.glosses()[1]);
+        try expectEqual(2, form.glossesByLang(Lang.english).?.glosses().len);
+        try expectEqualStrings("You untie", form.glossesByLang(Lang.english).?.glosses()[0]);
+        try expectEqualStrings("You release", form.glossesByLang(Lang.english).?.glosses()[1]);
     }
     {
         const results = try dictionary.by_form.lookup("λύει");
         try expect(results != null);
         try expectEqual(1, results.?.exact_accented.items.len);
         const form = results.?.exact_accented.items[0];
-        try expectEqual(3, form.glosses_by_lang(Lang.english).?.glosses().len);
-        try expectEqualStrings("untie", form.glosses_by_lang(Lang.english).?.glosses()[0]);
-        try expectEqualStrings("release", form.glosses_by_lang(Lang.english).?.glosses()[1]);
-        try expectEqualStrings("loose", form.glosses_by_lang(Lang.english).?.glosses()[2]);
+        try expectEqual(3, form.glossesByLang(Lang.english).?.glosses().len);
+        try expectEqualStrings("untie", form.glossesByLang(Lang.english).?.glosses()[0]);
+        try expectEqualStrings("release", form.glossesByLang(Lang.english).?.glosses()[1]);
+        try expectEqualStrings("loose", form.glossesByLang(Lang.english).?.glosses()[2]);
     }
     {
         const results = try dictionary.by_form.lookup("δρακων");
         try expect(results != null);
         try expectEqual(1, results.?.exact_unaccented.items.len);
         const form = results.?.exact_unaccented.items[0];
-        try expectEqual(2, form.glosses_by_lang(Lang.english).?.glosses().len);
-        try expectEqualStrings("dragon", form.glosses_by_lang(Lang.english).?.glosses()[0]);
-        try expectEqualStrings("large serpent", form.glosses_by_lang(Lang.english).?.glosses()[1]);
+        try expectEqual(2, form.glossesByLang(Lang.english).?.glosses().len);
+        try expectEqualStrings("dragon", form.glossesByLang(Lang.english).?.glosses()[0]);
+        try expectEqualStrings("large serpent", form.glossesByLang(Lang.english).?.glosses()[1]);
     }
 }
 
@@ -897,7 +895,7 @@ test "dictionary_destroy" {
 
     // Check for memory leaks in text loader
     const dictionary = try Dictionary.create(allocator);
-    defer dictionary.destroy(allocator);
+    defer dictionary.destroy();
     const data =
         \\λύω|el|636670|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
         \\  λύω|V-PAI-1S|false|855890|en:I untie:I release:I loose|
@@ -906,38 +904,38 @@ test "dictionary_destroy" {
         \\  δράκων|N-NSM|false|376027||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
         \\  δράκοντα|N-ASM|false|376028||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;
-    try dictionary.loadTextData(allocator, allocator, data);
+    try dictionary.loadTextData(allocator, data);
 
     // Check for memory leaks in binary loader
     var out = std.Io.Writer.Allocating.init(allocator);
     defer out.deinit();
     try dictionary.writeBinaryData(allocator, &out.writer, .all_words);
     const dictionary2 = try Dictionary.create(allocator);
-    defer dictionary2.destroy(allocator);
+    defer dictionary2.destroy();
     //try expectEqualSlices(u8, &[_]u8{}, out.items);
-    try dictionary2.loadBinaryData(allocator, out.written());
+    try dictionary2.loadBinaryData(out.written());
 }
 
 test "dictionary_destroy1" {
     const allocator = std.testing.allocator;
     // Another check for memory leaks
     const dictionary = try Dictionary.create(allocator);
-    defer dictionary.destroy(allocator);
+    defer dictionary.destroy();
     const data =
         \\λύω|el|636670|Verb|||3089|λύ|en:untie:hi|||
     ;
-    try dictionary.loadTextData(allocator, allocator, data);
+    try dictionary.loadTextData(allocator, data);
 }
 
 test "dictionary_destroy2" {
     const allocator = std.testing.allocator;
     // Another check for memory leaks
     const dictionary = try Dictionary.create(allocator);
-    defer dictionary.destroy(allocator);
+    defer dictionary.destroy();
     const data =
         \\λύω|el|636607|Verb|||3089|λύ||||
     ;
-    try dictionary.loadTextData(allocator, allocator, data);
+    try dictionary.loadTextData(allocator, data);
 }
 
 test "full_binary_dictionary" {
@@ -950,8 +948,8 @@ test "full_binary_dictionary" {
         try expectEqual(49759619, data.len);
 
         const dictionary = try Dictionary.create(gpa);
-        defer dictionary.destroy(gpa);
-        try dictionary.loadBinaryData(gpa, data);
+        defer dictionary.destroy();
+        try dictionary.loadBinaryData(data);
         try expectEqual(157986, dictionary.forms.count());
     }
 }
@@ -966,8 +964,8 @@ test "full_text_dictionary" {
         try expectEqual(12155992, data.len);
 
         const dictionary = try Dictionary.create(gpa);
-        defer dictionary.destroy(gpa);
-        try dictionary.loadTextData(gpa, gpa, data);
+        defer dictionary.destroy();
+        try dictionary.loadTextData(gpa, data);
 
         try expectEqual(157910, dictionary.forms.count());
     }
@@ -980,7 +978,7 @@ test "persist_dictionary" {
     defer tmp.cleanup();
 
     const dictionary = try Dictionary.create(gpa);
-    errdefer dictionary.destroy(gpa);
+    errdefer dictionary.destroy();
 
     const data =
         \\λύω|el|636607|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
@@ -990,7 +988,7 @@ test "persist_dictionary" {
         \\  δράκων|N-NSM|false|3760207||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
         \\  δράκοντα|N-ASM|false|3700628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;
-    try dictionary.loadTextData(gpa, gpa, data);
+    try dictionary.loadTextData(gpa, data);
     try expectEqual(4, dictionary.forms.count());
     try expectEqual(4, dictionary.by_form_uid.count());
     try expectEqual(27, dictionary.by_form.keywordCount());
@@ -1000,10 +998,10 @@ test "persist_dictionary" {
     try dictionary.saveBinaryFile(gpa, io, tmp.dir, "temp_binary_file", .all_words);
 
     var dictionary2 = try Dictionary.create(gpa);
-    errdefer dictionary2.destroy(gpa);
+    errdefer dictionary2.destroy();
     const data2 = try tmp.dir.readFileAlloc(io, "temp_binary_file", gpa, .unlimited);
     defer gpa.free(data2);
-    try dictionary2.loadBinaryData(gpa, data2);
+    try dictionary2.loadBinaryData(data2);
     try expectEqual(4, dictionary2.forms.count());
     try expectEqual(4, dictionary2.by_form_uid.count());
     try expectEqual(2, dictionary2.lexemes.count());
@@ -1011,14 +1009,14 @@ test "persist_dictionary" {
     // Lexeme index is not saved right now
     try expectEqual(0, dictionary2.by_lexeme.keywordCount());
 
-    dictionary.destroy(gpa);
-    dictionary2.destroy(gpa);
+    dictionary.destroy();
+    dictionary2.destroy();
 }
 
 test "partial dictionary search" {
     const allocator = std.testing.allocator;
     const dictionary = try Dictionary.create(allocator);
-    defer dictionary.destroy(allocator);
+    defer dictionary.destroy();
     const data =
         \\λύω|el|636607|Verb|||3089|λύ|en:untie:release:loose#ru:развязывать:освобождать:разрушать#zh:解開:釋放:放開#es:desato:suelto|||
         \\  λύω|V-PAI-1S|false|855809|en:I untie:I release:I loose|
@@ -1027,7 +1025,7 @@ test "partial dictionary search" {
         \\  δράκων|N-NSM|false|3760207||byz#Revelation 12:3 11,kjtr#Revelation 12:3 10,sbl#Revelation 12:3 10
         \\  δράκοντα|N-ASM|false|3700628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3
     ;
-    try dictionary.loadTextData(allocator, allocator, data);
+    try dictionary.loadTextData(allocator, data);
     const results = try dictionary.by_form.lookup("δρα");
     try expect(results != null);
     try expectEqual(0, results.?.exact_accented.items.len);
@@ -1040,9 +1038,9 @@ test "dictionary_file" {
     const io = std.testing.io;
 
     const dictionary = try Dictionary.create(allocator);
-    defer dictionary.destroy(allocator);
+    defer dictionary.destroy();
     const small_dict = @import("options").small_dict;
-    try dictionary.loadFile(allocator, allocator, io, small_dict);
+    try dictionary.loadFile(allocator, io, small_dict);
     var results = try dictionary.by_form.lookup("δρα");
     try expect(results == null);
     results = try dictionary.by_form.lookup("αρτο");
@@ -1078,9 +1076,9 @@ test "search" {
     const io = std.testing.io;
 
     const dict = try Dictionary.create(allocator);
-    defer dict.destroy(allocator);
+    defer dict.destroy();
     const small_dict = @import("options").small_dict;
-    try dict.loadFile(allocator, allocator, io, small_dict);
+    try dict.loadFile(allocator, io, small_dict);
     var results = try dict.by_form.lookup("Δαυιδ");
     try expect(results != null);
     try expectEqual(0, results.?.exact_accented.items.len);
@@ -1125,7 +1123,7 @@ test "accented_vs_unaccented" {
     const allocator = std.testing.allocator;
 
     const dict = try test_dictionary(allocator);
-    defer dict.destroy(allocator);
+    defer dict.destroy();
     const results = try dict.by_form.lookup("Δαυιδ");
     try expect(results != null);
 
@@ -1152,7 +1150,7 @@ test "search_result_form_order" {
     const allocator = std.testing.allocator;
 
     const dict = try test_dictionary(allocator);
-    defer dict.destroy(allocator);
+    defer dict.destroy();
     const results = try dict.by_form.lookup("ἅλας");
     try expect(results != null);
     try expect(results.?.exact_accented.items.len > 1);
@@ -1165,7 +1163,7 @@ test "search_result_form_order" {
 pub fn test_dictionary(allocator: Allocator) error{OutOfMemory}!*Dictionary {
     const larger_dict = @embedFile("larger_dict");
     var local_test_dictionary = try Dictionary.create(allocator);
-    local_test_dictionary.loadTextData(allocator, allocator, larger_dict) catch |e| {
+    local_test_dictionary.loadTextData(allocator, larger_dict) catch |e| {
         debug("dictionary load failed: {any}", .{e});
         @panic("load test dictionary failed");
     };

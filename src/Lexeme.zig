@@ -37,256 +37,6 @@ pub const empty: Lexeme = .{
     .adjective = "",
 };
 
-/// Release any memory under the control of this struct. The `forms` do not
-/// belong to this struct so are not released.
-pub fn deinit(self: *Lexeme, allocator: Allocator) void {
-    if (self.word.len > 0)
-        allocator.free(self.word);
-
-    for (self.glosses.items) |gloss|
-        gloss.destroy(allocator);
-
-    self.glosses.deinit(allocator);
-
-    if (self.tags) |tags| {
-        for (tags) |*tag|
-            allocator.free(tag.*);
-
-        allocator.free(tags);
-        self.tags = null;
-    }
-    if (self.root.len > 0)
-        allocator.free(self.root);
-
-    if (self.adjective.len > 0)
-        allocator.free(self.adjective);
-
-    if (self.genitiveSuffix.len > 0)
-        allocator.free(self.genitiveSuffix);
-
-    self.strongs.deinit(allocator);
-    self.forms.deinit(allocator);
-    self.* = undefined;
-}
-
-/// Lookup the glosses according to the users preferred language
-/// with no fallback to a default language such as English.
-pub fn glosses_by_lang(self: *const Lexeme, lang: Lang) ?*Gloss {
-    for (self.glosses.items) |gloss| {
-        if (gloss.*.lang == lang) return gloss;
-    }
-    return null;
-}
-
-/// Returns true if this `Lexeme` if the `tags` list contains this `tag`.
-pub fn has_tag(self: *const Lexeme, tag: []const u8) bool {
-    if (self.tags) |tags|
-        for (tags) |i|
-            if (std.ascii.eqlIgnoreCase(i, tag))
-                return true;
-    return false;
-}
-
-pub const VERB_PRIMARY = [_]Parsing{
-    parse("V-PAI-1S") catch unreachable,
-    parse("V-PEI-1S") catch unreachable,
-    parse("V-PMI-1S") catch unreachable,
-    parse("V-PPI-1S") catch unreachable,
-    parse("V-FAI-1S") catch unreachable,
-    parse("V-AAI-1S") catch unreachable,
-    parse("V-IAI-1S") catch unreachable,
-};
-pub const NOUN_PRIMARY = [_]Parsing{
-    parse("N-NSM") catch unreachable,
-    parse("N-NSF") catch unreachable,
-    parse("N-NSN") catch unreachable,
-};
-pub const PROPER_NOUN_PRIMARY = [_]Parsing{
-    parse("PN-NSM") catch unreachable,
-    parse("PN-NSF") catch unreachable,
-    parse("PN-NSN") catch unreachable,
-};
-pub const ADJECTIVE_PRIMARY = [_]Parsing{
-    parse("A-NSM") catch unreachable,
-    parse("A-NSF") catch unreachable,
-    parse("A-NSN") catch unreachable,
-};
-
-/// Get the _first_ form matching the specified parsing.
-pub fn formByParsing(self: *const Lexeme, parsing: Parsing) ?*Form {
-    var found: ?*Form = null;
-
-    // Loop until we fined the group of forms that have this
-    // parsing, then choose the preferred item.
-    for (self.forms.items) |current| {
-        if (current.parsing == parsing) {
-            if (found) |other| {
-                // Pick preferred option if one exists.
-                if (current.preferred) {
-                    found = current;
-                    continue;
-                }
-                // Pick form with glosses if the other does not.
-                if (current.glosses.items.len > 0 and other.glosses.items.len == 0) {
-                    found = current;
-                    continue;
-                }
-                if (current.glosses.items.len == 0 and other.glosses.items.len > 0) {
-                    continue;
-                }
-                if (other.references.items.len > current.references.items.len) {
-                    found = current;
-                }
-                continue;
-            }
-            found = current;
-            continue;
-        }
-        // The loop has moved past the items with the requested parsing.
-        if (found != null) {
-            return found;
-        }
-    }
-    return found;
-}
-
-/// Returns the form that would usually appear at the top of
-/// a list of forms in a table.
-pub fn primaryForm(self: *const Lexeme) ?*Form {
-    if (self.forms.items.len == 0)
-        return null;
-
-    switch (self.pos.part_of_speech) {
-        .verb => {
-            for (VERB_PRIMARY) |parsing| {
-                if (self.formByParsing(parsing)) |found| {
-                    return found;
-                }
-            }
-        },
-        .noun => {
-            for (NOUN_PRIMARY) |parsing| {
-                if (self.formByParsing(parsing)) |found| {
-                    return found;
-                }
-            }
-        },
-        .proper_noun => {
-            for (PROPER_NOUN_PRIMARY) |parsing| {
-                if (self.formByParsing(parsing)) |found| {
-                    return found;
-                }
-            }
-        },
-        .adjective => {
-            for (ADJECTIVE_PRIMARY) |parsing| {
-                if (self.formByParsing(parsing)) |found| {
-                    return found;
-                }
-            }
-        },
-        else => {},
-    }
-
-    return self.forms.items[0];
-}
-
-/// Compare two `Lexeme` entries by the `word` field. If both `word` values
-/// match, compare the `glosses` count.
-pub fn lessThan(_: ?[]const u8, self: *Lexeme, other: *Lexeme) bool {
-    const x = @import("sort.zig").order(self.word, other.word);
-    if (x == .lt)
-        return true
-    else if (x == .gt)
-        return false;
-
-    // Fallback to compare gloss count
-    return self.glosses.items.len < other.glosses.items.len;
-}
-
-/// Read binary `Lexeme` information along with any child `Form` binary
-/// records attached to the lexeme.
-pub fn initBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader, form_pool: anytype) error{
-    InvalidDictionaryFile,
-    InvalidLanguage,
-    InvalidGender,
-    InvalidModule,
-    InvalidBook,
-    OutOfMemory,
-    unexpected_eof,
-}!void {
-    self.* = .empty;
-    self.uid = try t.u24();
-    const word = try t.string();
-    self.word = try arena.dupe(u8, word);
-    self.lang = try Lang.from_u8(try t.u8());
-    self.pos = @bitCast(try t.u32());
-    self.article = try Gender.from_u8(try t.u8());
-
-    try readBinaryGlosses(arena, t, &self.glosses);
-    self.tags = null;
-    const tag_count = try t.u8();
-    if (tag_count > 0) {
-        self.tags = try arena.alloc([]const u8, tag_count);
-        for (0..tag_count) |i| {
-            const value = t.string() catch {
-                return error.InvalidDictionaryFile;
-            };
-            self.tags.?[i] = try arena.dupe(u8, value);
-        }
-    }
-    const strongs_count = try t.u8();
-    for (0..strongs_count) |_| {
-        try self.strongs.append(arena, try t.u16());
-    }
-
-    const form_count = try t.u16();
-    for (0..form_count) |_| {
-        const form_entry: *Form = try form_pool.alloc();
-        errdefer form_pool.free(form_entry);
-        try form_entry.initBinary(arena, t);
-        errdefer form_entry.deinit(arena);
-        form_entry.lexeme = self;
-        try self.forms.append(arena, form_entry);
-    }
-}
-
-/// Write lexeme data in binary format to a `writer`. Child `Form` records
-/// are not exported. See `Form.writeBinary`.
-pub fn writeBinary(
-    self: *const Lexeme,
-    data: *std.Io.Writer,
-) std.Io.Writer.Error!void {
-    try append_u24(data, self.uid);
-    try data.writeAll(self.word);
-    try data.writeByte(US);
-    try data.writeByte(@intFromEnum(self.lang));
-    try append_u32(data, @bitCast(self.pos));
-    try data.writeByte(@intFromEnum(self.article)); // M, F, M/F...
-    try append_u16(data, @intCast(self.glosses.items.len));
-    for (self.glosses.items) |gloss| {
-        try data.writeByte(@intFromEnum(gloss.lang));
-        for (gloss.glosses()) |item| {
-            try data.writeAll(item);
-            try data.writeByte(US);
-        }
-        try data.writeByte(RS);
-    }
-    if (self.tags) |tags| {
-        try append_u8(data, @intCast(tags.len));
-        for (tags) |tag| {
-            try data.writeAll(tag);
-            try data.writeByte(US);
-        }
-    } else {
-        try append_u8(data, 0);
-    }
-    try append_u8(data, @as(u8, @intCast(self.strongs.items.len)));
-    for (self.strongs.items) |number| {
-        try append_u16(data, number);
-    }
-}
-
 /// init `Lexeme` using text containing the lexeme information.
 /// Reads one line only. Does not read form entries on the
 /// following lines.
@@ -417,6 +167,298 @@ pub fn initText(self: *Lexeme, allocator: Allocator, t: *Parser) error{
     _ = t.readUntilEol();
 }
 
+/// Read binary `Lexeme` information along with any child `Form` binary
+/// records attached to the lexeme.
+pub fn initBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader, form_pool: anytype) error{
+    InvalidDictionaryFile,
+    InvalidLanguage,
+    InvalidGender,
+    InvalidModule,
+    InvalidBook,
+    OutOfMemory,
+    unexpected_eof,
+}!void {
+    self.* = .empty;
+    self.uid = try t.u24();
+    const word = try t.string();
+    self.word = try arena.dupe(u8, word);
+    self.lang = try Lang.from_u8(try t.u8());
+    self.pos = @bitCast(try t.u32());
+    self.article = try Gender.from_u8(try t.u8());
+
+    try readBinaryGlosses(arena, t, &self.glosses);
+    self.tags = null;
+    const tag_count = try t.u8();
+    if (tag_count > 0) {
+        self.tags = try arena.alloc([]const u8, tag_count);
+        for (0..tag_count) |i| {
+            const value = t.string() catch {
+                return error.InvalidDictionaryFile;
+            };
+            self.tags.?[i] = try arena.dupe(u8, value);
+        }
+    }
+    const strongs_count = try t.u8();
+    for (0..strongs_count) |_| {
+        try self.strongs.append(arena, try t.u16());
+    }
+
+    const form_count = try t.u16();
+    for (0..form_count) |_| {
+        const form_entry: *Form = try form_pool.alloc();
+        errdefer form_pool.free(form_entry);
+        try form_entry.initBinary(arena, t);
+        errdefer form_entry.deinit(arena);
+        form_entry.lexeme = self;
+        try self.forms.append(arena, form_entry);
+    }
+}
+
+/// Release any memory under the control of this struct. The `forms` do not
+/// belong to this struct so are not released.
+pub fn deinit(self: *Lexeme, allocator: Allocator) void {
+    if (self.word.len > 0)
+        allocator.free(self.word);
+
+    for (self.glosses.items) |gloss|
+        gloss.destroy(allocator);
+
+    self.glosses.deinit(allocator);
+
+    if (self.tags) |tags| {
+        for (tags) |*tag|
+            allocator.free(tag.*);
+
+        allocator.free(tags);
+        self.tags = null;
+    }
+    if (self.root.len > 0)
+        allocator.free(self.root);
+
+    if (self.adjective.len > 0)
+        allocator.free(self.adjective);
+
+    if (self.genitiveSuffix.len > 0)
+        allocator.free(self.genitiveSuffix);
+
+    self.strongs.deinit(allocator);
+    self.forms.deinit(allocator);
+    self.* = undefined;
+}
+
+/// Lookup the glosses according to the users preferred language
+/// with no fallback to a default language such as English.
+pub fn glossesByLang(self: *const Lexeme, lang: Lang) ?*Gloss {
+    for (self.glosses.items) |gloss| {
+        if (gloss.*.lang == lang) return gloss;
+    }
+    return null;
+}
+
+/// Returns true if this `Lexeme` if the `tags` list contains this `tag`.
+pub fn hasTag(self: *const Lexeme, tag: []const u8) bool {
+    if (self.tags) |tags|
+        for (tags) |i|
+            if (std.ascii.eqlIgnoreCase(i, tag))
+                return true;
+    return false;
+}
+
+pub const VERB_PRIMARY = [_]Parsing{
+    parse("V-PAI-1S") catch unreachable,
+    parse("V-PEI-1S") catch unreachable,
+    parse("V-PMI-1S") catch unreachable,
+    parse("V-PPI-1S") catch unreachable,
+    parse("V-FAI-1S") catch unreachable,
+    parse("V-AAI-1S") catch unreachable,
+    parse("V-IAI-1S") catch unreachable,
+};
+pub const NOUN_PRIMARY = [_]Parsing{
+    parse("N-NSM") catch unreachable,
+    parse("N-NSF") catch unreachable,
+    parse("N-NSN") catch unreachable,
+};
+pub const PROPER_NOUN_PRIMARY = [_]Parsing{
+    parse("PN-NSM") catch unreachable,
+    parse("PN-NSF") catch unreachable,
+    parse("PN-NSN") catch unreachable,
+};
+pub const ADJECTIVE_PRIMARY = [_]Parsing{
+    parse("A-NSM") catch unreachable,
+    parse("A-NSF") catch unreachable,
+    parse("A-NSN") catch unreachable,
+};
+
+/// Get the _first_ form matching the specified parsing.
+pub fn formByParsing(self: *const Lexeme, parsing: Parsing) ?*Form {
+    var found: ?*Form = null;
+
+    // Loop until we fined the group of forms that have this
+    // parsing, then choose the preferred item.
+    for (self.forms.items) |current| {
+        if (current.parsing == parsing) {
+            if (found) |other| {
+                // Pick preferred option if one exists.
+                if (current.preferred) {
+                    found = current;
+                    continue;
+                }
+                // Pick form with glosses if the other does not.
+                if (current.glosses.items.len > 0 and other.glosses.items.len == 0) {
+                    found = current;
+                    continue;
+                }
+                if (current.glosses.items.len == 0 and other.glosses.items.len > 0) {
+                    continue;
+                }
+                if (other.references.items.len > current.references.items.len) {
+                    found = current;
+                }
+                continue;
+            }
+            found = current;
+            continue;
+        }
+        // The loop has moved past the items with the requested parsing.
+        if (found != null) {
+            return found;
+        }
+    }
+    return found;
+}
+
+/// Returns the form that would usually appear at the top of
+/// a list of forms in a table.
+pub fn primaryForm(self: *const Lexeme) ?*Form {
+    if (self.forms.items.len == 0)
+        return null;
+
+    switch (self.pos.part_of_speech) {
+        .verb => {
+            for (VERB_PRIMARY) |parsing| {
+                if (self.formByParsing(parsing)) |found| {
+                    return found;
+                }
+            }
+        },
+        .noun => {
+            for (NOUN_PRIMARY) |parsing| {
+                if (self.formByParsing(parsing)) |found| {
+                    return found;
+                }
+            }
+        },
+        .proper_noun => {
+            for (PROPER_NOUN_PRIMARY) |parsing| {
+                if (self.formByParsing(parsing)) |found| {
+                    return found;
+                }
+            }
+        },
+        .adjective => {
+            for (ADJECTIVE_PRIMARY) |parsing| {
+                if (self.formByParsing(parsing)) |found| {
+                    return found;
+                }
+            }
+        },
+        else => {},
+    }
+
+    return self.forms.items[0];
+}
+
+/// Compare two `Lexeme` entries by the `word` field. If both `word` values
+/// match, compare the `glosses` count.
+pub fn lessThan(_: ?[]const u8, self: *Lexeme, other: *Lexeme) bool {
+    const x = @import("sort.zig").order(self.word, other.word);
+    if (x == .lt)
+        return true
+    else if (x == .gt)
+        return false;
+
+    // Fallback to compare gloss count
+    return self.glosses.items.len < other.glosses.items.len;
+}
+
+pub fn hasActiveForm(self: *const Lexeme) bool {
+    for (self.forms.items) |form| {
+        if (form.parsing.voice == .active) return true;
+    }
+    return false;
+}
+
+pub fn hasMiddlePassiveForm(self: *const Lexeme) bool {
+    for (self.forms.items) |form| {
+        if (form.parsing.voice == .middle or
+            form.parsing.voice == .passive or
+            form.parsing.voice == .middle_or_passive or
+            form.parsing.voice == .middle_deponent or
+            form.parsing.voice == .passive_deponent or
+            form.parsing.voice == .middle_or_passive_deponent)
+            return true;
+    }
+    return false;
+}
+
+pub fn hasMiddleForm(self: *const Lexeme) bool {
+    for (self.forms.items) |form| {
+        if (form.parsing.voice == .middle or
+            form.parsing.voice == .middle_or_passive or
+            form.parsing.voice == .middle_deponent or
+            form.parsing.voice == .middle_or_passive_deponent)
+            return true;
+    }
+    return false;
+}
+
+pub fn hasPassiveForm(self: *const Lexeme) bool {
+    for (self.forms.items) |form| {
+        if (form.parsing.voice == .passive or
+            form.parsing.voice == .middle_or_passive or
+            form.parsing.voice == .passive_deponent or
+            form.parsing.voice == .middle_or_passive_deponent)
+            return true;
+    }
+    return false;
+}
+
+/// Write lexeme data in binary format to a `writer`. Child `Form` records
+/// are not exported. See `Form.writeBinary`.
+pub fn writeBinary(
+    self: *const Lexeme,
+    data: *std.Io.Writer,
+) std.Io.Writer.Error!void {
+    try append_u24(data, self.uid);
+    try data.writeAll(self.word);
+    try data.writeByte(US);
+    try data.writeByte(@intFromEnum(self.lang));
+    try append_u32(data, @bitCast(self.pos));
+    try data.writeByte(@intFromEnum(self.article)); // M, F, M/F...
+    try append_u16(data, @intCast(self.glosses.items.len));
+    for (self.glosses.items) |gloss| {
+        try data.writeByte(@intFromEnum(gloss.lang));
+        for (gloss.glosses()) |item| {
+            try data.writeAll(item);
+            try data.writeByte(US);
+        }
+        try data.writeByte(RS);
+    }
+    if (self.tags) |tags| {
+        try append_u8(data, @intCast(tags.len));
+        for (tags) |tag| {
+            try data.writeAll(tag);
+            try data.writeByte(US);
+        }
+    } else {
+        try append_u8(data, 0);
+    }
+    try append_u8(data, @as(u8, @intCast(self.strongs.items.len)));
+    for (self.strongs.items) |number| {
+        try append_u16(data, number);
+    }
+}
+
 /// Write lexeme data in text format to a `writer`.
 pub fn writeText(
     self: *const Lexeme,
@@ -473,12 +515,12 @@ test "read_lexeme" {
     try expectEqual(Lang.english, lexeme.glosses.items[0].lang);
     try expectEqual(Lang.chinese, lexeme.glosses.items[1].lang);
     try expectEqual(Lang.spanish, lexeme.glosses.items[2].lang);
-    try expect(lexeme.glosses_by_lang(.hebrew) == null);
-    try expect(lexeme.glosses_by_lang(.english) != null);
-    try expectEqual(1, lexeme.glosses_by_lang(.spanish).?.glosses().len);
-    try expectEqualStrings("Aarón", lexeme.glosses_by_lang(.spanish).?.glosses()[0]);
-    try expectEqual(false, lexeme.has_tag("nothing"));
-    try expectEqual(true, lexeme.has_tag("person"));
+    try expect(lexeme.glossesByLang(.hebrew) == null);
+    try expect(lexeme.glossesByLang(.english) != null);
+    try expectEqual(1, lexeme.glossesByLang(.spanish).?.glosses().len);
+    try expectEqualStrings("Aarón", lexeme.glossesByLang(.spanish).?.glosses()[0]);
+    try expectEqual(false, lexeme.hasTag("nothing"));
+    try expectEqual(true, lexeme.hasTag("person"));
 }
 
 test "read_lexeme_short" {
@@ -609,7 +651,7 @@ test "return_correct_preferred_form" {
         \\  λύετε|V-PAI-2P|true|170009||
         \\
     ;
-    try dictionary.loadTextData(allocator, allocator, data);
+    try dictionary.loadTextData(allocator, data);
 
     try expectEqual(2, dictionary.lexemes.count());
     try expectEqual(10, dictionary.forms.count());
@@ -655,7 +697,12 @@ test "return_correct_preferred_form" {
     f = words.?.exact_accented.items[0].formByParsing(try parse("V-PAI-2P"));
     try expectEqual(170009, f.?.uid);
 
-    dictionary.destroy(allocator);
+    try expect(words.?.exact_accented.items[0].hasActiveForm());
+    try expect(!words.?.exact_accented.items[0].hasMiddlePassiveForm());
+    try expect(!words.?.exact_accented.items[0].hasPassiveForm());
+    try expect(!words.?.exact_accented.items[0].hasPassiveForm());
+
+    dictionary.destroy();
 }
 
 test "binary_lexeme_load_save" {

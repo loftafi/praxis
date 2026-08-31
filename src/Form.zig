@@ -29,6 +29,103 @@ pub fn init(self: *Form) void {
     self.* = .empty;
 }
 
+/// Read a single text line that contains a human readable description of a word form.
+///
+/// Examples of this format:
+///
+/// `Ἀαρών|N-NSM|false|17||`
+/// `δράκοντα|N-ASM|false|37628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3`
+pub fn initText(self: *Form, allocator: Allocator, t: *Parser) error{
+    MissingField,
+    Incomplete,
+    UnknownPartOfSpeech,
+    UnknownCase,
+    UnknownNumber,
+    UnknownGender,
+    UnknownPerson,
+    UnknownTenseForm,
+    UnknownVoice,
+    UnknownMood,
+    UnrecognisedValue,
+    InvalidParsing,
+    InvalidBooleanField,
+    InvalidU16,
+    InvalidU24,
+    InvalidReference,
+    OutOfMemory,
+}!void {
+    self.* = .empty;
+
+    _ = t.skip_whitespace_and_lines();
+    //const start = t.index;
+    const word_field = t.readField();
+    if (word_field.len == 0)
+        self.word = ""
+    else
+        self.word = try allocator.dupe(u8, word_field);
+    errdefer if (self.word.len > 0) allocator.free(self.word);
+
+    if (!t.consume_if('|')) return error.MissingField;
+
+    self.parsing = try readByzParsing(t); // parsing
+    if (!t.consume_if('|')) return error.MissingField;
+
+    self.preferred = try t.readBool();
+    if (!t.consume_if('|')) return error.MissingField;
+
+    self.uid = try t.readU24(); // uid
+    if (!t.consume_if('|')) return error.MissingField;
+
+    _ = try readTextGlosses(allocator, t, &self.glosses); // Glosses
+    if (!t.consume_if('|')) return error.MissingField;
+
+    try Reference.readReferenceList(allocator, t, &self.references); // References
+}
+
+/// Read all fields for a form. No final terminmating RS is consumed.
+/// Output fields:
+///
+///  - uid (3)
+///  - parsing (4)
+///  - flags (1)
+///  - word (len + US)
+///  - gloss count (2)
+///  - lang (1), entry* (len + US)
+///  - gloss end RS (1)
+///  - reference count (4)
+///  - module, book, chapter, verse, word (2,2,2,2,2)
+pub fn initBinary(self: *Form, arena: Allocator, t: *BinaryReader) !void {
+    self.uid = try t.u24();
+    self.parsing = @bitCast(try t.u32());
+    const flags = try t.u8();
+    self.preferred = flags & 0x1 == 0x1;
+    self.incorrect = flags & 0x10 == 0x10;
+    const word = t.string() catch return error.InvalidDictionaryFile;
+    if (word.len > 0) {
+        self.word = try arena.dupe(u8, word);
+    } else {
+        self.word = "";
+    }
+    self.glosses = .empty;
+    self.references = .empty;
+    try readBinaryGlosses(arena, t, &self.glosses);
+    const references_count = try t.u32();
+    for (0..references_count) |_| {
+        const module = try t.u16();
+        const book = try t.u16();
+        const chapter = try t.u16();
+        const verse = try t.u16();
+        const word_no = try t.u16();
+        try self.references.append(arena, Reference{
+            .module = try Module.from_u16(@intCast(module)),
+            .book = try Book.from_u16(book),
+            .chapter = chapter,
+            .verse = verse,
+            .word = word_no,
+        });
+    }
+}
+
 /// Deinitialise any memory associated with this `Form`.
 pub fn deinit(self: *Form, allocator: Allocator) void {
     if (self.word.len > 0)
@@ -80,7 +177,7 @@ pub fn writeBinary(
 
 /// Return the gloss set for a particular language. Returns null if
 /// no gloss set exists for the requested `lang`.
-pub fn glosses_by_lang(self: *const Form, lang: Lang) ?*Gloss {
+pub fn glossesByLang(self: *const Form, lang: Lang) ?*Gloss {
     for (self.glosses.items) |gloss| {
         if (gloss.*.lang == lang) return gloss;
     }
@@ -151,56 +248,12 @@ pub fn autocompleteLessThan(key: ?[]const u8, self: *const Form, other: *const F
     return self.uid < other.uid;
 }
 
-pub fn read_byz_parsing(t: *Parser) !Parsing {
+pub fn readByzParsing(t: *Parser) !Parsing {
     const field = t.readField();
     if (field.len == 0) {
         return Parsing{ .part_of_speech = .unknown };
     }
     return Byzantine.parse(field);
-}
-
-/// Read all fields for a form. No final terminmating RS is consumed.
-/// Output fields:
-///
-///  - uid (3)
-///  - parsing (4)
-///  - flags (1)
-///  - word (len + US)
-///  - gloss count (2)
-///  - lang (1), entry* (len + US)
-///  - gloss end RS (1)
-///  - reference count (4)
-///  - module, book, chapter, verse, word (2,2,2,2,2)
-pub fn initBinary(self: *Form, arena: Allocator, t: *BinaryReader) !void {
-    self.uid = try t.u24();
-    self.parsing = @bitCast(try t.u32());
-    const flags = try t.u8();
-    self.preferred = flags & 0x1 == 0x1;
-    self.incorrect = flags & 0x10 == 0x10;
-    const word = t.string() catch return error.InvalidDictionaryFile;
-    if (word.len > 0) {
-        self.word = try arena.dupe(u8, word);
-    } else {
-        self.word = "";
-    }
-    self.glosses = .empty;
-    self.references = .empty;
-    try readBinaryGlosses(arena, t, &self.glosses);
-    const references_count = try t.u32();
-    for (0..references_count) |_| {
-        const module = try t.u16();
-        const book = try t.u16();
-        const chapter = try t.u16();
-        const verse = try t.u16();
-        const word_no = try t.u16();
-        try self.references.append(arena, Reference{
-            .module = try Module.from_u16(@intCast(module)),
-            .book = try Book.from_u16(book),
-            .chapter = chapter,
-            .verse = verse,
-            .word = word_no,
-        });
-    }
 }
 
 pub fn writeText(
@@ -221,59 +274,6 @@ pub fn writeText(
     try writer.writeByte('|');
     try writeTextGlosses(writer, &self.glosses);
     try writer.writeByte('|');
-}
-
-/// Read a single text line that contains a human readable description of a word form.
-///
-/// Examples of this format:
-///
-/// `Ἀαρών|N-NSM|false|17||`
-/// `δράκοντα|N-ASM|false|37628||byz#Revelation 20:2 3,kjtr#Revelation 20:2 3`
-pub fn initText(self: *Form, allocator: Allocator, t: *Parser) error{
-    MissingField,
-    Incomplete,
-    UnknownPartOfSpeech,
-    UnknownCase,
-    UnknownNumber,
-    UnknownGender,
-    UnknownPerson,
-    UnknownTenseForm,
-    UnknownVoice,
-    UnknownMood,
-    UnrecognisedValue,
-    InvalidParsing,
-    InvalidBooleanField,
-    InvalidU16,
-    InvalidU24,
-    InvalidReference,
-    OutOfMemory,
-}!void {
-    self.* = .empty;
-
-    _ = t.skip_whitespace_and_lines();
-    //const start = t.index;
-    const word_field = t.readField();
-    if (word_field.len == 0)
-        self.word = ""
-    else
-        self.word = try allocator.dupe(u8, word_field);
-    errdefer if (self.word.len > 0) allocator.free(self.word);
-
-    if (!t.consume_if('|')) return error.MissingField;
-
-    self.parsing = try read_byz_parsing(t); // parsing
-    if (!t.consume_if('|')) return error.MissingField;
-
-    self.preferred = try t.readBool();
-    if (!t.consume_if('|')) return error.MissingField;
-
-    self.uid = try t.readU24(); // uid
-    if (!t.consume_if('|')) return error.MissingField;
-
-    _ = try readTextGlosses(allocator, t, &self.glosses); // Glosses
-    if (!t.consume_if('|')) return error.MissingField;
-
-    try Reference.readReferenceList(allocator, t, &self.references); // References
 }
 
 test "read_text_form" {

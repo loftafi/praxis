@@ -54,7 +54,7 @@ pub fn main(init: std.process.Init) !void {
     }
 
     const dictionary = try praxis.Dictionary.create(init.arena.allocator());
-    defer dictionary.destroy(init.arena.allocator());
+    defer dictionary.destroy();
 
     const data = std.Io.Dir.cwd().readFileAlloc(
         io,
@@ -67,7 +67,7 @@ pub fn main(init: std.process.Init) !void {
     };
     defer init.gpa.free(data);
 
-    try dictionary.loadData(init.arena.allocator(), init.gpa, data);
+    try dictionary.loadData(init.gpa, data);
 
     std.log.info("{d} lexemes, {d} forms, dictionary.name={s} dictionary.size={d}", .{
         dictionary.lexemes.count(),

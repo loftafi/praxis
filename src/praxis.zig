@@ -6,6 +6,8 @@
 pub const Dictionary = @import("Dictionary.zig").Dictionary;
 pub const SearchIndex = @import("search_index.zig").SearchIndex;
 pub const Normaliser = @import("Normaliser.zig");
+
+/// The maximum number of bytes (not unicode characters) a word may contain.
 pub const max_word_size = @import("search_index.zig").max_word_size;
 
 /// Contains information about a lexeme and its associated forms
@@ -79,7 +81,7 @@ pub const random = @import("random.zig");
 /// ascii or unicode characters from a string. Will be removed in the future.
 pub const Parser = @import("parser.zig");
 
-/// A slightly faster hash for HashMaps that use strings.
+/// A slightly faster hash for HashMaps that contain strings.
 pub const FarmHashContext = @import("farmhash64.zig").FarmHashContext;
 
 /// Hash a string into a 64 bit u64 value.

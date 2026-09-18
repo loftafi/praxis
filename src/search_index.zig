@@ -1,6 +1,7 @@
 //! Hold a collection of `lexeme` or `form` objects keyed to a
 //! string. Searching for a `lexeme` or `form` using an exact or partial string match.
 
+/// The maximum number of bytes (not unicode characters) a word may contain.
 pub const max_word_size = 500;
 const max_index_keyword_size = 50;
 const max_search_results = 60;

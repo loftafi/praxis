@@ -262,6 +262,7 @@ pub fn farmhash64(s: []const u8) u64 {
     );
 }
 
+/// A slightly faster hash for HashMaps that contain strings.
 pub const FarmHashContext = struct {
     pub fn hash(self: @This(), s: []const u8) u64 {
         _ = self;

@@ -8,7 +8,7 @@ languages.
 
 Care has been taken to carefully name and document each struct and
 important public method. See `praxis.zig` for the public interface, or
-view the zig [API documentation](https://loftafi.github.io/praxis/docs/).
+view the zig [API documentation](https://loftafi.github.io/praxis/).
 If anything is unclear please raise a Github issue.
 
 ## License

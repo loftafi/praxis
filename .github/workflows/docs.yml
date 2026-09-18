@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  docs:
+  build-docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -36,7 +36,7 @@ jobs:
         with:
           path: zig-out/docs
 
-  deploy:
+  deploy-docs:
     needs: docs # Wait for docs job to complete
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     environment:

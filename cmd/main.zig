@@ -9,8 +9,9 @@ pub fn main(init: std.process.Init) !void {
 
     var filename: ?[]const u8 = null;
     var output: ?[]const u8 = null;
-    var word: ?[]const u8 = null;
+    var search_word: ?[]const u8 = null;
     var mode: praxis.Dictionary.SaveMode = .all_words;
+    var output_binary: bool = false;
 
     var args = init.minimal.args.iterate();
     _ = args.skip();
@@ -27,30 +28,39 @@ pub fn main(init: std.process.Init) !void {
             mode = .gnt_words;
             continue;
         }
-        if (std.mem.eql(u8, arg, "-o")) {
+        if (std.mem.eql(u8, arg, "-ot")) {
             output = args.next() orelse {
                 help();
                 return;
             };
+            output_binary = false;
             continue;
         }
-        if (word != null) {
+        if (std.mem.eql(u8, arg, "-ob")) {
+            output = args.next() orelse {
+                help();
+                return;
+            };
+            output_binary = true;
+            continue;
+        }
+        if (search_word != null) {
             help();
             return;
         }
-        word = arg;
+        search_word = arg;
     }
 
     if (filename == null)
         filename = config.dict_bin;
 
-    if (output == null and word == null) {
+    if (output == null and search_word == null) {
         help();
         return;
     }
 
-    if (word != null) {
-        std.log.info("lookup {s} in {s}", .{ word.?, filename.? });
+    if (search_word) |keyword| {
+        info("lookup {s} in {s}", .{ keyword, filename.? });
     }
 
     const dictionary = try praxis.Dictionary.create(init.arena.allocator());
@@ -69,47 +79,59 @@ pub fn main(init: std.process.Init) !void {
 
     try dictionary.loadData(init.gpa, data);
 
-    std.log.info("{d} lexemes, {d} forms, dictionary.name={s} dictionary.size={d}", .{
+    info("{d} lexemes, {d} forms, dictionary.name={s} dictionary.size={d}", .{
         dictionary.lexemes.count(),
         dictionary.forms.count(),
         filename.?,
         data.len,
     });
 
-    if (word != null) {
-        const result = dictionary.by_lexeme.lookup(word.?) catch {
-            std.log.info("invalid utf8", .{});
-            return;
-        };
-        if (result == null) {
-            std.log.info("{s} lexeme not found", .{word.?});
-        } else {
-            std.log.info("found lexeme {s}", .{result.?.keyword});
-        }
-
-        const result2 = dictionary.by_form.lookup(word.?) catch {
-            std.log.info("invalid utf8", .{});
-            return;
-        };
-        if (result2 == null) {
-            std.log.info("{s} form not found", .{word.?});
-        } else {
-            std.log.info("found form {s}", .{result2.?.keyword});
-        }
+    if (output) |dest| {
+        info("Write binary dictionary to {s}. mode={t} ", .{ dest, mode });
+        if (output_binary)
+            try dictionary.saveBinaryFile(init.gpa, io, std.Io.Dir.cwd(), dest, mode)
+        else
+            try dictionary.saveTextFile(init.gpa, io, std.Io.Dir.cwd(), dest, mode);
         return;
     }
 
-    if (output != null) {
-        try dictionary.saveBinaryFile(init.gpa, io, std.Io.Dir.cwd(), output.?, mode);
+    if (search_word) |keyword| {
+        const result = dictionary.by_lexeme.lookup(keyword) catch {
+            info("invalid utf8", .{});
+            return;
+        };
+        if (result == null) {
+            info("{s} lexeme not found", .{keyword});
+        } else {
+            info("found lexeme {s}", .{result.?.keyword});
+        }
+
+        const result2 = dictionary.by_form.lookup(keyword) catch {
+            info("invalid utf8", .{});
+            return;
+        };
+        if (result2 == null) {
+            info("{s} form not found", .{keyword});
+        } else {
+            info("found form {s}", .{result2.?.keyword});
+        }
+        return;
     }
 }
 
 fn help() void {
-    print("Specify a valid command.\n", .{});
+    print("Specify a valid command:\n\n", .{});
     print("  praxis word \n", .{});
     print("  praxis -d [dictionary] word \n", .{});
+    print("  praxis -d [dictionary] -ob output.bin [-gnt] \n", .{});
+    print("  praxis -d [dictionary] -ot output.txt [-gnt] \n", .{});
     print("\n", .{});
 }
+
+/// Redirect all log messages to the engine log handler.
+pub const std_options: std.Options = .{
+    .log_level = if (builtin.mode == .debug) .debug else .info,
+};
 
 const builtin = @import("builtin");
 
@@ -117,7 +139,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const err = std.log.err;
-const warn = std.log.warn;
 const info = std.log.info;
 const debug = std.log.debug;
 const print = std.debug.print;

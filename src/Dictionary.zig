@@ -340,7 +340,7 @@ pub fn saveBinaryFile(
     var data: std.Io.Writer.Allocating = .init(temp_arena.allocator());
     defer data.deinit();
     try self.writeBinaryData(temp_arena.allocator(), &data.writer, save_mode);
-    debug("binary data size: {any}", .{data.written().len});
+    debug("binary dictionary data size={any}", .{data.written().len});
     try write_bytes_to_file(io, dir, filename, data.written());
 }
 
@@ -485,6 +485,7 @@ pub fn saveTextFile(
     self: *const Dictionary,
     allocator: Allocator,
     io: std.Io,
+    dir: std.Io.Dir,
     filename: []const u8,
     save_mode: SaveMode,
 ) !void {
@@ -494,8 +495,8 @@ pub fn saveTextFile(
     var data = std.Io.Writer.Allocating.init(allocator);
     defer data.deinit();
     try self.writeTextData(allocator, &data.writer, save_mode);
-    std.debug.print("text data size: {any}\n", .{data.items.len});
-    try write_bytes_to_file(io, data.items, filename);
+    std.log.debug("text dictionary data size={any}\n", .{data.written().len});
+    try write_bytes_to_file(io, dir, filename, data.written());
 }
 
 /// Export the entire dictionary contents into a byte arra

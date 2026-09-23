@@ -16,6 +16,7 @@ const minimum_uid: u24 = 100000;
 allocator: Allocator,
 
 by_lexeme: SearchIndex(*Lexeme, Lexeme.lessThan),
+by_lexeme_uid: AutoHashMapUnmanaged(u24, *Lexeme),
 by_form: SearchIndex(*Form, Form.autocompleteLessThan),
 by_form_uid: AutoHashMapUnmanaged(u24, *Form),
 by_gloss: SearchIndex(*Form, Form.autocompleteLessThan),
@@ -31,6 +32,7 @@ pub fn create(allocator: Allocator) error{OutOfMemory}!*Dictionary {
     dictionary.* = .{
         .allocator = allocator,
         .by_lexeme = .empty,
+        .by_lexeme_uid = .empty,
         .by_form = .empty,
         .by_form_uid = .empty,
         .by_gloss = .empty,
@@ -45,10 +47,10 @@ pub fn create(allocator: Allocator) error{OutOfMemory}!*Dictionary {
 /// This is usually an arena, but it does not have to be.
 pub fn destroy(self: *Dictionary) void {
     self.by_lexeme.deinit(self.allocator);
+    self.by_lexeme_uid.deinit(self.allocator);
     var lexeme_iter = self.lexemes.iterator();
-    while (lexeme_iter.next()) |lexeme| {
+    while (lexeme_iter.next()) |lexeme|
         lexeme.deinit(self.allocator);
-    }
     self.lexemes.deinit();
 
     self.by_form.deinit(self.allocator);
@@ -119,8 +121,6 @@ pub fn loadTextData(
     defer seen_lexemes.deinit(gpa);
 
     // Keep a cache of seen lexemes, and track which lexemes need a uid.
-    var lexeme_uid: AutoHashMapUnmanaged(u24, *Lexeme) = .empty;
-    defer lexeme_uid.deinit(gpa);
     var max_lexeme_uid: u24 = 0;
     var lexeme_needs_uid: ArrayListUnmanaged(*Lexeme) = .empty;
     defer lexeme_needs_uid.deinit(gpa);
@@ -169,7 +169,7 @@ pub fn loadTextData(
             if (lexeme.uid < minimum_uid) {
                 try lexeme_needs_uid.append(gpa, lexeme);
             } else {
-                try lexeme_uid.put(gpa, lexeme.uid, lexeme);
+                try self.by_lexeme_uid.put(gpa, lexeme.uid, lexeme);
                 if (lexeme.uid > max_lexeme_uid) {
                     max_lexeme_uid = lexeme.uid;
                 }
@@ -292,7 +292,7 @@ pub fn loadTextData(
     if (lexeme_needs_uid.items.len > 0) {
         info("{d} lexemes need uid.", .{lexeme_needs_uid.items.len});
         for (lexeme_needs_uid.items) |item| {
-            item.uid = self.generateUniqueUid(&lexeme_uid, &self.by_form_uid);
+            item.uid = self.generateUniqueUid();
             info("assign uid {s}={d}", .{ item.word, item.uid });
         }
         lexeme_needs_uid.clearAndFree(gpa);
@@ -300,26 +300,22 @@ pub fn loadTextData(
     if (form_needs_uid.items.len > 0) {
         info("{d} forms need uid.", .{form_needs_uid.items.len});
         for (form_needs_uid.items) |item| {
-            item.uid = self.generateUniqueUid(&lexeme_uid, &self.by_form_uid);
+            item.uid = self.generateUniqueUid();
             info("assign uid {s}={d}", .{ item.word, item.uid });
         }
         form_needs_uid.clearAndFree(gpa);
     }
 
     debug("Loaded dictionary.", .{});
-    return;
 }
 
-fn generateUniqueUid(
-    _: *const Dictionary,
-    lexeme_uid: *const AutoHashMapUnmanaged(u24, *Lexeme),
-    form_uid: *const AutoHashMapUnmanaged(u24, *Form),
-) u24 {
+/// Return a uid that has not already been used by a form or lexeme.
+pub fn generateUniqueUid(self: *const Dictionary) u24 {
     while (true) {
         const next = random_u24();
         if (next < minimum_uid) continue;
-        if (lexeme_uid.get(next) != null) continue;
-        if (form_uid.get(next) != null) continue;
+        if (self.by_lexeme_uid.get(next) != null) continue;
+        if (self.by_form_uid.get(next) != null) continue;
         return next;
     }
 }

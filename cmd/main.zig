@@ -129,13 +129,12 @@ pub fn main(init: std.process.Init) !void {
 }
 
 /// Add/update/validate forms of a lexeme.
-fn dataCleanup(allocator: Allocator, dictionary: *Dictionary) Allocator.Error!void {
+fn dataCleanup(allocator: Allocator, dictionary: *Dictionary) error{OutOfMemory}!void {
     var iter = dictionary.lexemes.iterator();
     while (iter.next()) |lexeme| {
         if (lexeme.pos.part_of_speech != .verb) continue;
         if (lexeme.strongs.items.len == 0) continue;
         if (lexeme.lang != .greek) continue;
-        info("cleanup {s} {t}", .{ lexeme.word, lexeme.pos.part_of_speech });
 
         // Present middle/passive/middle-passive duplicate to each other.
         // i.e. V-PPI-1S duplicates to V-PMI-1S
@@ -156,6 +155,20 @@ fn dataCleanup(allocator: Allocator, dictionary: *Dictionary) Allocator.Error!vo
                 try duplicatePresentPassiveForms(allocator, &dictionary.forms, form, .middle, &new_forms);
                 try duplicatePresentPassiveForms(allocator, &dictionary.forms, form, .passive, &new_forms);
             }
+        }
+        for (new_forms.items) |form| {
+            form.uid = dictionary.generateUniqueUid();
+            // Add this form to the lexeme it belongs to.
+            try lexeme.forms.append(dictionary.allocator, form);
+            dictionary.by_form.add(dictionary.allocator, form.word, form) catch |e| {
+                switch (e) {
+                    error.OutOfMemory => |f| return f,
+                    error.WordTooLong, error.EmptyWord, error.InvalidUtf8 => {
+                        unreachable; // Invalid word was loaded into index.
+                    },
+                }
+            };
+            try dictionary.by_form_uid.put(dictionary.allocator, form.uid, form);
         }
     }
 }

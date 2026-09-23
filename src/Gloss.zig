@@ -35,6 +35,18 @@ pub fn deinit(self: *Gloss, arena: Allocator) void {
     self.* = undefined;
 }
 
+/// Copy fields from one Form struct to another, including creating
+/// new unique memory allocations of strings and arrays.
+pub fn clone(self: *const Gloss, allocator: Allocator) error{OutOfMemory}!*Gloss {
+    var gloss = try allocator.create(Gloss);
+    errdefer allocator.destroy(gloss);
+    gloss.init();
+    gloss.lang = self.lang;
+    for (self.entries.items) |entry|
+        try gloss.entries.append(allocator, try allocator.dupe(u8, entry));
+    return gloss;
+}
+
 // Add a gloss
 pub fn add(self: *Gloss, arena: Allocator, gloss: []const u8) error{OutOfMemory}!void {
     try self.entries.append(arena, try arena.dupe(u8, gloss));
@@ -288,6 +300,23 @@ test "gloss_alloc" {
     try expectEqual(2, gloss.glosses().len);
     try expectEqualStrings("fish", gloss.glosses()[0]);
     try expectEqualStrings("cat", gloss.glosses()[1]);
+}
+
+test "gloss_clone" {
+    const allocator = std.testing.allocator;
+
+    var data = Parser.init("en:fish:cat#ko:apple|");
+    var gloss = try Gloss.create(allocator);
+    defer gloss.destroy(allocator);
+    try gloss.readText(std.testing.allocator, &data);
+
+    var gloss2 = try gloss.clone(allocator);
+    defer gloss2.destroy(allocator);
+
+    try expectEqual(gloss.lang, gloss2.lang);
+    try expectEqual(gloss.glosses().len, gloss2.glosses().len);
+    try expect(gloss.glosses()[0].ptr != gloss2.glosses()[0].ptr);
+    try expect(gloss.glosses()[1].ptr != gloss2.glosses()[1].ptr);
 }
 
 test "read_text_glosses" {

@@ -12,6 +12,7 @@ pub fn main(init: std.process.Init) !void {
     var search_word: ?[]const u8 = null;
     var mode: praxis.Dictionary.SaveMode = .all_words;
     var output_binary: bool = false;
+    var cleanup: bool = false;
 
     var args = init.minimal.args.iterate();
     _ = args.skip();
@@ -34,6 +35,10 @@ pub fn main(init: std.process.Init) !void {
                 return;
             };
             output_binary = false;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "-c")) {
+            cleanup = true;
             continue;
         }
         if (std.mem.eql(u8, arg, "-ob")) {
@@ -63,7 +68,7 @@ pub fn main(init: std.process.Init) !void {
         info("lookup {s} in {s}", .{ keyword, filename.? });
     }
 
-    const dictionary = try praxis.Dictionary.create(init.arena.allocator());
+    var dictionary = try Dictionary.create(init.arena.allocator());
     defer dictionary.destroy();
 
     const data = std.Io.Dir.cwd().readFileAlloc(
@@ -85,6 +90,10 @@ pub fn main(init: std.process.Init) !void {
         filename.?,
         data.len,
     });
+
+    if (cleanup) {
+        try dataCleanup(init.arena.allocator(), dictionary);
+    }
 
     if (output) |dest| {
         info("Write binary dictionary to {s}. mode={t} ", .{ dest, mode });
@@ -119,6 +128,77 @@ pub fn main(init: std.process.Init) !void {
     }
 }
 
+/// Add/update/validate forms of a lexeme.
+fn dataCleanup(allocator: Allocator, dictionary: *Dictionary) Allocator.Error!void {
+    var iter = dictionary.lexemes.iterator();
+    while (iter.next()) |lexeme| {
+        if (lexeme.pos.part_of_speech != .verb) continue;
+        if (lexeme.strongs.items.len == 0) continue;
+        if (lexeme.lang != .greek) continue;
+        info("cleanup {s} {t}", .{ lexeme.word, lexeme.pos.part_of_speech });
+
+        // Present middle/passive/middle-passive duplicate to each other.
+        // i.e. V-PPI-1S duplicates to V-PMI-1S
+        var new_forms: std.ArrayListUnmanaged(*Form) = .empty;
+        for (lexeme.forms.items) |form| {
+            if (form.parsing.part_of_speech != .verb) continue;
+            if (form.parsing.tense_form != .present) continue;
+            if (form.parsing.mood != .indicative) continue;
+            if (form.parsing.voice == .middle) {
+                try duplicatePresentPassiveForms(allocator, &dictionary.forms, form, .passive, &new_forms);
+                try duplicatePresentPassiveForms(allocator, &dictionary.forms, form, .middle_or_passive, &new_forms);
+            }
+            if (form.parsing.voice == .passive) {
+                try duplicatePresentPassiveForms(allocator, &dictionary.forms, form, .middle, &new_forms);
+                try duplicatePresentPassiveForms(allocator, &dictionary.forms, form, .middle_or_passive, &new_forms);
+            }
+            if (form.parsing.voice == .middle_or_passive) {
+                try duplicatePresentPassiveForms(allocator, &dictionary.forms, form, .middle, &new_forms);
+                try duplicatePresentPassiveForms(allocator, &dictionary.forms, form, .passive, &new_forms);
+            }
+        }
+    }
+}
+
+/// Present middle/passive/middle-passive endings should be the same. Duplicate
+/// from one voice to the other when possible.
+fn duplicatePresentPassiveForms(
+    allocator: Allocator,
+    pool: *@FieldType(Dictionary, "forms"),
+    form: *const Form,
+    add_voice: praxis.Parsing.Voice,
+    new_forms: *std.ArrayListUnmanaged(*Form),
+) Allocator.Error!void {
+    std.debug.assert(form.lexeme != null);
+    for (form.lexeme.?.forms.items) |item| {
+        if (item.parsing.part_of_speech != .verb) continue;
+        if (item.parsing.tense_form != .present) continue;
+        if (item.parsing.mood != .indicative) continue;
+        if (item.parsing.person != form.parsing.person) continue;
+        if (item.parsing.number != form.parsing.number) continue;
+        if (item.parsing.voice == add_voice) return;
+    }
+    for (new_forms.items) |item| {
+        if (item.parsing.part_of_speech != .verb) continue;
+        if (item.parsing.tense_form != .present) continue;
+        if (item.parsing.mood != .indicative) continue;
+        if (item.parsing.person != form.parsing.person) continue;
+        if (item.parsing.number != form.parsing.number) continue;
+        if (item.parsing.voice == add_voice) return;
+    }
+
+    info("would add form: {s} {s}: {t} -> {t}", .{
+        form.lexeme.?.word,
+        form.word,
+        form.parsing.voice,
+        add_voice,
+    });
+    var new_form = try pool.alloc();
+    try form.clone(allocator, new_form);
+    new_form.parsing.voice = add_voice;
+    try new_forms.append(allocator, new_form);
+}
+
 fn help() void {
     print("Specify a valid command:\n\n", .{});
     print("  praxis word \n", .{});
@@ -145,3 +225,5 @@ const print = std.debug.print;
 
 const praxis = @import("praxis");
 const Config = @import("Config.zig");
+const Dictionary = praxis.Dictionary;
+const Form = praxis.Form;

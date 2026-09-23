@@ -139,6 +139,25 @@ pub fn deinit(self: *Form, allocator: Allocator) void {
     self.* = undefined;
 }
 
+/// Copy fields from one Form struct to another, including creating
+/// new unique memory allocations of strings and arrays.
+pub fn clone(self: *const Form, allocator: Allocator, target: *Form) error{OutOfMemory}!void {
+    target.uid = self.uid;
+    target.word = self.word;
+    if (self.word.len == 0)
+        target.word = ""
+    else
+        target.word = try allocator.dupe(u8, self.word);
+    target.parsing = self.parsing;
+    target.preferred = self.preferred;
+    target.incorrect = self.incorrect;
+    target.glosses = .empty;
+    for (self.glosses.items) |gloss|
+        try target.glosses.append(allocator, try gloss.clone(allocator));
+    target.references = .empty;
+    try target.references.appendSlice(allocator, self.references.items);
+}
+
 /// Output the bytes representing the form. No terminator at
 /// end of record.
 pub fn writeBinary(
@@ -274,6 +293,22 @@ pub fn writeText(
     try writer.writeByte('|');
     try writeTextGlosses(writer, &self.glosses);
     try writer.writeByte('|');
+}
+
+test "clone" {
+    const gpa = std.testing.allocator;
+    var tp = try make_test_pool(gpa);
+    defer tp.deinit(.leak_check) catch {};
+
+    var data = Parser.init("ἄρτος|N-NSM|false|20||\nποῦ|N-NSM|true|21|en:fish|byz#Revelation 20:2 3,kjtr#Revelation 20:2 3\n");
+    var form = try tp.form_pool.alloc();
+    defer tp.form_pool.free(form);
+    try form.initText(std.testing.allocator, &data);
+    defer form.deinit(gpa);
+
+    var form2: Form = undefined;
+    try form.clone(gpa, &form2);
+    defer form2.deinit(gpa);
 }
 
 test "read_text_form" {

@@ -1,5 +1,3 @@
-const minimum_uid: u24 = 100000;
-
 /// Contain a set of `Lexeme` and lexeme `Form` objects. Search
 /// for forms and glosses that start with a desired string.
 ///
@@ -12,6 +10,8 @@ const minimum_uid: u24 = 100000;
 ///      defer dictionary.deinit(arena);
 ///
 pub const Dictionary = @This();
+
+const minimum_uid: u24 = 100000;
 
 allocator: Allocator,
 

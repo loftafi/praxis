@@ -1,3 +1,4 @@
+/// A simple object pool designed to hold large lists of Forms or Lexemes
 pub fn Pool(comptime T: type, comptime items_per_block: usize) type {
     return struct {
         const entity_size = sized(@sizeOf(T));

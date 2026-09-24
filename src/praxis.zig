@@ -90,6 +90,9 @@ pub const farmhash64 = @import("farmhash64.zig").farmhash64;
 /// Return a placeholder dictionary for testing.
 pub const test_dictionary = @import("Dictionary.zig").test_dictionary;
 
+/// A simple object pool designed to hold large lists of Forms or Lexemes
+pub const Pool = @import("Pool.zig").Pool;
+
 test {
     @import("std").testing.refAllDecls(@This());
 }

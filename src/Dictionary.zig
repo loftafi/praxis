@@ -25,8 +25,9 @@ by_transliteration: SearchIndex(*Form, Form.autocompleteLessThan),
 lexemes: Pool(Lexeme, 20000),
 forms: Pool(Form, 50000),
 
-/// Create a dictionary object with an allocator that may be an
-/// arena, or a general purpose allocator.
+/// Create a dictionary object with an allocator for long lived objects.
+/// It is recommended an arena is provided rather than a general purpose
+/// allocator.
 pub fn create(allocator: Allocator) error{OutOfMemory}!*Dictionary {
     const dictionary: *Dictionary = try allocator.create(Dictionary);
     dictionary.* = .{
@@ -69,6 +70,7 @@ pub fn destroy(self: *Dictionary) void {
 
 /// Load dictionary data from a file. Detect if the data is text or
 /// binary format. See `loadTextData()` and `loadBinaryData()` for details.
+/// `gpa` should be a temporary allocator for short lived objects.
 pub fn loadFile(
     self: *Dictionary,
     gpa: Allocator,

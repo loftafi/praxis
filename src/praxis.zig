@@ -77,6 +77,8 @@ pub const transliterate = @import("transliterate.zig").transliterate_word;
 
 pub const syllables = @import("Syllables.zig").syllables;
 
+pub const characterInfo = @import("CharacterInfo.zig").characterInfo;
+
 pub const random = @import("random.zig");
 
 /// Deprecated. Was used to share a standard way to read a sequence of

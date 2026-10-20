@@ -75,6 +75,8 @@ pub const parse_reference = Reference.parse;
 /// the Greek word.
 pub const transliterate = @import("transliterate.zig").transliterate_word;
 
+pub const syllables = @import("Syllables.zig").syllables;
+
 pub const random = @import("random.zig");
 
 /// Deprecated. Was used to share a standard way to read a sequence of

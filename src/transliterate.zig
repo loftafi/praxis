@@ -25,7 +25,8 @@ pub const ROUGH: u21 = '\u{0314}';
 pub const ACUTE_ALT: u21 = '\u{0341}';
 pub const GRAVE_ALT: u21 = '\u{0340}';
 pub const CIRCUMFLEX_ALT: u21 = '\u{0342}';
-pub const DIAERESIS: u21 = '\u{0308}';
+pub const DIAERESIS: u21 = '\u{0308}'; // i.e. ϊ
+pub const BREVE: u21 = '\u{0306}'; // i.e. ῐ
 
 /// Return a romanised equivalent of the specified codepoint.
 /// if the character does not belong in a romanised version
@@ -36,7 +37,7 @@ inline fn transliterate_char(codepoint: u21, allow_unicode: bool) []const u8 {
         '\n' => "",
         '\r' => "",
         '\t' => "",
-        ACUTE, ACUTE_ALT, CIRCUMFLEX, CIRCUMFLEX_ALT, MACRON => "",
+        ACUTE, ACUTE_ALT, CIRCUMFLEX, CIRCUMFLEX_ALT, MACRON, BREVE => "",
         GRAVE, GRAVE_ALT => "",
         DIAERESIS, IOTA_SUBSCRIPT => "",
         'Α', 'Ἀ', 'Ἁ', 'Ἄ', 'Ἆ', 'Ἇ', 'Ἅ', 'Ά', 'Ὰ' => "A",

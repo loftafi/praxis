@@ -149,32 +149,11 @@ pub const t = @import("transliterate.zig");
 /// and breathings grouped with the correct character.
 fn reverseUnicodeSlices(string: []const u8, buffer: [][]const u8) error{ NoSpace, InvalidUtf8 }![][]const u8 {
     var index = buffer.len;
-    var utf8 = (try std.unicode.Utf8View.init(string)).iterator();
-    var last: usize = 0;
-    while (utf8.nextCodepoint()) |c| {
-        defer last = utf8.i;
+    var utf8 = try readUtf8Slices(string);
+    while (try utf8.next()) |c| {
         if (index == 0) return error.NoSpace;
-        switch (c) {
-            t.ACUTE,
-            t.ACUTE_ALT,
-            t.GRAVE,
-            t.GRAVE_ALT,
-            t.SMOOTH,
-            t.ROUGH,
-            t.CIRCUMFLEX,
-            t.CIRCUMFLEX_ALT,
-            t.IOTA_SUBSCRIPT,
-            t.MACRON,
-            t.DIAERESIS,
-            => {
-                buffer[index].len += (utf8.i - last);
-                continue;
-            },
-            else => {
-                index -= 1;
-                buffer[index] = string[last..utf8.i];
-            },
-        }
+        index -= 1;
+        buffer[index] = c;
     }
     return buffer[index..buffer.len];
 }
@@ -192,7 +171,9 @@ test reverseUnicodeSlices {
     try expectEqualDeep(try reverseUnicodeSlices("ᾷι", &b), &[_][]const u8{ "ι", "ᾷ" });
     try expectEqualDeep(try reverseUnicodeSlices("ᾷ", &b), &[_][]const u8{"ᾷ"});
     try expectEqualDeep(try reverseUnicodeSlices("α\u{342}\u{345}ι", &b), &[_][]const u8{ "ι", "α\u{342}\u{345}" });
-    try expectEqualDeep(try reverseUnicodeSlices("α\u{301}βγε\u{313}\u{301}", &b), &[_][]const u8{ "ε\u{313}\u{301}", "γ", "β", "α\u{301}" });
+    try expectEqualDeep(&[_][]const u8{ "ε\u{313}\u{301}", "γ", "β", "α\u{301}" }, try reverseUnicodeSlices("α\u{301}βγε\u{313}\u{301}", &b));
+    try expectEqualDeep(&[_][]const u8{ "᾽", "δ" }, try reverseUnicodeSlices("δ᾽", &b));
+    try expectEqualDeep(&[_][]const u8{ "᾽", "λ", "λ", "ἀ" }, try reverseUnicodeSlices("ἀλλ᾽", &b));
     //for (try reverseUnicodeSlices("α\u{301}βγε\u{313}\u{301}", &b)) |value| {
     //    std.log.err(" ==> {s} {any}", .{ value, value });
     //}
@@ -278,3 +259,4 @@ const expectEqualDeep = std.testing.expectEqualDeep;
 const praxis = @import("praxis.zig");
 const max_word_size = praxis.max_word_size;
 const characterInfo = @import("CharacterInfo.zig").characterInfo;
+const readUtf8Slices = @import("CharacterInfo.zig").readUtf8Slices;

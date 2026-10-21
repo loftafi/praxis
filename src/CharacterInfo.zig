@@ -26,10 +26,11 @@ const fh = @import("farmhash64.zig").farmhash64;
 
 /// Return greek accent information about a unicode (nfc or nfd) encoded character.
 pub fn characterInfo(c: []const u8) *const Info {
-    @setEvalBranchQuota(2000);
+    @setEvalBranchQuota(4000);
 
     return switch (fh(c)) {
-        fh("Α"), fh("α"), fh("ᾰ") => &.{ .char = 'α', .utf8 = "a", .vowel = true, .breathing = .none, .accent = .unaccented, .diaeresis = false },
+        fh("α"), fh("Α"), fh("ᾰ") => &.{ .char = 'α', .utf8 = "a", .vowel = true, .breathing = .none, .accent = .unaccented, .diaeresis = false },
+        fh("α̈"), fh("Α̈") => &.{ .char = 'α', .utf8 = "a", .vowel = true, .breathing = .none, .accent = .unaccented, .diaeresis = true },
         fh("Ά"), fh("Α\u{301}"), fh("ά"), fh("α\u{301}") => &.{ .char = 'α', .utf8 = "a", .vowel = true, .breathing = .smooth, .accent = .acute, .diaeresis = false },
         fh("ᾴ"), fh("α\u{345}\u{301}"), fh("α\u{301}\u{345}") => &.{ .char = 'α', .utf8 = "a", .vowel = true, .breathing = .smooth, .accent = .acute, .diaeresis = false },
         fh("Ὰ"), fh("Α\u{300}"), fh("ὰ"), fh("α\u{300}") => &.{ .char = 'α', .utf8 = "a", .vowel = true, .breathing = .smooth, .accent = .grave, .diaeresis = false },
@@ -77,8 +78,10 @@ pub fn characterInfo(c: []const u8) *const Info {
         fh("ᾐ"), fh("η\u{345}\u{313}"), fh("η\u{313}\u{345}"), fh("ᾘ"), fh("Η\u{345}\u{313}"), fh("Η\u{313}\u{345}") => &.{ .char = 'η', .utf8 = "e", .vowel = true, .breathing = .smooth, .accent = .unaccented, .diaeresis = false },
         fh("ῃ"), fh("η\u{345}"), fh("ῌ"), fh("Η\u{345}") => &.{ .char = 'η', .utf8 = "e", .vowel = true, .breathing = .none, .accent = .unaccented, .diaeresis = false },
         fh("ῄ"), fh("η\u{345}\u{301}"), fh("η\u{345}\u{341}"), fh("η\u{301}\u{345}"), fh("η\u{341}\u{345}") => &.{ .char = 'η', .utf8 = "e", .vowel = true, .breathing = .none, .accent = .acute, .diaeresis = false },
+        fh("ᾕ"), fh("ᾝ"), fh("η\u{314}\u{345}\u{301}"), fh("η\u{314}\u{345}\u{341}"), fh("η\u{301}\u{345}\u{314}"), fh("η\u{341}\u{345}\u{314}") => &.{ .char = 'η', .utf8 = "e", .vowel = true, .breathing = .rough, .accent = .acute, .diaeresis = false },
         fh("ῂ"), fh("η\u{345}\u{300}"), fh("η\u{345}\u{340}"), fh("η\u{300}\u{345}"), fh("η\u{340}\u{345}") => &.{ .char = 'η', .utf8 = "e", .vowel = true, .breathing = .none, .accent = .grave, .diaeresis = false },
         fh("ῇ"), fh("η\u{302}\u{345}"), fh("η\u{345}\u{302}") => &.{ .char = 'η', .utf8 = "e", .vowel = true, .breathing = .none, .accent = .circumflex, .diaeresis = false },
+        fh("ᾗ"), fh("η\u{314}\u{302}\u{345}"), fh("η\u{345}\u{302}\u{314}") => &.{ .char = 'η', .utf8 = "e", .vowel = true, .breathing = .rough, .accent = .circumflex, .diaeresis = false },
         fh("ἦ"), fh("η\u{302}\u{313}"), fh("η\u{313}\u{302}"), fh("η\u{342}\u{313}"), fh("η\u{313}\u{342}"), fh("Ἦ"), fh("Η\u{302}\u{313}"), fh("Η\u{313}\u{302}"), fh("Η\u{342}\u{313}"), fh("Η\u{313}\u{342}") => &.{ .char = 'η', .utf8 = "e", .vowel = true, .breathing = .smooth, .accent = .circumflex, .diaeresis = false },
         fh("ἧ"), fh("η\u{302}\u{314}"), fh("η\u{314}\u{302}"), fh("η\u{342}\u{314}"), fh("η\u{314}\u{342}"), fh("Ἧ"), fh("Η\u{302}\u{314}"), fh("Η\u{314}\u{302}"), fh("Η\u{342}\u{314}"), fh("Η\u{314}\u{342}") => &.{ .char = 'η', .utf8 = "e", .vowel = true, .breathing = .rough, .accent = .circumflex, .diaeresis = false },
         fh("ᾖ"), fh("η\u{345}\u{302}\u{313}"), fh("η\u{345}\u{313}\u{302}"), fh("η\u{345}\u{342}\u{313}"), fh("η\u{345}\u{313}\u{342}"), fh("ᾞ"), fh("Η\u{345}\u{302}\u{313}"), fh("Η\u{345}\u{313}\u{302}"), fh("Η\u{345}\u{342}\u{313}"), fh("Η\u{345}\u{313}\u{342}"), fh("η\u{302}\u{313}\u{345}"), fh("η\u{313}\u{302}\u{345}"), fh("η\u{342}\u{313}\u{345}"), fh("η\u{313}\u{342}\u{345}"), fh("Η\u{302}\u{313}\u{345}"), fh("Η\u{313}\u{302}\u{345}"), fh("Η\u{342}\u{313}\u{345}"), fh("Η\u{313}\u{342}\u{345}") => &.{ .char = 'η', .utf8 = "e", .vowel = true, .breathing = .smooth, .accent = .circumflex, .diaeresis = false },
@@ -86,6 +89,7 @@ pub fn characterInfo(c: []const u8) *const Info {
         fh("Ι"), fh("ι"), fh("Ῐ"), fh("ῐ") => &.{ .char = 'ι', .utf8 = "i", .vowel = true, .breathing = .none, .accent = .unaccented, .diaeresis = false },
         fh("Ϊ"), fh("Ι\u{308}"), fh("ϊ"), fh("ι\u{308}") => &.{ .char = 'ι', .utf8 = "i", .vowel = true, .breathing = .none, .accent = .unaccented, .diaeresis = true },
         fh("ῖ") => &.{ .char = 'ι', .utf8 = "i", .vowel = true, .breathing = .none, .accent = .circumflex, .diaeresis = false },
+        fh("ῗ") => &.{ .char = 'ι', .utf8 = "i", .vowel = true, .breathing = .none, .accent = .circumflex, .diaeresis = true },
         fh("ἶ"), fh("Ἶ") => &.{ .char = 'ι', .utf8 = "i", .vowel = true, .breathing = .smooth, .accent = .circumflex, .diaeresis = false },
         fh("ἷ"), fh("Ἷ") => &.{ .char = 'ι', .utf8 = "i", .vowel = true, .breathing = .rough, .accent = .circumflex, .diaeresis = false },
         fh("Ί"), fh("Ι\u{301}"), fh("ί"), fh("ι\u{301}") => &.{ .char = 'ι', .utf8 = "i", .vowel = true, .breathing = .smooth, .accent = .acute, .diaeresis = false },
@@ -118,9 +122,11 @@ pub fn characterInfo(c: []const u8) *const Info {
         fh("ῥ"), fh("Ῥ"), fh("ρ\u{314}"), fh("Ρ\u{314}") => &.{ .char = 'ρ', .utf8 = "r", .vowel = false, .breathing = .rough, .accent = .unaccented, .diaeresis = false },
         fh("Σ"), fh("σ"), fh("ς") => &.{ .char = 'σ', .utf8 = "s", .vowel = false, .breathing = .none, .accent = .unaccented, .diaeresis = false },
         fh("Τ"), fh("τ") => &.{ .char = 'τ', .utf8 = "t", .vowel = false, .breathing = .none, .accent = .unaccented, .diaeresis = false },
-        fh("Ὑ"), fh("ὑ") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .rough, .accent = .unaccented, .diaeresis = false },
-        fh("Υ"), fh("υ") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .none, .accent = .unaccented, .diaeresis = false },
-        fh("Υ\u{313}"), fh("ὐ"), fh("υ\u{313}") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .smooth, .accent = .unaccented, .diaeresis = false },
+        fh("ὑ"), fh("Ὑ") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .rough, .accent = .unaccented, .diaeresis = false },
+        fh("υ"), fh("Υ"), fh("ῠ") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .none, .accent = .unaccented, .diaeresis = false },
+        fh("ὐ"), fh("Υ\u{313}"), fh("υ\u{313}") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .smooth, .accent = .unaccented, .diaeresis = false },
+        fh("ὖ"), fh("Υ\u{313}\u{302}"), fh("Υ\u{313}\u{342}"), fh("υ\u{302}\u{313}"), fh("υ\u{342}\u{313}") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .smooth, .accent = .circumflex, .diaeresis = false },
+        fh("ὗ"), fh("Υ\u{314}\u{302}"), fh("Υ\u{314}\u{342}"), fh("υ\u{302}\u{314}"), fh("υ\u{342}\u{314}") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .rough, .accent = .circumflex, .diaeresis = false },
         fh("Ὺ"), fh("Υ\u{300}"), fh("ὺ"), fh("υ\u{300}") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .smooth, .accent = .grave, .diaeresis = false },
         fh("ῦ"), fh("υ\u{302}"), fh("υ\u{342}") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .none, .accent = .circumflex, .diaeresis = false },
         fh("ὔ"), fh("υ\u{313}\u{301}"), fh("υ\u{301}\u{313}") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .smooth, .accent = .acute, .diaeresis = false },
@@ -134,6 +140,8 @@ pub fn characterInfo(c: []const u8) *const Info {
         fh("Ϋ"), fh("ϋ") => &.{ .char = 'υ', .utf8 = "υ", .vowel = true, .breathing = .none, .accent = .unaccented, .diaeresis = true },
         fh("ύ̈"), // fh("\u{3cd}\u{308}"),
         => &.{ .char = 'υ', .utf8 = "υ", .vowel = true, .breathing = .none, .accent = .acute, .diaeresis = true },
+        fh("ὐ̈") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .smooth, .accent = .unaccented, .diaeresis = true },
+        fh("ΰ"), fh("υ\u{308}\u{300}"), fh("υ\u{300}\u{308}"), fh("υ\u{308}\u{340}"), fh("υ\u{340}\u{308}") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .none, .accent = .acute, .diaeresis = true },
         fh("Ὓ"), fh("ὓ") => &.{ .char = 'υ', .utf8 = "u", .vowel = true, .breathing = .rough, .accent = .grave, .diaeresis = false },
         fh("Φ"), fh("φ") => &.{ .char = 'φ', .utf8 = "f", .vowel = false, .breathing = .none, .accent = .unaccented, .diaeresis = false },
         fh("Χ"), fh("χ") => &.{ .char = 'χ', .utf8 = "ch", .vowel = false, .breathing = .none, .accent = .unaccented, .diaeresis = false },
@@ -146,12 +154,18 @@ pub fn characterInfo(c: []const u8) *const Info {
         fh("Ὡ"), fh("ὡ") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .rough, .accent = .unaccented, .diaeresis = false },
         fh("Ω"), fh("ω") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .none, .accent = .unaccented, .diaeresis = false },
         fh("Ώ"), fh("Ω\u{301}"), fh("ώ"), fh("ω\u{301}") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .smooth, .accent = .acute, .diaeresis = false },
-        fh("ῶ") => &.{ .char = 'ῶ', .utf8 = "o", .vowel = true, .breathing = .none, .accent = .circumflex, .diaeresis = false },
+        fh("ῶ"), fh("ω\u{302}"), fh("ω\u{342}") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .none, .accent = .circumflex, .diaeresis = false },
         fh("ὥ"), fh("ω\u{301}\u{314}"), fh("ω\u{314}\u{301}"), fh("Ὥ"), fh("Ω\u{301}\u{314}"), fh("Ω\u{314}\u{301}") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .rough, .accent = .acute, .diaeresis = false },
         fh("ῳ"), fh("ω\u{345}"), fh("ῼ"), fh("Ω\u{345}") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .none, .accent = .unaccented, .diaeresis = false },
+        fh("ᾠ"), fh("ω\u{313}\u{345}"), fh("ω\u{345}\u{313}"), fh("ᾨ"), fh("Ω\u{313}\u{345}"), fh("Ω\u{345}\u{313}") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .smooth, .accent = .unaccented, .diaeresis = false },
         fh("ῴ"), fh("ω\u{345}\u{301}"), fh("ω\u{301}\u{345}") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .none, .accent = .acute, .diaeresis = false },
         fh("ῲ"), fh("ω\u{345}\u{300}"), fh("ω\u{300}\u{345}") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .none, .accent = .grave, .diaeresis = false },
         fh("ῷ"), fh("ω\u{302}\u{345}"), fh("ω\u{345}\u{302}") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .none, .accent = .circumflex, .diaeresis = false },
+        fh("ᾦ"), fh("ω\u{313}\u{302}\u{345}"), fh("ω\u{313}\u{345}\u{302}"), fh("ω\u{302}\u{345}\u{313}"), fh("ω\u{345}\u{302}\u{313}"), fh("ᾮ"), fh("Ω\u{313}\u{302}\u{345}"), fh("Ω\u{313}\u{345}\u{302}"), fh("Ω\u{302}\u{345}\u{313}"), fh("Ω\u{345}\u{302}\u{313}") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .smooth, .accent = .circumflex, .diaeresis = false },
+        fh("ᾧ"), fh("ω\u{314}\u{302}\u{345}"), fh("ω\u{314}\u{345}\u{302}"), fh("ω\u{302}\u{345}\u{314}"), fh("ω\u{345}\u{302}\u{314}"), fh("ᾯ"), fh("Ω\u{314}\u{302}\u{345}"), fh("Ω\u{314}\u{345}\u{302}"), fh("Ω\u{302}\u{345}\u{314}"), fh("Ω\u{345}\u{302}\u{314}") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .rough, .accent = .circumflex, .diaeresis = false },
+        fh("ὦ"), fh("ω\u{313}\u{302}"), fh("ω\u{302}\u{313}"), fh("Ὦ"), fh("Ω\u{313}\u{302}"), fh("Ω\u{302}\u{313}") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .smooth, .accent = .circumflex, .diaeresis = false },
+        fh("ᾤ"), fh("ω\u{313}\u{345}\u{301}"), fh("ω\u{301}\u{345}\u{313}") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .smooth, .accent = .acute, .diaeresis = false },
+        fh("ὧ"), fh("Ὧ"), fh("ω\u{314}\u{302}"), fh("ω\u{302}\u{314}"), fh("Ω\u{314}\u{302}"), fh("Ω\u{302}\u{314}") => &.{ .char = 'ω', .utf8 = "o", .vowel = true, .breathing = .rough, .accent = .circumflex, .diaeresis = false },
         fh("ϝ") => &.{ .char = 'ϝ', .utf8 = "w", .vowel = false, .breathing = .none, .accent = .unaccented, .diaeresis = false },
         fh("᾽") => &.{ .char = '᾽', .utf8 = "'", .vowel = true, .breathing = .none, .accent = .unaccented, .diaeresis = false },
         else => &.{ .char = 0, .utf8 = "", .vowel = false, .breathing = .none, .accent = .unaccented, .diaeresis = false },
@@ -267,8 +281,6 @@ test "real_data_test" {
         }
         previous = slice;
     }
-
-    try expectEqual(1, 2);
 }
 
 const std = @import("std");

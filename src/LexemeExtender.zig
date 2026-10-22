@@ -109,7 +109,7 @@ fn equalize(
         form.uid = dictionary.generateUniqueUid();
         try dictionary.by_form_uid.put(dictionary.allocator, form.uid, form);
         try lexeme.forms.append(dictionary.allocator, form);
-        info("add form {s} parsing {s} uid {d}", .{ form.word, left, form.uid });
+        info("add form {s} parsing {s} -> {s} uid {d}", .{ form.word, right, left, form.uid });
         return;
     }
 
@@ -125,7 +125,7 @@ fn equalize(
         form.uid = dictionary.generateUniqueUid();
         try dictionary.by_form_uid.put(dictionary.allocator, form.uid, form);
         try lexeme.forms.append(dictionary.allocator, form);
-        info("add form {s} parsing {s} uid {d}", .{ form.word, left, form.uid });
+        info("add form {s} parsing {s} -> {s} uid {d}", .{ form.word, left, right, form.uid });
         return;
     }
 }

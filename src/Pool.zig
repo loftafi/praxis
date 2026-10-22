@@ -1,16 +1,13 @@
 /// A simple object pool designed to hold large lists of Forms or Lexemes
 pub fn Pool(comptime T: type, comptime items_per_block: usize) type {
     return struct {
-        const entity_size = alignSized(T);
-        const block_size = entity_size * items_per_block;
-
         allocator: Allocator,
 
-        blocks: std.ArrayListUnmanaged([]u8),
+        blocks: std.ArrayListUnmanaged([]T),
         block_index: usize,
 
         // If free made a whole block unused, keep it here.
-        spare_block: std.ArrayListUnmanaged([]u8),
+        spare_block: std.ArrayListUnmanaged([]T),
 
         pub const Self = @This();
 
@@ -21,7 +18,7 @@ pub fn Pool(comptime T: type, comptime items_per_block: usize) type {
                 .block_index = 0,
                 .spare_block = .empty,
             };
-            const new_block = try gpa.alloc(u8, block_size);
+            const new_block = try gpa.alloc(T, items_per_block);
             errdefer gpa.free(new_block);
             try pool.blocks.append(gpa, new_block);
             try pool.spare_block.ensureTotalCapacity(gpa, pool.blocks.items.len);
@@ -40,19 +37,19 @@ pub fn Pool(comptime T: type, comptime items_per_block: usize) type {
         }
 
         pub fn count(self: *const Self) usize {
-            return (self.blocks.items.len * block_size / entity_size) -
-                ((block_size - self.block_index) / entity_size);
+            return (self.blocks.items.len * items_per_block) -
+                (items_per_block - self.block_index);
         }
 
         pub fn alloc(self: *Self) Allocator.Error!*T {
-            if (self.block_index == block_size) {
+            if (self.block_index == items_per_block) {
                 @branchHint(.unlikely);
                 if (self.spare_block.items.len > 0) {
                     const spare = self.spare_block.swapRemove(self.spare_block.items.len - 1);
                     try self.blocks.append(self.allocator, spare);
                     self.block_index = 0;
                 } else {
-                    const new_block = try self.allocator.alignedAlloc(u8, .fromByteUnits(@alignOf(T)), block_size);
+                    const new_block = try self.allocator.alloc(T, items_per_block);
                     errdefer self.allocator.free(new_block);
                     try self.blocks.append(self.allocator, new_block);
                     try self.spare_block.ensureTotalCapacity(self.allocator, self.blocks.items.len);
@@ -60,32 +57,40 @@ pub fn Pool(comptime T: type, comptime items_per_block: usize) type {
                 }
             }
             const block = self.blocks.last().?;
-            const next = block.ptr + self.block_index;
-            const entity: *T = @as(*T, @ptrCast(@alignCast(next)));
-            self.block_index += entity_size;
+            const entity: *T = &block[self.block_index];
+            self.block_index += 1;
             entity.* = undefined;
             return entity;
         }
 
         // The final last allocated item may be freed.
         pub fn free(self: *Self, item: *T) void {
+            if (self.blocks.items.len == 0) {
+                // Should not occur.
+                err("Pool free called when pool is not initialised.", .{});
+                return;
+            }
+            // If we are releasing the very last item returned, we just
+            // decrement the index.
             const block = self.blocks.last().?;
             if (self.block_index > 0) {
-                const last: *T = @as(*T, @ptrCast(@alignCast(block.ptr + self.block_index - entity_size)));
+                const last: *T = &block[self.block_index - 1];
+                debug("Pool free releasing just allocated item.", .{});
                 if (item == last) {
-                    self.block_index -= entity_size;
+                    self.block_index -= 1;
                 }
                 return;
             }
             if (self.blocks.items.len == 1) {
+                // We are already at zero on the only block. This
+                // should not happen.
+                debug("Pool free called when pool is empty.", .{});
                 return;
-            } else if (self.blocks.items.len > 1) {
-                const removed = self.blocks.swapRemove(self.blocks.items.len - 1);
-                self.spare_block.appendAssumeCapacity(removed);
-                self.block_index = block_size - entity_size;
-            } else if (self.blocks.items.len == 0) {
-                unreachable;
             }
+            std.debug.assert(self.blocks.items.len > 1);
+            const removed = self.blocks.swapRemove(self.blocks.items.len - 1);
+            self.spare_block.appendAssumeCapacity(removed);
+            self.block_index = items_per_block - 1;
         }
 
         pub fn iterator(self: *const Self) Iterator {
@@ -98,7 +103,7 @@ pub fn Pool(comptime T: type, comptime items_per_block: usize) type {
         }
 
         pub const Iterator = struct {
-            blocks: [][]u8,
+            blocks: [][]T,
             last_block_index: usize,
             current_block: usize,
             current_block_index: usize,
@@ -115,9 +120,9 @@ pub fn Pool(comptime T: type, comptime items_per_block: usize) type {
                         return null;
                     }
                 }
-                const entity: *T = @as(*T, @ptrCast(@alignCast(self.blocks[self.current_block].ptr + self.current_block_index)));
-                self.current_block_index += entity_size;
-                if (self.current_block_index == block_size) {
+                const entity: *T = &self.blocks[self.current_block][self.current_block_index];
+                self.current_block_index += 1;
+                if (self.current_block_index == items_per_block) {
                     self.current_block_index = 0;
                     self.current_block += 1;
                 }
@@ -150,23 +155,29 @@ test "alloc" {
     try expectEqual(0, pool.count());
     var item1 = try pool.alloc();
     item1.a = 5;
+    try expectEqual(1, pool.block_index);
     try expectEqual(1, pool.count());
-    try expectEqual(alignSized(@sizeOf(Sample)), pool.block_index);
-    try expectEqual(5, pool.blocks.items[0][0 + 2]);
+    try expectEqual(5, pool.blocks.items[0][0].a);
     var item2 = try pool.alloc();
     item2.a = 6;
     try expectEqual(2, pool.count());
-    try expectEqual(6, pool.blocks.items[0][alignSized(@sizeOf(Sample)) + 2]);
-    try expectEqual(alignSized(@sizeOf(Sample)) * 2, pool.block_index);
+    try expectEqual(6, pool.blocks.items[0][1].a);
+    try expectEqual(2, pool.block_index);
     _ = try pool.alloc();
     _ = try pool.alloc();
     try expectEqual(4, pool.count());
-    try expectEqual(alignSized(@sizeOf(Sample)) * 4, pool.block_index);
+    try expectEqual(1, pool.blocks.items.len);
+    try expectEqual(4, pool.block_index);
     var item5 = try pool.alloc();
     item5.a = 7;
+    try expectEqual(2, pool.blocks.items.len);
     try expectEqual(5, pool.count());
-    try expectEqual(7, pool.blocks.items[1][0 + 2]);
-    try expectEqual(alignSized(@sizeOf(Sample)), pool.block_index);
+    try expectEqual(7, pool.blocks.items[1][0].a);
+    try expectEqual(1, pool.block_index);
+
+    pool.free(item5);
+    const item5repeat = try pool.alloc();
+    try expectEqual(item5, item5repeat);
 }
 
 test "free" {
@@ -322,5 +333,7 @@ test "iterator" {
 }
 
 const std = @import("std");
+const err = std.log.err;
+const debug = std.log.debug;
 const Allocator = std.mem.Allocator;
 const expectEqual = std.testing.expectEqual;

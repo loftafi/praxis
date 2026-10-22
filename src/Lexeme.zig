@@ -8,6 +8,9 @@
 const Lexeme = @This();
 
 uid: u24 = 0,
+
+/// Either a zero length static string, or an alloc'ed
+/// non zero length string that must be free'd on `deinit`.
 word: []const u8,
 lang: Lang = Lang.unknown,
 article: Gender = .unknown,
@@ -66,7 +69,7 @@ pub fn initText(self: *Lexeme, allocator: Allocator, t: *Parser) error{
 
     if (!t.consume_if('|')) {
         // Extra warning on first field to highlight where problem is
-        err("expected |, found {d} while reading line {d} (word={s})", .{ t.peek(), t.line, word_field });
+        err("expected |, found {d} while reading line {d} (word={s})", .{ t.peek(), t.line, self.word });
         return error.MissingField;
     }
 
@@ -181,7 +184,12 @@ pub fn initBinary(self: *Lexeme, arena: Allocator, t: *BinaryReader, form_pool: 
     self.* = .empty;
     self.uid = try t.u24();
     const word = try t.string();
-    self.word = try arena.dupe(u8, word);
+    if (word.len == 0) {
+        self.word = "";
+        warn("Binary file lexeme uid={d} has empty word field.", .{self.uid});
+    } else {
+        self.word = try arena.dupe(u8, word);
+    }
     self.lang = try Lang.from_u8(try t.u8());
     self.pos = @bitCast(try t.u32());
     self.article = try Gender.from_u8(try t.u8());
@@ -327,6 +335,37 @@ pub fn formByParsing(self: *const Lexeme, parsing: Parsing) ?*Form {
     return found;
 }
 
+pub fn hasMasculineAdjective(self: *const Lexeme) bool {
+    for (self.forms.items) |form| {
+        if (form.parsing.part_of_speech != .adjective) continue;
+        if (form.parsing.gender == .masculine) return true;
+        if (form.parsing.gender == .masculine_neuter) return true;
+        if (form.parsing.gender == .masculine_feminine) return true;
+        if (form.parsing.gender == .masculine_feminine_neuter) return true;
+    }
+    return false;
+}
+
+pub fn hasFeminineNoun(self: *const Lexeme) bool {
+    for (self.forms.items) |form| {
+        if (form.parsing.part_of_speech != .noun) continue;
+        if (form.parsing.gender == .feminine) return true;
+        if (form.parsing.gender == .masculine_feminine) return true;
+        if (form.parsing.gender == .masculine_feminine_neuter) return true;
+    }
+    return false;
+}
+
+pub fn hasNeuterAdjective(self: *const Lexeme) bool {
+    for (self.forms.items) |form| {
+        if (form.parsing.part_of_speech != .adjective) continue;
+        if (form.parsing.gender == .neuter) return true;
+        if (form.parsing.gender == .masculine_neuter) return true;
+        if (form.parsing.gender == .masculine_feminine_neuter) return true;
+    }
+    return false;
+}
+
 /// Returns the form that would usually appear at the top of
 /// a list of forms in a table.
 pub fn primaryForm(self: *const Lexeme) ?*Form {
@@ -432,12 +471,12 @@ pub fn writeBinary(
     try append_u24(data, self.uid);
     try data.writeAll(self.word);
     try data.writeByte(US);
-    try data.writeByte(@intFromEnum(self.lang));
+    try data.writeByte(@backingInt(self.lang));
     try append_u32(data, @bitCast(self.pos));
-    try data.writeByte(@intFromEnum(self.article)); // M, F, M/F...
+    try data.writeByte(@backingInt(self.article)); // M, F, M/F...
     try append_u16(data, @intCast(self.glosses.items.len));
     for (self.glosses.items) |gloss| {
-        try data.writeByte(@intFromEnum(gloss.lang));
+        try data.writeByte(@backingInt(gloss.lang));
         for (gloss.glosses()) |item| {
             try data.writeAll(item);
             try data.writeByte(US);
@@ -571,12 +610,12 @@ test "lexeme_bytes" {
     try expectEqual('t', out[5]);
     try expectEqual(US, out[6]);
 
-    try expectEqual(@intFromEnum(Lang.greek), out[7]);
-    try expectEqual(@intFromEnum(PartOfSpeech.proper_noun), out[8]);
-    try expectEqual(@intFromEnum(Gender.masculine), out[12]);
+    try expectEqual(@backingInt(Lang.greek), out[7]);
+    try expectEqual(@backingInt(PartOfSpeech.proper_noun), out[8]);
+    try expectEqual(@backingInt(Gender.masculine), out[12]);
     try expectEqual(3, out[13]);
     try expectEqual(0, out[14]);
-    try expectEqual(@intFromEnum(Lang.english), out[15]);
+    try expectEqual(@backingInt(Lang.english), out[15]);
     try expectEqual('c', out[16]);
 }
 
@@ -742,6 +781,7 @@ test "read_invalid_lexeme_id" {
 
 const std = @import("std");
 const err = std.log.err;
+const warn = std.log.warn;
 const Allocator = std.mem.Allocator;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 

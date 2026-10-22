@@ -49,20 +49,21 @@ pub fn create(allocator: Allocator) error{OutOfMemory}!*Dictionary {
 pub fn destroy(self: *Dictionary) void {
     self.by_lexeme.deinit(self.allocator);
     self.by_lexeme_uid.deinit(self.allocator);
+    self.by_form.deinit(self.allocator);
+    self.by_form_uid.deinit(self.allocator);
+    self.by_gloss.deinit(self.allocator);
+    self.by_transliteration.deinit(self.allocator);
+
     var lexeme_iter = self.lexemes.iterator();
     while (lexeme_iter.next()) |lexeme|
         lexeme.deinit(self.allocator);
     self.lexemes.deinit();
 
-    self.by_form.deinit(self.allocator);
-    self.by_form_uid.deinit(self.allocator);
     var forms_iter = self.forms.iterator();
     while (forms_iter.next()) |form|
         form.deinit(self.allocator);
     self.forms.deinit();
 
-    self.by_gloss.deinit(self.allocator);
-    self.by_transliteration.deinit(self.allocator);
     const allocator = self.allocator;
     self.* = undefined;
     allocator.destroy(self);
@@ -122,16 +123,11 @@ pub fn loadTextData(
     var seen_lexemes: std.StringHashMapUnmanaged(bool) = .empty;
     defer seen_lexemes.deinit(gpa);
 
+    // Build a search index of the glosses for each word.
+    var seen_gloss = StringSet.init(gpa);
+    defer seen_gloss.deinit();
+
     // Keep a cache of seen lexemes, and track which lexemes need a uid.
-    var max_lexeme_uid: u24 = 0;
-    var lexeme_needs_uid: ArrayListUnmanaged(*Lexeme) = .empty;
-    defer lexeme_needs_uid.deinit(gpa);
-
-    // Keep a cache of seen forms, and track which forms need a uid.
-    var max_form_uid: u24 = 0;
-    var form_needs_uid: std.ArrayListUnmanaged(*Form) = .empty;
-    defer form_needs_uid.deinit(gpa);
-
     var data = Parser.init(content);
     _ = data.skip_whitespace_and_lines();
 
@@ -160,7 +156,7 @@ pub fn loadTextData(
             if (seen_lexemes.contains(lexeme.word)) {
                 debug("Skip duplicate root {s} on line {d}", .{ lexeme.word, line });
                 skip_lexeme = true;
-                lexeme.deinit(gpa);
+                lexeme.deinit(self.allocator);
                 self.lexemes.free(lexeme);
                 continue;
             }
@@ -168,14 +164,11 @@ pub fn loadTextData(
             try seen_lexemes.put(gpa, lexeme.word, true);
             current_lexeme = lexeme;
             try self.by_lexeme.add(self.allocator, lexeme.word, lexeme);
-            if (lexeme.uid < minimum_uid) {
-                try lexeme_needs_uid.append(gpa, lexeme);
-            } else {
-                try self.by_lexeme_uid.put(gpa, lexeme.uid, lexeme);
-                if (lexeme.uid > max_lexeme_uid) {
-                    max_lexeme_uid = lexeme.uid;
-                }
+            if (lexeme.uid == 0) {
+                lexeme.uid = self.generateUniqueUid();
+                info("assign uid {s}={d}", .{ lexeme.word, lexeme.uid });
             }
+            try self.by_lexeme_uid.put(self.allocator, lexeme.uid, lexeme);
         } else {
             var form = try self.forms.alloc();
             errdefer self.forms.free(form);
@@ -188,12 +181,12 @@ pub fn loadTextData(
 
             if (form.word.len == 0) {
                 err("Missing form word field on line: {any}\n", .{line});
-                form.deinit(gpa);
+                form.deinit(self.allocator);
                 self.forms.free(form);
                 break;
             }
             if (skip_lexeme) {
-                form.deinit(gpa);
+                form.deinit(self.allocator);
                 self.forms.free(form);
                 continue;
             }
@@ -204,22 +197,17 @@ pub fn loadTextData(
                 form.lexeme = current_lexeme.?;
                 try current_lexeme.?.forms.append(self.allocator, form);
             }
-
-            // Add this form to the form uid lookup map
-            if (form.uid < minimum_uid) {
-                try form_needs_uid.append(gpa, form);
-            } else {
-                try self.by_form_uid.put(self.allocator, form.uid, form);
-                if (form.uid > max_lexeme_uid) {
-                    max_form_uid = form.uid;
-                }
+            if (form.uid == 0) {
+                form.uid = self.generateUniqueUid();
+                info("assign uid {s}={d}", .{ form.word, form.uid });
             }
+            try self.by_form_uid.put(self.allocator, form.uid, form);
         }
-        debug("reading text line: {d} lexemes={d} forms={d}", .{
-            data.line,
-            self.lexemes.count(),
-            self.forms.count(),
-        });
+        //debug("reading text line: {d} lexemes={d} forms={d}", .{
+        //    data.line,
+        //    self.lexemes.count(),
+        //    self.forms.count(),
+        //});
     }
 
     // Build a search index of transliterated version of the words.
@@ -242,17 +230,13 @@ pub fn loadTextData(
         try self.by_gloss.add(self.allocator, transliterated, form);
     }
 
-    // Build a search index of the glosses for each word.
-    var seen = StringSet.init(gpa);
-    defer seen.deinit();
-
     var iter = self.lexemes.iterator();
     while (iter.next()) |lexeme| {
         if (lexeme.forms.items.len == 0) {
             continue;
         }
         // Add the primary glosses
-        seen.clear();
+        defer seen_gloss.clear();
         if (lexeme.forms.items[0].glossesByLang(.english)) |gloss| {
             for (gloss.entries.items) |entry| {
                 var i = GlossTokens{ .data = entry };
@@ -260,8 +244,9 @@ pub fn loadTextData(
                     var buff: [@import("search_index.zig").max_word_size * 2]u8 = undefined;
                     const lower = std.ascii.lowerString(&buff, text);
                     if (lower.len == entry.len or !is_stopword(lower)) {
-                        try self.by_gloss.add(self.allocator, lower, lexeme.forms.items[0]);
-                        _ = try seen.add(lower);
+                        if (try seen_gloss.add(lower)) {
+                            try self.by_gloss.add(self.allocator, lower, lexeme.forms.items[0]);
+                        }
                     }
                 }
             }
@@ -279,7 +264,7 @@ pub fn loadTextData(
                     var i = GlossTokens{ .data = item };
                     while (i.next()) |text| {
                         if (text.len == item.len or !is_stopword(text)) {
-                            if (try seen.add(text)) {
+                            if (try seen_gloss.add(text)) {
                                 try self.by_gloss.add(self.allocator, text, form);
                             }
                         }
@@ -290,23 +275,6 @@ pub fn loadTextData(
     }
 
     try self.sort_search_results();
-
-    if (lexeme_needs_uid.items.len > 0) {
-        info("{d} lexemes need uid.", .{lexeme_needs_uid.items.len});
-        for (lexeme_needs_uid.items) |item| {
-            item.uid = self.generateUniqueUid();
-            info("assign uid {s}={d}", .{ item.word, item.uid });
-        }
-        lexeme_needs_uid.clearAndFree(gpa);
-    }
-    if (form_needs_uid.items.len > 0) {
-        info("{d} forms need uid.", .{form_needs_uid.items.len});
-        for (form_needs_uid.items) |item| {
-            item.uid = self.generateUniqueUid();
-            info("assign uid {s}={d}", .{ item.word, item.uid });
-        }
-        form_needs_uid.clearAndFree(gpa);
-    }
 
     debug("Loaded dictionary.", .{});
 }
@@ -355,14 +323,21 @@ pub fn writeBinaryData(
 
     try append_u32(data, @as(u32, @intCast(self.lexemes.count())));
 
+    var skipped: usize = 0;
     var iter = self.lexemes.iterator();
     while (iter.next()) |lexeme| {
-        if (save_mode == .gnt_words and lexeme.glosses.items.len == 0) continue;
+        if (save_mode == .gnt_words and lexeme.glosses.items.len == 0) {
+            skipped += 1;
+            continue;
+        }
         try lexeme.writeBinary(data);
         try append_u16(data, @intCast(lexeme.forms.items.len));
         for (lexeme.forms.items) |*form| {
             try form.*.writeBinary(data);
         }
+    }
+    if (skipped > 0 or save_mode == .gnt_words) {
+        std.log.debug("gnt mode skipped {d} words without glosses", .{skipped});
     }
     try data.writeByte(FS);
 
@@ -508,10 +483,17 @@ pub fn writeTextData(
     var unsorted: ArrayListUnmanaged(*Lexeme) = .empty;
     defer unsorted.deinit(allocator);
 
+    var skipped: usize = 0;
     var iter = self.lexemes.iterator();
     while (iter.next()) |lexeme| {
-        if (save_mode == .gnt_words and lexeme.glosses.items.len == 0) continue;
+        if (save_mode == .gnt_words and lexeme.glosses.items.len == 0) {
+            skipped += 1;
+            continue;
+        }
         try unsorted.append(allocator, lexeme);
+    }
+    if (skipped > 0 or save_mode == .gnt_words) {
+        std.log.debug("gnt mode skipped {d} words without glosses", .{skipped});
     }
     std.mem.sort(*Lexeme, unsorted.items, @as(?[]const u8, null), Lexeme.lessThan);
 

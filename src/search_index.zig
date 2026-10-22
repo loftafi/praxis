@@ -265,6 +265,16 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
                 }
             };
 
+            /// Return the first search complete search
+            /// result. Ignore accent if needed.
+            pub fn first(self: *const SearchResult) ?T {
+                if (self.exact_accented.items.len > 0)
+                    return self.exact_accented.items[0];
+                if (self.exact_unaccented.items.len > 0)
+                    return self.exact_unaccented.items[0];
+                return null;
+            }
+
             pub fn iterator(self: *const SearchResult) Iterator {
                 return .{
                     .results = self,

@@ -79,6 +79,12 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(praxis_exe);
 
+    const run_cmd = b.addRunArtifact(praxis_exe);
+    run_cmd.step.dependOn(b.getInstallStep());
+    run_cmd.addPassthruArgs();
+    const run_step = b.step("run", "Run the app");
+    run_step.dependOn(&run_cmd.step);
+
     const install_docs = b.addInstallDirectory(.{
         .source_dir = lib.getEmittedDocs(),
         .install_dir = .prefix,

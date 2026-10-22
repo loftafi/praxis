@@ -79,6 +79,8 @@ pub const syllables = @import("Syllables.zig").syllables;
 
 pub const characterInfo = @import("CharacterInfo.zig").characterInfo;
 
+pub const extend = @import("LexemeExtender.zig").extend;
+
 pub const random = @import("random.zig");
 
 /// Deprecated. Was used to share a standard way to read a sequence of

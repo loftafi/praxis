@@ -1,7 +1,7 @@
 const std = @import("std");
 
-/// Packs parsing information about a biblical
-/// greek word into a u32.
+/// Packs parsing information about a Koine Greek or
+/// Biblical Hebrew word into a u32.
 pub const Parsing = packed struct(u32) {
     part_of_speech: PartOfSpeech = .unknown,
     tense_form: TenseForm = .unknown,
@@ -21,6 +21,8 @@ pub const Parsing = packed struct(u32) {
 
     pub const default: Parsing = @bitCast(@as(u32, 0));
 
+    /// Print a `Parsing` struct into a writer and print `[incomplete]`
+    /// if the parsing data is in an invalid state.
     pub fn format(
         parsing: Parsing,
         writer: *std.Io.Writer,
@@ -31,6 +33,8 @@ pub const Parsing = packed struct(u32) {
         };
     }
 
+    /// Print a `Parsing` struct into a writer or return
+    /// `error.Incomplete` if the parsing data is in an invalid state.
     pub fn string(
         p: Parsing,
         b: *std.Io.Writer,

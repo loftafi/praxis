@@ -1,7 +1,7 @@
 /// A simple object pool designed to hold large lists of Forms or Lexemes
 pub fn Pool(comptime T: type, comptime items_per_block: usize) type {
     return struct {
-        const entity_size = sized(@sizeOf(T));
+        const entity_size = alignSized(T);
         const block_size = entity_size * items_per_block;
 
         allocator: Allocator,
@@ -52,7 +52,7 @@ pub fn Pool(comptime T: type, comptime items_per_block: usize) type {
                     try self.blocks.append(self.allocator, spare);
                     self.block_index = 0;
                 } else {
-                    const new_block = try self.allocator.alloc(u8, block_size);
+                    const new_block = try self.allocator.alignedAlloc(u8, .fromByteUnits(@alignOf(T)), block_size);
                     errdefer self.allocator.free(new_block);
                     try self.blocks.append(self.allocator, new_block);
                     try self.spare_block.ensureTotalCapacity(self.allocator, self.blocks.items.len);
@@ -60,7 +60,8 @@ pub fn Pool(comptime T: type, comptime items_per_block: usize) type {
                 }
             }
             const block = self.blocks.last().?;
-            const entity: *T = @as(*T, @ptrCast(@alignCast(block.ptr + self.block_index)));
+            const next = block.ptr + self.block_index;
+            const entity: *T = @as(*T, @ptrCast(@alignCast(next)));
             self.block_index += entity_size;
             entity.* = undefined;
             return entity;
@@ -126,9 +127,11 @@ pub fn Pool(comptime T: type, comptime items_per_block: usize) type {
     };
 }
 
-/// Round up entity size to size of
-pub fn sized(n: usize) usize {
-    const s = @sizeOf(usize);
+/// Size of an item in memory is the exact byte size, rounded up
+/// to a number matching its required alignment.
+pub fn alignSized(T: type) usize {
+    const n = @sizeOf(T);
+    const s = @alignOf(T);
     const round = (n / s) * s;
     if (round == n) return n;
     return round + s;
@@ -148,22 +151,22 @@ test "alloc" {
     var item1 = try pool.alloc();
     item1.a = 5;
     try expectEqual(1, pool.count());
-    try expectEqual(sized(@sizeOf(Sample)), pool.block_index);
+    try expectEqual(alignSized(@sizeOf(Sample)), pool.block_index);
     try expectEqual(5, pool.blocks.items[0][0 + 2]);
     var item2 = try pool.alloc();
     item2.a = 6;
     try expectEqual(2, pool.count());
-    try expectEqual(6, pool.blocks.items[0][sized(@sizeOf(Sample)) + 2]);
-    try expectEqual(sized(@sizeOf(Sample)) * 2, pool.block_index);
+    try expectEqual(6, pool.blocks.items[0][alignSized(@sizeOf(Sample)) + 2]);
+    try expectEqual(alignSized(@sizeOf(Sample)) * 2, pool.block_index);
     _ = try pool.alloc();
     _ = try pool.alloc();
     try expectEqual(4, pool.count());
-    try expectEqual(sized(@sizeOf(Sample)) * 4, pool.block_index);
+    try expectEqual(alignSized(@sizeOf(Sample)) * 4, pool.block_index);
     var item5 = try pool.alloc();
     item5.a = 7;
     try expectEqual(5, pool.count());
     try expectEqual(7, pool.blocks.items[1][0 + 2]);
-    try expectEqual(sized(@sizeOf(Sample)), pool.block_index);
+    try expectEqual(alignSized(@sizeOf(Sample)), pool.block_index);
 }
 
 test "free" {

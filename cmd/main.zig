@@ -129,8 +129,12 @@ pub fn main(init: std.process.Init) !void {
 }
 
 /// Add/update/validate forms of a lexeme.
-fn dataCleanup(allocator: Allocator, dictionary: *Dictionary) error{OutOfMemory}!void {
+fn dataCleanup(allocator: Allocator, dictionary: *Dictionary) error{ OutOfMemory, WordTooLong, InvalidUtf8 }!void {
     var iter = dictionary.lexemes.iterator();
+    while (iter.next()) |lexeme| {
+        try praxis.extend(dictionary, lexeme);
+    }
+
     while (iter.next()) |lexeme| {
         if (lexeme.pos.part_of_speech != .verb) continue;
         if (lexeme.strongs.items.len == 0) continue;

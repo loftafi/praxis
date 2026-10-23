@@ -1,63 +1,28 @@
-//! Group a set of word forms into a set of tables of grammatical forms.
-
+/// Group a set of word forms into a set of tables of grammatical forms.
 const Panels = @This();
 
-lexeme: *const Lexeme,
-tables: std.ArrayListUnmanaged(Panel),
+lexeme: ?*const Lexeme = null,
+tables: std.ArrayListUnmanaged(Panel) = .empty,
 
 pub const empty = Panels{
     .lexeme = &Lexeme.empty,
     .tables = .empty,
 };
 
-pub fn create(allocator: std.mem.Allocator) !*Panels {
-    var p = try allocator.create(Panels);
-    p.init();
-    return p;
-}
-
-pub fn destroy(self: *Panels, allocator: std.mem.Allocator) void {
-    self.tables.deinit(allocator);
-    allocator.destroy(self);
-}
-
-pub fn init(self: *Panels) void {
-    self.tables = .empty;
-    self.lexeme = &Lexeme.empty;
-}
-
-pub fn deinit(self: *Panel) void {
-    self.tables.deinit();
+pub fn deinit(self: *Panels, gpa: Allocator) void {
+    _ = gpa;
+    //self.tables.deinit(gpa);
     self.* = undefined;
 }
 
-pub fn setLexeme(self: *Panels, lexeme: *const Lexeme) void {
+pub fn setup(self: *Panels, lexeme: *const Lexeme, gpa: Allocator) Allocator.Error![]Panel {
     self.lexeme = lexeme;
     self.tables.clearRetainingCapacity();
-}
 
-pub const Panel = struct {
-    title: []const u8 = "",
-    subtitle: []const u8 = "",
-    gender: Gender = .unknown,
-    top: [5]?*Form = [_]?*Form{ null, null, null, null, null },
-    bottom: [5]?*Form = [_]?*Form{ null, null, null, null, null },
-    count: u8,
+    std.log.debug("setup panels with {s}", .{lexeme.word});
+    const forms = lexeme.forms.items;
 
-    pub fn hasData(self: *Panel) bool {
-        return self.top[0] != null or self.top[1] != null or
-            self.top[2] != null or self.top[3] != null or self.top[4] != null or
-            self.bottom[0] != null or self.bottom[1] != null or self.bottom[2] != null or
-            self.bottom[3] != null or self.bottom[4] != null;
-    }
-};
-
-pub fn panels(self: *Panels, gpa: Allocator) ![]Panel {
-    std.log.debug("panels for {s}", .{self.lexeme.word});
-    const forms = self.lexeme.forms.items;
-    self.tables.clearRetainingCapacity();
-
-    if (self.lexeme.pos.part_of_speech == .verb) {
+    if (lexeme.pos.part_of_speech == .verb) {
         var panel = Panel{ .title = "Present", .subtitle = "Active", .count = 3 };
         panel.top[0] = ff(forms, .verb, .present, .active, .indicative, .first, .singular);
         panel.top[1] = ff(forms, .verb, .present, .active, .indicative, .second, .singular);
@@ -288,7 +253,7 @@ pub fn panels(self: *Panels, gpa: Allocator) ![]Panel {
         }
     }
 
-    if (self.lexeme.pos.part_of_speech == .noun or (self.lexeme.pos.part_of_speech == .proper_noun and !self.lexeme.pos.indeclinable)) {
+    if (lexeme.pos.part_of_speech == .noun or (lexeme.pos.part_of_speech == .proper_noun and !lexeme.pos.indeclinable)) {
         var panel = Panel{ .title = "Masculine", .subtitle = "", .count = 4 };
         panel.gender = .masculine;
         panel.top[0] = nf(forms, .noun, .nominative, .masculine, .singular);
@@ -330,9 +295,9 @@ pub fn panels(self: *Panels, gpa: Allocator) ![]Panel {
         }
     }
 
-    if (self.lexeme.pos.part_of_speech == .personal_pronoun) {
-        std.log.debug("searching personal pronoun for {d}", .{self.lexeme.uid});
-        if (self.lexeme.uid == 30314) {
+    if (lexeme.pos.part_of_speech == .personal_pronoun) {
+        std.log.debug("searching personal pronoun for {d}", .{lexeme.uid});
+        if (lexeme.uid == 30314) {
             var panel = Panel{ .title = "Singular", .subtitle = "", .count = 4 };
             panel.top[0] = pp(forms, .personal_pronoun, .nominative, .singular, .first);
             panel.top[1] = pp(forms, .personal_pronoun, .accusative, .singular, .first);
@@ -350,7 +315,7 @@ pub fn panels(self: *Panels, gpa: Allocator) ![]Panel {
                 try self.tables.append(gpa, panel);
             }
         }
-        if (self.lexeme.uid == 96456) {
+        if (lexeme.uid == 96456) {
             var panel = Panel{ .title = "Singular", .subtitle = "", .count = 4 };
             panel.top[0] = pp(forms, .personal_pronoun, .nominative, .singular, .second);
             panel.top[1] = pp(forms, .personal_pronoun, .accusative, .singular, .second);
@@ -371,8 +336,8 @@ pub fn panels(self: *Panels, gpa: Allocator) ![]Panel {
     }
 
     // Filter ajectives into panels, or words like adjectives.
-    if (self.lexeme.pos.part_of_speech == .adjective or self.lexeme.uid == 17770 or self.lexeme.uid == 31602 or self.lexeme.uid == 75261) {
-        const pos = self.lexeme.pos.part_of_speech;
+    if (lexeme.pos.part_of_speech == .adjective or lexeme.uid == 17770 or lexeme.uid == 31602 or lexeme.uid == 75261) {
+        const pos = lexeme.pos.part_of_speech;
         var panel = Panel{ .title = "Masculine", .subtitle = "", .count = 4 };
         panel.gender = .masculine;
         panel.top[0] = nf(forms, pos, .nominative, .masculine, .singular);
@@ -416,6 +381,22 @@ pub fn panels(self: *Panels, gpa: Allocator) ![]Panel {
 
     return self.tables.items;
 }
+
+pub const Panel = struct {
+    title: []const u8 = "",
+    subtitle: []const u8 = "",
+    gender: Gender = .unknown,
+    top: [5]?*Form = [_]?*Form{ null, null, null, null, null },
+    bottom: [5]?*Form = [_]?*Form{ null, null, null, null, null },
+    count: u8,
+
+    pub fn hasData(self: *Panel) bool {
+        return self.top[0] != null or self.top[1] != null or
+            self.top[2] != null or self.top[3] != null or self.top[4] != null or
+            self.bottom[0] != null or self.bottom[1] != null or self.bottom[2] != null or
+            self.bottom[3] != null or self.bottom[4] != null;
+    }
+};
 
 /// voice must be active, middle, passive. Do not use other voice options.
 pub fn ff(
@@ -523,8 +504,8 @@ pub fn pp(
 
 test "init_panels" {
     const gpa = std.testing.allocator;
-    var p = try Panels.create(gpa);
-    defer p.destroy(gpa);
+    var p: Panels = .empty;
+    defer p.deinit(gpa);
     const l = Lexeme.empty;
     p.setLexeme(&l);
     _ = try p.panels(gpa);

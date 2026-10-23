@@ -73,7 +73,9 @@ pub const parse_reference = Reference.parse;
 
 /// Convert a Greek word into a standardised roman character version of
 /// the Greek word.
-pub const transliterate = @import("transliterate.zig").transliterate_word;
+pub const transliterateSyllables = @import("transliterate.zig").transliterateSyllables;
+pub const transliterateWord = @import("transliterate.zig").transliterateWord;
+pub const transliterateChar = @import("transliterate.zig").transliterateChar;
 
 pub const syllables = @import("Syllables.zig").syllables;
 

@@ -1,6 +1,45 @@
 /// Copy the contents of a word into a buffer, converting Greek
 /// codepoints into English equivalents.
-pub fn transliterate_word(
+pub fn transliterateSyllables(
+    word: []const u8,
+    allow_unicode: bool,
+    divider: []const u8,
+    buffer: []u8,
+) error{ NoSpace, InvalidUtf8 }![]const u8 {
+    var n: usize = 0;
+    var syllable_buffer: [30][]const u8 = undefined;
+    for (try syllables(word, &syllable_buffer)) |slice| {
+        if (n > 0) {
+            @memcpy(buffer[n .. n + divider.len], divider);
+            n += divider.len;
+        }
+        var i = (try unicode.Utf8View.init(slice)).iterator();
+        while (i.nextCodepoint()) |codepoint| {
+            const entry = transliterateChar(codepoint, allow_unicode);
+            @memcpy(buffer[n .. n + entry.len], entry);
+            n += entry.len;
+        }
+    }
+    return buffer[0..n];
+}
+
+test "transliterateSyllables" {
+    var buffer: [praxis.max_word_size]u8 = undefined;
+    try eq("ar-tos", try transliterateSyllables("αρτος", false, "-", &buffer));
+    try eq("pa·tēr", try transliterateSyllables("πατήρ", true, "·", &buffer));
+    try eq("pa·ter", try transliterateSyllables("πατήρ", false, "·", &buffer));
+    try eq("pe-ri-pa-tei", try transliterateSyllables("περιπατει", true, "-", &buffer));
+    try eq("en", try transliterateSyllables("ἔν", true, "-", &buffer));
+    try eq("a", try transliterateSyllables("ἇ", true, "-", &buffer));
+    try eq("to", try transliterateSyllables("τὸ", true, "-", &buffer));
+    try eq("ru-o-mai", try transliterateSyllables("ῥυομαι", true, "-", &buffer));
+    try eq("Ru、o、mai", try transliterateSyllables("Ῥυομαι", true, "、", &buffer));
+    try eq("Tre|chei", try transliterateSyllables("Τρεχει", true, "|", &buffer));
+}
+
+/// Copy the contents of a word into a buffer, converting Greek
+/// codepoints into English equivalents.
+pub fn transliterateWord(
     word: []const u8,
     allow_unicode: bool,
     buffer: []u8,
@@ -8,11 +47,29 @@ pub fn transliterate_word(
     var i = (try unicode.Utf8View.init(word)).iterator();
     var n: usize = 0;
     while (i.nextCodepoint()) |codepoint| {
-        const entry = transliterate_char(codepoint, allow_unicode);
+        const entry = transliterateChar(codepoint, allow_unicode);
         @memcpy(buffer[n .. n + entry.len], entry);
         n += entry.len;
     }
     return buffer[0..n];
+}
+
+test "transliterateWord" {
+    var buffer: [praxis.max_word_size]u8 = undefined;
+    try eq("artos", try transliterateWord("αρτος", false, &buffer));
+    try eq("patēr", try transliterateWord("πατήρ", true, &buffer));
+    try eq("pater", try transliterateWord("πατήρ", false, &buffer));
+    try eq("en", try transliterateWord("ἔν", true, &buffer));
+    try eq("a", try transliterateWord("ἀ", true, &buffer));
+    try eq("a", try transliterateWord("ἇ", true, &buffer));
+    try eq("to", try transliterateWord("το", true, &buffer));
+    try eq("to", try transliterateWord("τό", true, &buffer));
+    try eq("to", try transliterateWord("τὸ", true, &buffer));
+    try eq("ruomai", try transliterateWord("ῥυομαι", true, &buffer));
+    try eq("ruomai", try transliterateWord("ῤυομαι", true, &buffer));
+    try eq("Ruomai", try transliterateWord("Ῥυομαι", true, &buffer));
+    try eq("peripatei", try transliterateWord("περιπατει", true, &buffer));
+    try eq("Trechei", try transliterateWord("Τρεχει", true, &buffer));
 }
 
 pub const ACUTE: u21 = '\u{0301}';
@@ -31,7 +88,7 @@ pub const BREVE: u21 = '\u{0306}'; // i.e. ῐ
 /// Return a romanised equivalent of the specified codepoint.
 /// if the character does not belong in a romanised version
 /// of a word then an empty string is returned.
-inline fn transliterate_char(codepoint: u21, allow_unicode: bool) []const u8 {
+pub inline fn transliterateChar(codepoint: u21, allow_unicode: bool) []const u8 {
     return switch (codepoint) {
         ' ' => "",
         '\n' => "",
@@ -125,20 +182,5 @@ const std = @import("std");
 const unicode = std.unicode;
 const eq = std.testing.expectEqualStrings;
 
-test "transliterate" {
-    var buffer: [100]u8 = undefined;
-    try eq("artos", try transliterate_word("αρτος", false, &buffer));
-    try eq("patēr", try transliterate_word("πατήρ", true, &buffer));
-    try eq("pater", try transliterate_word("πατήρ", false, &buffer));
-    try eq("en", try transliterate_word("ἔν", true, &buffer));
-    try eq("a", try transliterate_word("ἀ", true, &buffer));
-    try eq("a", try transliterate_word("ἇ", true, &buffer));
-    try eq("to", try transliterate_word("το", true, &buffer));
-    try eq("to", try transliterate_word("τό", true, &buffer));
-    try eq("to", try transliterate_word("τὸ", true, &buffer));
-    try eq("ruomai", try transliterate_word("ῥυομαι", true, &buffer));
-    try eq("ruomai", try transliterate_word("ῤυομαι", true, &buffer));
-    try eq("Ruomai", try transliterate_word("Ῥυομαι", true, &buffer));
-    try eq("peripatei", try transliterate_word("περιπατει", true, &buffer));
-    try eq("Trechei", try transliterate_word("Τρεχει", true, &buffer));
-}
+const praxis = @import("praxis.zig");
+const syllables = praxis.syllables;

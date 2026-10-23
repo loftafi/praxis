@@ -217,7 +217,7 @@ pub fn loadTextData(
         if (form.word.len == 0) {
             continue;
         }
-        const transliterated = transliterate_word(form.word, false, &buffer) catch |e| {
+        const transliterated = transliterateWord(form.word, false, &buffer) catch |e| {
             log.warn("Transliterate {s} failed: {any}", .{ form.word, e });
             continue;
         };
@@ -588,7 +588,7 @@ const Lang = @import("lang.zig").Lang;
 const GlossTokens = @import("gloss_tokens.zig").GlossToken;
 const is_stopword = @import("gloss_tokens.zig").is_stopword;
 const builtin = @import("builtin");
-const transliterate_word = @import("transliterate.zig").transliterate_word;
+const transliterateWord = @import("transliterate.zig").transliterateWord;
 const BinaryReader = @import("binary_reader.zig");
 const append_u16 = @import("binary_writer.zig").append_u16;
 const append_u32 = @import("binary_writer.zig").append_u32;

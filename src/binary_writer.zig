@@ -30,5 +30,3 @@ pub const RS = 30; // Record separator
 pub const US = 31; // Field (record) separator
 
 const std = @import("std");
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
-const Allocator = std.mem.Allocator;

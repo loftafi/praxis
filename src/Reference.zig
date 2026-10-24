@@ -102,7 +102,7 @@ pub inline fn readReference(
 pub fn readReferenceList(
     arena: Allocator,
     t: *Parser,
-    references: *std.ArrayListUnmanaged(Reference),
+    references: *std.ArrayList(Reference),
 ) error{ OutOfMemory, InvalidReference, InvalidU16 }!void {
     var reference: Reference = .{}; // Parse into a temporary variable
 
@@ -249,7 +249,7 @@ test "read reference list" {
     const allocator = std.testing.allocator;
     {
         var p = Parser.init("byz#Mark 1:2 3");
-        var references: std.ArrayListUnmanaged(Reference) = .empty;
+        var references: std.ArrayList(Reference) = .empty;
         defer references.deinit(allocator);
         try Reference.readReferenceList(allocator, &p, &references);
         try std.testing.expectEqual(1, references.items.len);
@@ -262,7 +262,7 @@ test "read reference list" {
     {
         //var p = Parser.init("byz#John 10:20 30");
         var p = Parser.init("byz#John 10:20 30,sr#mark 11:22 33");
-        var references: std.ArrayListUnmanaged(Reference) = .empty;
+        var references: std.ArrayList(Reference) = .empty;
         defer references.deinit(allocator);
         try Reference.readReferenceList(allocator, &p, &references);
         try std.testing.expectEqual(2, references.items.len);

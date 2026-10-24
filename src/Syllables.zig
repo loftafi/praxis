@@ -150,7 +150,7 @@ pub const t = @import("transliterate.zig");
 fn reverseUnicodeSlices(string: []const u8, buffer: [][]const u8) error{ NoSpace, InvalidUtf8 }![][]const u8 {
     var index = buffer.len;
     var utf8 = try readUtf8Slices(string);
-    while (try utf8.next()) |c| {
+    while (utf8.next()) |c| {
         if (index == 0) return error.NoSpace;
         index -= 1;
         buffer[index] = c;

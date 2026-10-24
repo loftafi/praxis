@@ -6,7 +6,7 @@
 const Gloss = @This();
 
 lang: Lang,
-entries: std.ArrayListUnmanaged([]const u8),
+entries: std.ArrayList([]const u8),
 
 pub fn create(allocator: Allocator) error{OutOfMemory}!*Gloss {
     var gloss = try allocator.create(Gloss);
@@ -81,7 +81,7 @@ pub fn writeBinary(
     self: *const Gloss,
     writer: *std.Io.Writer,
 ) (std.Io.Writer.Error)!void {
-    try writer.writeByte(@intFromEnum(self.lang));
+    try writer.writeByte(@backingInt(self.lang));
     for (self.entries.items) |g| {
         try writer.writeAll(g);
         try writer.writeByte(0);
@@ -127,7 +127,7 @@ pub fn writeText(self: *const Gloss, writer: anytype) !void {
 pub fn readTextGlosses(
     arena: Allocator,
     t: *Parser,
-    entries: *std.ArrayListUnmanaged(*Gloss),
+    entries: *std.ArrayList(*Gloss),
 ) error{OutOfMemory}!void {
     var c = t.peek();
     var loc = t.index;
@@ -148,7 +148,7 @@ pub fn readTextGlosses(
 
 pub fn writeTextGlosses(
     writer: *std.Io.Writer,
-    entries: *const std.ArrayListUnmanaged(*Gloss),
+    entries: *const std.ArrayList(*Gloss),
 ) std.Io.Writer.Error!void {
     for (entries.items, 0..) |gloss, i| {
         if (i > 0) try writer.writeByte('#');
@@ -159,7 +159,7 @@ pub fn writeTextGlosses(
 pub fn readBinaryGlosses(
     arena: Allocator,
     t: *BinaryReader,
-    entries: *std.ArrayListUnmanaged(*Gloss),
+    entries: *std.ArrayList(*Gloss),
 ) !void {
     const gloss_count = try t.u16();
     for (0..gloss_count) |_| {
@@ -322,7 +322,7 @@ test "gloss_clone" {
 test "read_text_glosses" {
     const allocator = std.testing.allocator;
     var data = Parser.init("en:Aaron#zh:亞倫#es:Aarón||person|");
-    var list: std.ArrayListUnmanaged(*Gloss) = .empty;
+    var list: std.ArrayList(*Gloss) = .empty;
     errdefer list.deinit(allocator);
     try readTextGlosses(allocator, &data, &list);
     try expectEqual(3, list.items.len);
@@ -356,7 +356,7 @@ test "gloss_read_write_bytes" {
     const out = buffer.written();
 
     try expectEqual(8, out.len);
-    try expectEqual(@intFromEnum(Lang.hebrew), out[0]);
+    try expectEqual(@backingInt(Lang.hebrew), out[0]);
     try expectEqual('a', out[1]);
     try expectEqual('r', out[2]);
     try expectEqual(0, out[3]);

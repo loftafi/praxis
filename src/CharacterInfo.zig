@@ -212,10 +212,31 @@ test "test_categorise" {
 
 pub const t = @import("transliterate.zig");
 
+/// Returns number of unicode characters, accounting for
+/// decomposed accents appearing as seperate utf8 entries.
+pub fn unicodeLength(string: []const u8) error{InvalidUtf8}!usize {
+    var len: usize = 0;
+    var iter = try readUtf8Slices(string);
+    while (iter.next()) |_| {
+        len += 1;
+    }
+    return len;
+}
+
+test "unicodeLength" {
+    try expectEqual(5, unicodeLength("λῦσον"));
+    try expectEqual(6, unicodeLength("λύθητι"));
+    try expectEqual(6, unicodeLength("λυσάτω"));
+    try expectEqual(2, unicodeLength("ab"));
+    try expectEqual(0, unicodeLength(""));
+}
+
+/// Iterate over unicode characters in a string, accounting for
+/// decomposed accents appearing as seperate utf8 entries.
 pub fn readUtf8Slices(string: []const u8) error{InvalidUtf8}!struct {
     utf8: std.unicode.Utf8Iterator,
 
-    pub fn next(self: *@This()) error{InvalidUtf8}!?[]const u8 {
+    pub fn next(self: *@This()) ?[]const u8 {
         const last: usize = self.utf8.i;
         while (self.utf8.nextCodepoint()) |_| {
             if (self.utf8.peekCodepoint()) |peek| {
@@ -248,12 +269,12 @@ pub fn readUtf8Slices(string: []const u8) error{InvalidUtf8}!struct {
 
 test "read_utf8_slices" {
     var utf8 = try readUtf8Slices("βάτΐμῷ");
-    try expectEqualStrings("β", (try utf8.next()).?);
-    try expectEqualStrings("ά", (try utf8.next()).?);
-    try expectEqualStrings("τ", (try utf8.next()).?);
-    try expectEqualStrings("ΐ", (try utf8.next()).?);
-    try expectEqualStrings("μ", (try utf8.next()).?);
-    try expectEqualStrings("ῷ", (try utf8.next()).?);
+    try expectEqualStrings("β", (utf8.next()).?);
+    try expectEqualStrings("ά", (utf8.next()).?);
+    try expectEqualStrings("τ", (utf8.next()).?);
+    try expectEqualStrings("ΐ", (utf8.next()).?);
+    try expectEqualStrings("μ", (utf8.next()).?);
+    try expectEqualStrings("ῷ", (utf8.next()).?);
 }
 
 test "real_data_test" {
@@ -263,7 +284,7 @@ test "real_data_test" {
     var utf8 = try readUtf8Slices(data);
     var line: usize = 0;
     var previous: []const u8 = "";
-    while (try utf8.next()) |slice| {
+    while (utf8.next()) |slice| {
         if (std.mem.eql(u8, "\n", slice)) {
             line += 1;
             continue;

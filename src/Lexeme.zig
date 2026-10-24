@@ -15,9 +15,9 @@ word: []const u8,
 lang: Lang = Lang.unknown,
 article: Gender = .unknown,
 pos: Parsing = .{ .part_of_speech = .unknown },
-forms: std.ArrayListUnmanaged(*Form),
-strongs: std.ArrayListUnmanaged(u16),
-glosses: std.ArrayListUnmanaged(*Gloss) = undefined,
+forms: std.ArrayList(*Form),
+strongs: std.ArrayList(u16),
+glosses: std.ArrayList(*Gloss) = undefined,
 tags: ?[][]const u8 = null,
 root: []const u8 = undefined,
 genitiveSuffix: []const u8 = undefined,
@@ -783,7 +783,7 @@ const std = @import("std");
 const err = std.log.err;
 const warn = std.log.warn;
 const Allocator = std.mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 
 pub const Parser = @import("parser.zig");
 const is_eol = @import("parser.zig").is_eol;

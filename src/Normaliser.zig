@@ -455,7 +455,6 @@ pub fn normalise_char(c: u21) u21 {
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const ue = std.unicode.utf8EncodeComptime;
 const eq = std.testing.expectEqual;
 const se = std.testing.expectEqualStrings;

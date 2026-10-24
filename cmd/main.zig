@@ -1,3 +1,15 @@
+/// Exit with success error code.
+const success = 0;
+
+/// Exit and report input cmd string was invalid.
+const invalid_data = 1;
+
+/// Exit and report that a lookup/search found no data.
+const not_found = 2;
+
+/// Exit and report that writing output data file failed.
+const save_failed = 3;
+
 /// Reformat and validate the contents of a quiz data file and optionally
 /// generate a resource bundle or html vocab summary files.
 pub fn main(init: std.process.Init) !void {
@@ -10,6 +22,7 @@ pub fn main(init: std.process.Init) !void {
     var filename: ?[]const u8 = null;
     var output: ?[]const u8 = null;
     var search_word: ?[]const u8 = null;
+    var cmd: enum { search, info } = .search;
     var mode: praxis.Dictionary.SaveMode = .all_words;
     var output_binary: bool = false;
     var cleanup: bool = false;
@@ -21,7 +34,7 @@ pub fn main(init: std.process.Init) !void {
         if (std.mem.eql(u8, arg, "-d")) {
             filename = args.next() orelse {
                 help();
-                return;
+                std.process.exit(invalid_data);
             };
             continue;
         }
@@ -32,7 +45,7 @@ pub fn main(init: std.process.Init) !void {
         if (std.mem.eql(u8, arg, "-ot")) {
             output = args.next() orelse {
                 help();
-                return;
+                std.process.exit(invalid_data);
             };
             output_binary = false;
             continue;
@@ -44,14 +57,22 @@ pub fn main(init: std.process.Init) !void {
         if (std.mem.eql(u8, arg, "-ob")) {
             output = args.next() orelse {
                 help();
-                return;
+                std.process.exit(invalid_data);
             };
             output_binary = true;
             continue;
         }
+        if (std.ascii.eqlIgnoreCase("search", arg)) {
+            cmd = .search;
+            continue;
+        }
+        if (std.ascii.eqlIgnoreCase("info", arg)) {
+            cmd = .info;
+            continue;
+        }
         if (search_word != null) {
             help();
-            return;
+            std.process.exit(invalid_data);
         }
         search_word = arg;
     }
@@ -61,11 +82,7 @@ pub fn main(init: std.process.Init) !void {
 
     if (output == null and search_word == null) {
         help();
-        return;
-    }
-
-    if (search_word) |keyword| {
-        info("lookup {s} in {s}", .{ keyword, filename.? });
+        std.process.exit(invalid_data);
     }
 
     var dictionary = try Dictionary.create(init.arena.allocator());
@@ -78,13 +95,13 @@ pub fn main(init: std.process.Init) !void {
         .unlimited,
     ) catch {
         std.log.err("Failed to load {s}", .{filename.?});
-        return;
+        std.process.exit(invalid_data);
     };
     defer init.gpa.free(data);
 
     try dictionary.loadData(init.gpa, data);
 
-    info("{d} lexemes, {d} forms, dictionary.name={s} dictionary.size={d}", .{
+    debug("{d} lexemes, {d} forms, dictionary.name={s} dictionary.size={d}", .{
         dictionary.lexemes.count(),
         dictionary.forms.count(),
         filename.?,
@@ -98,34 +115,227 @@ pub fn main(init: std.process.Init) !void {
     if (output) |dest| {
         info("Write binary dictionary to {s}. mode={t} ", .{ dest, mode });
         if (output_binary)
-            try dictionary.saveBinaryFile(init.gpa, io, std.Io.Dir.cwd(), dest, mode)
+            dictionary.saveBinaryFile(init.gpa, io, std.Io.Dir.cwd(), dest, mode) catch |e| {
+                err("Save binary dictionary failed. {t}", .{e});
+                std.process.exit(save_failed);
+            }
         else
-            try dictionary.saveTextFile(init.gpa, io, std.Io.Dir.cwd(), dest, mode);
-        return;
+            dictionary.saveTextFile(init.gpa, io, std.Io.Dir.cwd(), dest, mode) catch |e| {
+                err("Save text dictionary failed. {t}", .{e});
+                std.process.exit(save_failed);
+            };
+        std.process.exit(success);
     }
 
     if (search_word) |keyword| {
-        const result = dictionary.by_lexeme.lookup(keyword) catch {
+        switch (cmd) {
+            .search => search(dictionary, keyword),
+            .info => try wordInfo(init.gpa, dictionary, keyword),
+        }
+        unreachable;
+    }
+    std.process.exit(invalid_data);
+}
+
+/// Find the single best matching dicitonary entry and
+/// display extended information about that word.
+fn wordInfo(
+    gpa: Allocator,
+    dictionary: *Dictionary,
+    keyword: []const u8,
+) Allocator.Error!void {
+    debug("info {s}", .{keyword});
+
+    const result = dictionary.by_form.lookup(keyword) catch {
+        info("invalid utf8", .{});
+        std.process.exit(1);
+    };
+    if (result) |value| {
+        debug("found form {s}", .{value.keyword});
+        if (value.first()) |form| {
+            try printInfoBlock(gpa, form);
+            std.process.exit(0);
+        }
+    }
+    info("{s} form not found", .{keyword});
+    std.process.exit(2);
+}
+
+/// Search and display a list of search results line by line.
+fn search(dictionary: *Dictionary, keyword: []const u8) void {
+    debug("search {s}", .{keyword});
+
+    var result = dictionary.by_form.lookup(keyword) catch {
+        info("invalid utf8", .{});
+        std.process.exit(invalid_data);
+    };
+
+    if (result == null) {
+        debug("{s} lookup by form failed", .{keyword});
+        result = dictionary.by_gloss.lookup(keyword) catch {
             info("invalid utf8", .{});
-            return;
+            std.process.exit(invalid_data);
         };
         if (result == null) {
-            info("{s} lexeme not found", .{keyword});
-        } else {
-            info("found lexeme {s}", .{result.?.keyword});
+            debug("lookup {s} by gloss failed.", .{keyword});
         }
-
-        const result2 = dictionary.by_form.lookup(keyword) catch {
-            info("invalid utf8", .{});
-            return;
-        };
-        if (result2 == null) {
-            info("{s} form not found", .{keyword});
-        } else {
-            info("found form {s}", .{result2.?.keyword});
-        }
-        return;
     }
+    if (result) |value| {
+        var gloss_iter = value.iterator();
+        while (gloss_iter.next()) |form| {
+            printInfoRow(form);
+        }
+        std.process.exit(success);
+    } else {
+        info("{s} keyword not found", .{keyword});
+        std.process.exit(not_found);
+    }
+}
+
+/// Display one line of information about a word.
+fn printInfoRow(form: *Form) void {
+    var buffer: [praxis.max_word_size * 2]u8 = undefined;
+    std.debug.print("{s} ({s}) {f}\n", .{
+        form.word,
+        praxis.transliterateSyllables(form.word, true, "·", &buffer) catch "",
+        form.parsing,
+    });
+}
+
+/// Display extended info about a word form over multiple lines.
+fn printInfoBlock(gpa: Allocator, form: *Form) Allocator.Error!void {
+    var buffer: [praxis.max_word_size * 2]u8 = undefined;
+    std.debug.print("{s}\n{s}\n{f}\n", .{
+        form.word,
+        praxis.transliterateSyllables(form.word, true, "·", &buffer) catch "",
+        form.parsing,
+    });
+    if (form.glossesByLang(.english)) |gloss| {
+        for (gloss.glosses(), 0..) |value, i| {
+            if (i == 0)
+                std.debug.print("\n", .{})
+            else
+                std.debug.print(", ", .{});
+            std.debug.print("{s}", .{value});
+        }
+        if (gloss.glosses().len > 0) {
+            std.debug.print(".\n", .{});
+        }
+    }
+
+    if (form.lexeme) |lexeme| {
+        var panels: praxis.Panels = .empty;
+        const charts = try panels.setup(lexeme, gpa);
+
+        var winsize: std.posix.winsize = .{
+            .row = 0,
+            .col = 0,
+            .xpixel = 0,
+            .ypixel = 0,
+        };
+        if (charts.len > 0) {
+            _ = std.posix.system.ioctl(
+                std.Io.File.stdout().handle,
+                std.posix.T.IOCGWINSZ,
+                @intFromPtr(&winsize),
+            );
+        }
+        if (winsize.col < 30) winsize.col = 40;
+
+        var x: usize = 0;
+        while (x < charts.len) {
+            // Work out how many panels fit in the current terminal width.
+            var fits: usize = 0;
+            var end = x;
+            while (x < charts.len and charts[x].width + 2 + fits < winsize.col) {
+                end += 1;
+                fits += charts[x].width + 2;
+            }
+            defer x = end;
+
+            // Print the panels line by line.
+            if (end > charts.len) end = charts.len;
+            std.debug.print("\n", .{}); // Spacer
+
+            for (charts[x..end]) |panel| {
+                spacedPrint(panel.title, panel.width, .left);
+            }
+            std.debug.print("\n", .{}); // Spacer
+
+            for (charts[x..end]) |panel| {
+                spacedPrint(panel.subtitle, panel.width, .left);
+            }
+            std.debug.print("\n", .{}); // Spacer
+
+            for (charts[x..end]) |panel| {
+                spacedDivider(panel.width);
+            }
+            std.debug.print("\n", .{}); // Spacer
+
+            for (0..4) |row| {
+                var has_row = false;
+                for (charts[x..end]) |panel| {
+                    if (row < panel.count) has_row = true;
+                }
+                if (!has_row) break;
+                for (charts[x..end]) |panel| {
+                    const adjust: usize = if (panel.label_width > 0) panel.label_width + 1 else 0;
+                    spacedPrint(if (panel.top[row]) |p| p.word else "", panel.width - adjust, .left);
+                    spacedPrint(panel.top_label[row], panel.label_width, .right);
+                }
+                std.debug.print("\n", .{}); // Spacer
+            }
+            for (charts[x..end]) |panel| {
+                spacedDivider(panel.width);
+            }
+            std.debug.print("\n", .{}); // Spacer
+
+            for (0..4) |row| {
+                var has_row = false;
+                for (charts[x..end]) |panel| {
+                    if (row < panel.count) has_row = true;
+                }
+                if (!has_row) break;
+                for (charts[x..end]) |panel| {
+                    const adjust: usize = if (panel.label_width > 0) panel.label_width + 1 else 0;
+                    spacedPrint(if (panel.bottom[row]) |p| p.word else "", panel.width - adjust, .left);
+                    spacedPrint(panel.bottom_label[row], panel.label_width, .right);
+                }
+                std.debug.print("\n", .{}); // Spacer
+            }
+        }
+    }
+}
+
+const table_divider = " ";
+const cell_space = " ";
+
+fn spacedPrint(
+    value: []const u8,
+    width: usize,
+    aligns: enum { left, right },
+) void {
+    if (aligns == .left)
+        std.debug.print("{s}", .{value});
+
+    const len = praxis.unicodeLength(value) catch 0;
+    if (len < width) {
+        for (0..width - len) |_| {
+            std.debug.print(cell_space, .{});
+        }
+    }
+
+    if (aligns == .right)
+        std.debug.print("{s}", .{value});
+
+    std.debug.print(table_divider, .{});
+}
+
+fn spacedDivider(width: usize) void {
+    for (0..width) |_| {
+        std.debug.print("-", .{});
+    }
+    std.debug.print(table_divider, .{});
 }
 
 /// Add/update/validate forms of a lexeme.
@@ -142,7 +352,7 @@ fn dataCleanup(allocator: Allocator, dictionary: *Dictionary) error{ OutOfMemory
 
         // Present middle/passive/middle-passive duplicate to each other.
         // i.e. V-PPI-1S duplicates to V-PMI-1S
-        var new_forms: std.ArrayListUnmanaged(*Form) = .empty;
+        var new_forms: std.ArrayList(*Form) = .empty;
         for (lexeme.forms.items) |form| {
             if (form.parsing.part_of_speech != .verb) continue;
             if (form.parsing.tense_form != .present) continue;
@@ -184,7 +394,7 @@ fn duplicatePresentPassiveForms(
     pool: *@FieldType(Dictionary, "forms"),
     form: *const Form,
     add_voice: praxis.Parsing.Voice,
-    new_forms: *std.ArrayListUnmanaged(*Form),
+    new_forms: *std.ArrayList(*Form),
 ) Allocator.Error!void {
     std.debug.assert(form.lexeme != null);
     for (form.lexeme.?.forms.items) |item| {

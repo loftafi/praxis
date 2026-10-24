@@ -9,8 +9,8 @@ word: []const u8,
 parsing: Parsing = .{},
 preferred: bool = false,
 incorrect: bool = false,
-references: std.ArrayListUnmanaged(Reference) = .empty,
-glosses: std.ArrayListUnmanaged(*Gloss) = .empty,
+references: std.ArrayList(Reference) = .empty,
+glosses: std.ArrayList(*Gloss) = .empty,
 lexeme: ?*Lexeme = null,
 
 /// Describes an empty `Form` record.
@@ -176,7 +176,7 @@ pub fn writeBinary(
     try data.writeByte(US);
     try append_u16(data, @intCast(self.glosses.items.len));
     for (self.glosses.items) |gloss| {
-        try data.writeByte(@intFromEnum(gloss.lang));
+        try data.writeByte(@backingInt(gloss.lang));
         for (gloss.entries.items) |item| {
             try data.writeAll(item);
             try data.writeByte(US);
@@ -186,8 +186,8 @@ pub fn writeBinary(
     // References into linked modules
     try append_u32(data, @intCast(self.references.items.len));
     for (self.references.items) |reference| {
-        try append_u16(data, @intFromEnum(reference.module));
-        try append_u16(data, @intFromEnum(reference.book));
+        try append_u16(data, @backingInt(reference.module));
+        try append_u16(data, @backingInt(reference.book));
         try append_u16(data, reference.chapter);
         try append_u16(data, reference.verse);
         try append_u16(data, reference.word);

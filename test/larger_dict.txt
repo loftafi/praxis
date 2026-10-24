@@ -421,7 +421,7 @@
   μέλανες|A-NPM|false|6568758|en:black|
   μέλανας|A-APM|false|1705397|en:black|
   μέλασι|A-GPM|false|6105319|en:black|
-  μελάνων|A-DPM|false|6832086|en:black|
+  μελάνων|A-GPM|false|6832086|en:black|
   μέλαινα|A-NSF|false|8014446|en:black:ink|
   μέλαιναν|A-ASF|false|6921504|en:black:ink|
   μελαίνης|A-GSF|false|15138369|en:black|

@@ -81,6 +81,10 @@ pub const syllables = @import("Syllables.zig").syllables;
 
 pub const characterInfo = @import("CharacterInfo.zig").characterInfo;
 
+/// Returns number of unicode characters, accounting for
+/// decomposed accents appearing as seperate utf8 entries.
+pub const unicodeLength = @import("CharacterInfo.zig").unicodeLength;
+
 pub const extend = @import("LexemeExtender.zig").extend;
 
 pub const random = @import("random.zig");

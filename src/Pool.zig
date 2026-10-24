@@ -3,11 +3,11 @@ pub fn Pool(comptime T: type, comptime items_per_block: usize) type {
     return struct {
         allocator: Allocator,
 
-        blocks: std.ArrayListUnmanaged([]T),
+        blocks: std.ArrayList([]T),
         block_index: usize,
 
         // If free made a whole block unused, keep it here.
-        spare_block: std.ArrayListUnmanaged([]T),
+        spare_block: std.ArrayList([]T),
 
         pub const Self = @This();
 

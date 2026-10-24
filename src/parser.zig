@@ -166,7 +166,7 @@ pub inline fn readArticle(t: *Parser) error{InvalidGender}!Gender {
 pub inline fn readStrongs(
     t: *Parser,
     allocator: Allocator,
-    numbers: *std.ArrayListUnmanaged(u16),
+    numbers: *std.ArrayList(u16),
 ) error{ OutOfMemory, InvalidU16 }!void {
     try t.readU16s(allocator, numbers);
 }
@@ -174,7 +174,7 @@ pub inline fn readStrongs(
 pub inline fn readU16s(
     self: *Parser,
     allocator: Allocator,
-    numbers: *std.ArrayListUnmanaged(u16),
+    numbers: *std.ArrayList(u16),
 ) error{ OutOfMemory, InvalidU16 }!void {
     while (true) {
         if (self.eof()) {

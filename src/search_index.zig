@@ -145,7 +145,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             allocator: Allocator,
             data: *std.Io.Writer,
         ) (std.Io.Writer.Error || error{ OutOfMemory, IndexTooLarge })!void {
-            var unsorted: std.ArrayListUnmanaged([]const u8) = .empty;
+            var unsorted: std.ArrayList([]const u8) = .empty;
             defer unsorted.deinit(allocator);
             try unsorted.ensureTotalCapacityPrecise(allocator, self.index.size);
 
@@ -230,13 +230,13 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             keyword: []const u8,
 
             /// Exact matches with accents.
-            exact_accented: ArrayListUnmanaged(T),
+            exact_accented: ArrayList(T),
 
             /// Exact matches without accents.
-            exact_unaccented: ArrayListUnmanaged(T),
+            exact_unaccented: ArrayList(T),
 
             /// Unaccented prefix matches, most common words first.
-            partial_match: ArrayListUnmanaged(T),
+            partial_match: ArrayList(T),
 
             pub const Iterator = struct {
                 const SI = @This();
@@ -515,7 +515,7 @@ const is_stopword = @import("gloss_tokens.zig").is_stopword;
 const Keywords = @import("Normaliser.zig").Keywords;
 
 const farmhash = @import("farmhash64.zig");
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const BinaryReader = @import("binary_reader.zig");
 const BinaryWriter = @import("binary_writer.zig");

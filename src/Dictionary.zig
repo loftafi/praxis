@@ -480,7 +480,7 @@ pub fn writeTextData(
     data: *std.Io.Writer,
     save_mode: SaveMode,
 ) !void {
-    var unsorted: ArrayListUnmanaged(*Lexeme) = .empty;
+    var unsorted: ArrayList(*Lexeme) = .empty;
     defer unsorted.deinit(allocator);
 
     var skipped: usize = 0;
@@ -573,7 +573,7 @@ const log = std.log;
 const err = std.log.err;
 const info = std.log.info;
 const debug = std.log.debug;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;

@@ -20,7 +20,7 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             .index = .empty,
         };
 
-        /// `deinit` is required if do not use an arena allocator.
+        /// `deinit` is required if using an arena allocator.
         pub fn deinit(self: *Self, allocator: Allocator) void {
             var i = self.index.iterator();
             while (i.next()) |item| {
@@ -47,12 +47,11 @@ pub fn SearchIndex(comptime T: type, cmp: fn (?[]const u8, T, T) bool) type {
             InvalidUtf8,
         }!void {
             if (word.len >= max_word_size) {
-                std.debug.print("Word {s} too long for index.", .{word});
+                err("Word {s} too long for index.", .{word});
                 return IndexError.WordTooLong;
             }
-            if (word.len == 0) {
+            if (word.len == 0)
                 return IndexError.EmptyWord;
-            }
 
             var keywords: Keywords(max_word_size) = undefined;
             const info = try keywords.keywords(word);
@@ -488,10 +487,6 @@ test "search_index arena" {
     var f4 = Thing{ .word = "ἄρτον" };
     try index.add(allocator, f4.word, &f4);
 
-    //var ti = index.index.iterator();
-    //while (ti.next()) |i| {
-    //    std.debug.print(" - {s}\n", .{i.key_ptr.*});
-    //}
     try std.testing.expectEqual(26, index.index.count());
 
     try eq(null, try index.lookup(""));

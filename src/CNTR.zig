@@ -30,7 +30,7 @@ pub fn parse(value: []const u8) Parsing.Error!Parsing {
 
     // Skip the separating characters
     tag = tag[1..];
-    while (tag.len > 0 and tag[0] == ' ' or tag[0] == '\t') {
+    while (tag.len > 0 and (tag[0] == ' ' or tag[0] == '\t')) {
         tag = tag[1..];
     }
 

@@ -107,7 +107,9 @@ pub const Book = enum(u16) {
     }
 
     /// Map a standard book name or abbreviation into a book enum.
-    pub fn parse(value: []const u8) @This() {
+    pub fn parse(text: []const u8) Book {
+        var value = text;
+        if (value.len > 0 and value[value.len - 1] == '.') value.len -= 1;
         for (&NAMES) |*item| {
             for (item.names) |name| {
                 if (std.ascii.eqlIgnoreCase(name, value))
@@ -118,7 +120,7 @@ pub const Book = enum(u16) {
     }
 
     /// Return an English description of the book.
-    pub fn info(self: @This()) *const BookInfo {
+    pub fn info(self: Book) *const BookInfo {
         const index = @intFromEnum(self);
         if (index < NAMES.len) {
             return &NAMES[@intFromEnum(self)];

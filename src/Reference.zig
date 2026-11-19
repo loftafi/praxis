@@ -27,7 +27,9 @@ pub fn clear(self: *Reference) void {
     self.* = .unknown;
 }
 
-/// Read a bible reference, i.e. "Acts 7:40", "1 John 2:4"
+/// Read a bible reference in standard English format.
+///
+/// i.e. "Acts 7:40", "1 John 2:4", "Mk. 1", "Rev 1:2 3"
 pub inline fn parse(text: []const u8) error{
     OutOfMemory,
     InvalidReference,
@@ -38,15 +40,41 @@ pub inline fn parse(text: []const u8) error{
 }
 
 test parse {
-    const verse = try @This().parse("Acts 7:40");
+    const verse = try Reference.parse("Acts 7:40");
     try expectEqual(.acts, verse.book);
     try expectEqual(7, verse.chapter);
     try expectEqual(40, verse.verse);
 
-    const other = try @This().parse("1 John 2:4");
+    const other = try Reference.parse("1 John 2:4");
     try expectEqual(.first_john, other.book);
     try expectEqual(2, other.chapter);
     try expectEqual(4, other.verse);
+
+    const chapter = try Reference.parse("Rev. 5");
+    try expectEqual(.revelation, chapter.book);
+    try expectEqual(5, chapter.chapter);
+    try expectEqual(0, chapter.verse);
+
+    const alt = try Reference.parse("1 Jn. 3.5");
+    try expectEqual(.first_john, alt.book);
+    try expectEqual(3, alt.chapter);
+    try expectEqual(5, alt.verse);
+
+    const short = try Reference.parse("Mark ");
+    try expectEqual(.mark, short.book);
+    try expectEqual(0, short.chapter);
+    try expectEqual(0, short.verse);
+
+    const ot = try Reference.parse("Luke.");
+    try expectEqual(.luke, ot.book);
+    try expectEqual(0, ot.chapter);
+    try expectEqual(0, ot.verse);
+
+    const word = try Reference.parse("Col 1:2 3");
+    try expectEqual(.colossians, word.book);
+    try expectEqual(1, word.chapter);
+    try expectEqual(2, word.verse);
+    try expectEqual(3, word.word);
 }
 
 const expectEqual = std.testing.expectEqual;
@@ -66,33 +94,54 @@ pub inline fn readReference(
         c = t.peek();
     }
     var end = t.index;
+    if (c == ' ') {
+        _ = t.next();
+        c = t.peek();
+    }
     while (true) {
-        if (c == ' ') {
+        if (c == '\n' or c == '\t' or c == ' ' or c == '|' or c == 0 or c == '#' or c == ',' or c == '.' or (c >= '0' and c <= '9')) {
             end = t.index;
-        }
-        if (c == '\n' or c == '\t' or c == '|' or c == 0 or c == '#' or c == ',' or c == '.' or (c >= '0' and c <= '9')) {
             reference.book = Book.parse(t.data[start..end]);
-            //std.debug.print("aargh {any} {any} `{s}` \n", .{ c, reference.book, t.data[start..end] });
             break;
         }
+        end = t.index;
         _ = t.next();
         c = t.peek();
     }
     if (reference.book == .unknown) {
         return error.InvalidReference;
     }
+    if (c == '.') {
+        _ = t.next();
+        c = t.peek();
+    }
+    while (c == ' ') {
+        _ = t.next();
+        c = t.peek();
+    }
 
     if (try t.readU16()) |chapter| {
         reference.chapter = chapter;
+    } else {
+        return reference;
     }
     c = t.peek();
-    if (c != ':') {
+    if (c != ':' and c != '.') {
+        if (c == 0) return reference;
         return error.InvalidReference;
     }
     _ = t.next();
 
     if (try t.readU16()) |verse| {
         reference.verse = verse;
+    }
+
+    while (c == ' ') {
+        _ = t.next();
+        c = t.peek();
+    }
+    if (try t.readU16()) |word_ref| {
+        reference.word = word_ref;
     }
 
     return reference;
@@ -189,12 +238,6 @@ pub fn readReferenceList(
     }
 }
 
-const Module = @import("module.zig").Module;
-const Book = @import("book.zig").Book;
-const Parser = @import("parser.zig");
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-
 test "read verse" {
     {
         var p = Parser.init("Mark 1:2");
@@ -274,3 +317,10 @@ test "read reference list" {
         try std.testing.expectEqual(33, references.items[1].word);
     }
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+
+const Module = @import("module.zig").Module;
+const Book = @import("book.zig").Book;
+const Parser = @import("parser.zig");
